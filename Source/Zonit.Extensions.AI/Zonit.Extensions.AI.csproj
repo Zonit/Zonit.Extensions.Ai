@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+	</PropertyGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\Zonit.Extensions.AI.Abstractions\Zonit.Extensions.AI.Abstractions.csproj" />
+	</ItemGroup>
+	<ItemGroup>
+	  <Folder Include="Services\Anthropic\" />
+	  <Folder Include="Services\X\" />
+	</ItemGroup>
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+	  <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+	  <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+	</ItemGroup>
+</Project>
