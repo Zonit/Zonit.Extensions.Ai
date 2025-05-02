@@ -25,7 +25,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{2CFD
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{315F2147-0038-43F5-9762-E941D5CABD19}"
 	ProjectSection(SolutionItems) = preProject
-		publish.yml = publish.yml
+		.github\workflows\publish.yml = .github\workflows\publish.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.AI.Infrastructure", "Source\Zonit.Extensions.AI.Infrastructure\Zonit.Extensions.AI.Infrastructure.csproj", "{E0574C30-A107-4E73-8900-90EF195BD8B1}"
