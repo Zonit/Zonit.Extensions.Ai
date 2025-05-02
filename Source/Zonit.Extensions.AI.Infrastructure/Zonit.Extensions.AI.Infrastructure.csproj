@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+	</PropertyGroup>
+	<ItemGroup>
+	  <Folder Include="Repositories\Anthropic\" />
+	  <Folder Include="Repositories\X\" />
+	  <Folder Include="Repositories\OpenAi\" />
+	</ItemGroup>
+</Project>

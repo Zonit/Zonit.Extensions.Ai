@@ -8,16 +8,17 @@ using Zonit.Extensions.AI.Abstractions.Options;
 
 namespace Zonit.Extensions.AI.Services.OpenAi;
 
-internal class OpenAiImageService
+public class OpenAiImageService
 {
     readonly HttpClient _httpClient;
 
     public OpenAiImageService(
-        HttpClient httpClient,
-        IOptions<AiOptions> options
+       HttpClient httpClient,
+       IOptions<AiOptions> options
     )
     {
         _httpClient = httpClient ?? new HttpClient();
+        _httpClient.Timeout = TimeSpan.FromMinutes(10);
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {options.Value.OpenAiKey}");
     }
 

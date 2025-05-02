@@ -6,6 +6,7 @@
 	  <ProjectReference Include="..\Zonit.Extensions.AI.Abstractions\Zonit.Extensions.AI.Abstractions.csproj" />
 	</ItemGroup>
 	<ItemGroup>
+	  <Folder Include="Repositories\" />
 	  <Folder Include="Services\Anthropic\" />
 	  <Folder Include="Services\X\" />
 	</ItemGroup>
