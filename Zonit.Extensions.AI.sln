@@ -15,9 +15,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "El
 		Readme.md = Readme.md
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Abstractions", "Source\Zonit.Extensions.AI.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj", "{D94ACDF5-2215-4A41-9944-6082C424CEB0}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Abstractions", "Source\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj", "{D94ACDF5-2215-4A41-9944-6082C424CEB0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai", "Source\Zonit.Extensions.AI\Zonit.Extensions.Ai.csproj", "{78891EDC-F4DA-43D0-9BED-9DC3FF2689BD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai", "Source\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj", "{78891EDC-F4DA-43D0-9BED-9DC3FF2689BD}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example", "Example\Example\Example.csproj", "{8382F950-A087-4CF1-9DA4-30B84D5449E2}"
 EndProject
@@ -30,9 +30,9 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 		.github\workflows\PublishNuGet.yml = .github\workflows\PublishNuGet.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Infrastructure", "Source\Zonit.Extensions.AI.Infrastructure\Zonit.Extensions.Ai.Infrastructure.csproj", "{E0574C30-A107-4E73-8900-90EF195BD8B1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Infrastructure", "Source\Zonit.Extensions.Ai.Infrastructure\Zonit.Extensions.Ai.Infrastructure.csproj", "{E0574C30-A107-4E73-8900-90EF195BD8B1}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Application", "Source\Zonit.Extensions.AI.Application\Zonit.Extensions.Ai.Application.csproj", "{CA40FA0B-CF69-46CE-B83A-752D37C78756}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Application", "Source\Zonit.Extensions.Ai.Application\Zonit.Extensions.Ai.Application.csproj", "{CA40FA0B-CF69-46CE-B83A-752D37C78756}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
