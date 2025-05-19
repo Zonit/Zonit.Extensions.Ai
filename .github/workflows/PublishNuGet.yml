@@ -1,0 +1,12 @@
+name: Build and Publish NuGet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    uses: Zonit/.github/.github/workflows/reusable-publish-nuget.yml@main
+    with:
+      source_directory: 'Source'
+    secrets:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}

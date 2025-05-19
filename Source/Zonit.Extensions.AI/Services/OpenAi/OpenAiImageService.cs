@@ -17,8 +17,7 @@ public class OpenAiImageService
        IOptions<AiOptions> options
     )
     {
-        _httpClient = httpClient ?? new HttpClient();
-        _httpClient.Timeout = TimeSpan.FromMinutes(10);
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {options.Value.OpenAiKey}");
     }
 
