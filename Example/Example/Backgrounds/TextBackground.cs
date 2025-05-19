@@ -13,7 +13,7 @@ internal class TextBackground(IImageClient imageClient) : BackgroundService
         var image = await imageClient
             .AddVariable("color", "red")
             .GenerateImageAsync(prompt, new GPTImage1 { 
-            Quality = GPTImage1.QualityType.High,
+            Quality = GPTImage1.QualityType.Low,
             Size = GPTImage1.SizeType.Landscape
         }, stoppingToken);
 
