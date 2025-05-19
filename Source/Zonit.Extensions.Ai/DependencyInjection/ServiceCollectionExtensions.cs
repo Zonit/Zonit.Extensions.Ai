@@ -1,5 +1,8 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Polly;
+using System.Net.Http.Headers;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Abstractions.Options;
 using Zonit.Extensions.Ai.Services.OpenAi;
@@ -19,15 +22,34 @@ public static class ServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddTransient<IImageClient, ImageService>();
-        services.AddTransient<OpenAiImageService>();
 
-        // Dodajemy HttpClient z odpowiednio dużym timeoutem dla OpenAiImageService
-        services.AddHttpClient<OpenAiImageService>()
-            .ConfigureHttpClient(client =>
+        services
+            .AddTransient<OpenAiImageService>()
+            .AddHttpClient<OpenAiImageService>((serviceProvider, client) =>
             {
-                // Ustawiamy długi timeout dla operacji, które mogą potrwać dłużej
-                client.Timeout = TimeSpan.FromMinutes(15);
+                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
+                client.BaseAddress = new Uri("https://api.openai.com/");
+                client.Timeout = Timeout.InfiniteTimeSpan;
+
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
+            })
+            .AddStandardResilienceHandler(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
+                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
+
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.Delay = TimeSpan.FromSeconds(5);
+                options.Retry.BackoffType = DelayBackoffType.Exponential;
+                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
+
+                options.CircuitBreaker.FailureRatio = 0.5;
+                options.CircuitBreaker.MinimumThroughput = 10;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
+                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
             });
+
 
         return services;
     }

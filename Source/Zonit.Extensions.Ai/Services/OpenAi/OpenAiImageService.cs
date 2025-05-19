@@ -10,28 +10,21 @@ namespace Zonit.Extensions.Ai.Services.OpenAi;
 
 public class OpenAiImageService
 {
-    readonly HttpClient _httpClient;
+    private readonly HttpClient _httpClient;
 
-    public OpenAiImageService(
-       HttpClient httpClient,
-       IOptions<AiOptions> options
-    )
+    public OpenAiImageService(HttpClient httpClient)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {options.Value.OpenAiKey}");
     }
 
     public async Task<Result<IFile>> GenerateAsync(
-        string prompt, 
-        IImageModel model, 
+        string prompt,
+        IImageModel model,
         CancellationToken cancellationToken = default)
     {
-        if(model.Quantity > 1)
+        if (model.Quantity > 1)
             throw new ArgumentException("Method does not support multiple images.", nameof(model));
 
-
-        var stopwatch = new Stopwatch();
-        
         var requestBody = new
         {
             model = model.Name,
@@ -41,25 +34,29 @@ public class OpenAiImageService
             quality = model.QualityValue,
         };
 
+        var stopwatch = Stopwatch.StartNew();
+
         var response = await _httpClient.PostAsJsonAsync(
-            "https://api.openai.com/v1/images/generations",
+            "v1/images/generations",
             requestBody,
-            cancellationToken
-        );
+            cancellationToken);
 
-        response.EnsureSuccessStatusCode(); 
+        response.EnsureSuccessStatusCode();
 
-        stopwatch.Start();
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         stopwatch.Stop();
 
         var responseData = JsonSerializer.Deserialize<OpenAIImageResponse>(responseJson);
+        if (responseData?.Data == null || responseData.Data.Length == 0)
+            throw new InvalidOperationException("No image data returned");
+        
         var imageBytes = Convert.FromBase64String(responseData.Data[0].B64Json);
 
         return new Result<IFile>
         {
             Value = new FileModel("", "image/png", imageBytes),
-            MetaData = new(model, new Usage {
+            MetaData = new(model, new Usage
+            {
                 Input = responseData.Usage.InputTokens,
                 InputDetails = new Usage.Details
                 {
@@ -69,8 +66,8 @@ public class OpenAiImageService
                 Output = responseData.Usage.OutputTokens,
             }, stopwatch.Elapsed)
         };
-  
     }
+
 
     private class OpenAIImageResponse
     {
@@ -86,7 +83,7 @@ public class OpenAiImageService
         public class ImageData
         {
             [JsonPropertyName("b64_json")]
-            public string B64Json { get; set; }
+            public required string B64Json { get; set; }
         }
 
         public class UsageInfo
