@@ -3,8 +3,6 @@ using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
 using Zonit.Extensions.Ai.Models;
-using Microsoft.Extensions.Options;
-using Zonit.Extensions.Ai.Abstractions.Options;
 
 namespace Zonit.Extensions.Ai.Services.OpenAi;
 
@@ -15,6 +13,12 @@ public class OpenAiImageService
     public OpenAiImageService(HttpClient httpClient)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+
+        // test
+        if (_httpClient.Timeout < TimeSpan.FromMinutes(5))
+        {
+            _httpClient.Timeout = TimeSpan.FromMinutes(5);
+        }
     }
 
     public async Task<Result<IFile>> GenerateAsync(

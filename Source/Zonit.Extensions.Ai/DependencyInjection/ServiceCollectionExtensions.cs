@@ -29,7 +29,8 @@ public static class ServiceCollectionExtensions
             {
                 var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
                 client.BaseAddress = new Uri("https://api.openai.com/");
-                client.Timeout = Timeout.InfiniteTimeSpan;
+                //client.Timeout = Timeout.InfiniteTimeSpan;
+                client.Timeout = TimeSpan.FromMinutes(5);
 
                 client.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
