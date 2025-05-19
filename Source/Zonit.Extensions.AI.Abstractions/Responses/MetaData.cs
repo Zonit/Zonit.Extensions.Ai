@@ -1,4 +1,4 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
 public class MetaData(IBaseModel model, Usage usage, TimeSpan? duration = default)
 {

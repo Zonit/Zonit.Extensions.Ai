@@ -8,7 +8,7 @@
     <FileVersion>$(AssemblyVersion)</FileVersion>
     <Version>$(AssemblyVersion)</Version>
     <Authors>Zonit</Authors>
-    <Title>Zonit.Extensions.AI</Title>
+    <Title>Zonit.Extensions.Ai</Title>
     <PackageOutputPath>$(SolutionDir)Packages</PackageOutputPath>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <PackageProjectUrl>https://github.com/Zonit</PackageProjectUrl>
@@ -36,8 +36,11 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.4" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="9.0.4" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.4" />
-	<PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.4" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.4" />
   </ItemGroup>
+	<ItemGroup>
+		<PackageVersion Include="OpenAI" Version="2.1.0" />
+	</ItemGroup>
   <ItemGroup>
     <None Include="..\..\Readme.md" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>

@@ -1,4 +1,4 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
 public abstract class BaseModel : IBaseModel
 {
@@ -21,8 +21,8 @@ public abstract class BaseModel : IBaseModel
     public abstract decimal PriceInput { get; }
     public abstract decimal PriceOutput { get; }
 
-    public abstract decimal? BatchPriceInput { get; }
-    public abstract decimal? BatchPriceOutput { get; }
+    public virtual decimal? BatchPriceInput { get; } = null;
+    public virtual decimal? BatchPriceOutput { get; } = null;
 
     public abstract int MaxInputTokens { get; }
     public abstract int MaxOutputTokens { get; }

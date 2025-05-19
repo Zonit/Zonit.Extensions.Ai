@@ -1,5 +1,5 @@
 ﻿
-namespace Zonit.Extensions.AI.Services;
+namespace Zonit.Extensions.Ai.Services;
 
 internal class VariableService<TClient> : IVariable<TClient>
 {

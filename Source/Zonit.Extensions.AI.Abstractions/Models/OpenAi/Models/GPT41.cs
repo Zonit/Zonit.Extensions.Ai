@@ -1,6 +1,6 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
-public class GPT41 : BaseOpenAITextModel
+public class GPT41 : BaseOpenAiText
 {
     public override string Name => "gpt-4.1-2025-04-14";
     public override decimal? PriceCachedInput => 0.50m;

@@ -1,4 +1,6 @@
-namespace Zonit.Extensions.AI.Models;
+namespace Zonit.Extensions.Ai.Models;
+
+// TODO: Zwróæ extension pliku, np jpg, png itp
 
 public class FileModel : IFile
 {

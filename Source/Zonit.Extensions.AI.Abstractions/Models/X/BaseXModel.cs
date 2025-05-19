@@ -1,4 +1,4 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
 public abstract class BaseXModel : BaseModel
 {

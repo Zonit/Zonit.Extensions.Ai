@@ -1,6 +1,6 @@
 ﻿using System.Text.RegularExpressions;
-using Zonit.Extensions.AI;
-using Zonit.Extensions.AI.Services.OpenAi;
+using Zonit.Extensions.Ai;
+using Zonit.Extensions.Ai.Services.OpenAi;
 
 public partial class ImageService(OpenAiImageService openAiImageService) : IImageClient
 {

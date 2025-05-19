@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Zonit.Extensions.AI;
-using Zonit.Extensions.AI.Abstractions.Options;
-using Zonit.Extensions.AI.Services;
-using Zonit.Extensions.AI.Services.OpenAi;
+using Zonit.Extensions.Ai;
+using Zonit.Extensions.Ai.Abstractions.Options;
+using Zonit.Extensions.Ai.Services;
+using Zonit.Extensions.Ai.Services.OpenAi;
 
 public static class ServiceCollectionExtensions
 {

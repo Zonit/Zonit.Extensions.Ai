@@ -3,7 +3,7 @@
 		<TargetFrameworks>net8.0;net9.0</TargetFrameworks>
 	</PropertyGroup>
 	<ItemGroup>
-	  <ProjectReference Include="..\Zonit.Extensions.AI.Abstractions\Zonit.Extensions.AI.Abstractions.csproj" />
+	  <ProjectReference Include="..\Zonit.Extensions.AI.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Repositories\" />

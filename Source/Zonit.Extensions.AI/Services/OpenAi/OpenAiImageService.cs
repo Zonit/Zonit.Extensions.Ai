@@ -2,11 +2,11 @@
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
-using Zonit.Extensions.AI.Models;
+using Zonit.Extensions.Ai.Models;
 using Microsoft.Extensions.Options;
-using Zonit.Extensions.AI.Abstractions.Options;
+using Zonit.Extensions.Ai.Abstractions.Options;
 
-namespace Zonit.Extensions.AI.Services.OpenAi;
+namespace Zonit.Extensions.Ai.Services.OpenAi;
 
 public class OpenAiImageService
 {

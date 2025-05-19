@@ -1,4 +1,4 @@
-﻿namespace Zonit.Extensions.AI.Abstractions.Options;
+﻿namespace Zonit.Extensions.Ai.Abstractions.Options;
 
 public class AiOptions
 {

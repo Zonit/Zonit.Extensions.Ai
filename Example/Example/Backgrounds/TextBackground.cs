@@ -1,5 +1,5 @@
 ﻿using Microsoft.Extensions.Hosting;
-using Zonit.Extensions.AI;
+using Zonit.Extensions.Ai;
 
 namespace Example.Backgrounds;
 

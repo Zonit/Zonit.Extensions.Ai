@@ -14,7 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Source\Zonit.Extensions.AI\Zonit.Extensions.AI.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.AI\Zonit.Extensions.Ai.csproj" />
   </ItemGroup>
 
   <ItemGroup>

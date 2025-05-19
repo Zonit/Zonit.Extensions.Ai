@@ -1,6 +1,6 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
-public abstract class BaseOpenAIImageModel<TQuality, TSize> : BaseOpenAIModel, IImageModel
+public abstract class BaseOpenAiImage<TQuality, TSize> : BaseOpenAi, IImageModel
     where TQuality : Enum
     where TSize : Enum
 {

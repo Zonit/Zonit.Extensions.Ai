@@ -1,13 +1,10 @@
-﻿namespace Zonit.Extensions.AI;
+﻿namespace Zonit.Extensions.Ai;
 
-public class GPTImage1 : BaseOpenAIImageModel<GPTImage1.QualityType, GPTImage1.SizeType>
+public class GPTImage1 : BaseOpenAiImage<GPTImage1.QualityType, GPTImage1.SizeType>
 {
     public required override QualityType Quality { get; init; }
     public required override SizeType Size { get; init; }
     public override string Name => "gpt-image-1";
-
-    public override decimal? BatchPriceInput => throw new NotImplementedException();
-    public override decimal? BatchPriceOutput => throw new NotImplementedException();
 
     public override decimal PriceInput => 10;
     public override decimal PriceOutput => 40;
