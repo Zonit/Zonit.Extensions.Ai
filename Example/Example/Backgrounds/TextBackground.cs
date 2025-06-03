@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Hosting;
+﻿using Example.Prompts;
+using Microsoft.Extensions.Hosting;
 using Zonit.Extensions.Ai;
 
 namespace Example.Backgrounds;
@@ -7,6 +8,16 @@ internal class TextBackground(IImageClient imageClient) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var translate = new TranslatePrompt
+        {
+            Content = "Hello world!",
+            Culture = "pl"
+        };
+
+        Console.WriteLine(translate.BuildPrompt());
+
+        var test = translate.ResponseType;
+
         var prompt = "Beautiful sunset over the mountains with the color {{$color}} of the sun.";
 
 

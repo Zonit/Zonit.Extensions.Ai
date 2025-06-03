@@ -4,6 +4,5 @@
 	</PropertyGroup>
 	<ItemGroup>
 	  <Folder Include="Exception\" />
-	  <Folder Include="Models\Anthropic\Models\" />
 	</ItemGroup>
 </Project>
