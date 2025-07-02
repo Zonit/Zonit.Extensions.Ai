@@ -10,11 +10,15 @@ namespace Zonit.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddAiExtension(this IServiceCollection services)
+    public static IServiceCollection AddAiApplicationExtension(this IServiceCollection services, Action<AiOptions>? options = null)
     {
-        services
-            .AddAiApplicationExtension()
-            .AddAiInfrastructureExtension();
+        services.AddOptions<AiOptions>()
+            .Configure<IConfiguration>(
+                (options, configuration) =>
+                    configuration.GetSection("Ai").Bind(options));
+
+        if (options is not null)
+            services.PostConfigure(options);
 
         //services.AddTransient<IImageClient, ImageService>();
 

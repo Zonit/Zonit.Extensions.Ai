@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Prompts;
 
 public class TranslatePrompt : PromptBase<string>
 {
-    public required string Context { get; set; }
+    public required string Content { get; set; }
     public required string Language { get; set; }
     public string? Culture { get; set; }
 
@@ -23,6 +23,6 @@ Translation guidelines:
 - Return only the translated text without additional annotations.
 
 Text to translate:
-``{{ context }}``
+``{{ content }}``
 ";
 }

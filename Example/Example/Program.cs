@@ -35,7 +35,6 @@ internal class Program
         builder.Services.AddAiExtension();
         builder.Services.AddHostedService<TextBackground>();
 
-
         var app = builder.Build();
         app.Run();
     }

@@ -3,6 +3,11 @@
 		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Folder Include="Exception\" />
+	  <Compile Remove="Exception\**" />
+	  <EmbeddedResource Remove="Exception\**" />
+	  <None Remove="Exception\**" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\Zonit.Extensions.Ai.Llm\Zonit.Extensions.Ai.Llm.csproj" />
 	</ItemGroup>
 </Project>

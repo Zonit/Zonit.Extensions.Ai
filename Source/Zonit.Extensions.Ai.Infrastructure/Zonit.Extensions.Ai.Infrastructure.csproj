@@ -3,8 +3,12 @@
 		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 	</PropertyGroup>
 	<ItemGroup>
-	  <Folder Include="Repositories\Anthropic\" />
-	  <Folder Include="Repositories\X\" />
+	  <Compile Remove="Repositories\Anthropic\**" />
+	  <Compile Remove="Repositories\X\**" />
+	  <EmbeddedResource Remove="Repositories\Anthropic\**" />
+	  <EmbeddedResource Remove="Repositories\X\**" />
+	  <None Remove="Repositories\Anthropic\**" />
+	  <None Remove="Repositories\X\**" />
 	</ItemGroup>
 	<ItemGroup>
 	  <PackageReference Include="OpenAI" />
@@ -13,5 +17,8 @@
 		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
 		<PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="..\Zonit.Extensions.Ai.Application\Zonit.Extensions.Ai.Application.csproj" />
 	</ItemGroup>
 </Project>

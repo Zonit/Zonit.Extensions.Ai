@@ -1,6 +1,6 @@
 ﻿namespace Zonit.Extensions.Ai.Llm.OpenAi;
 
-public class GPT41Mini : OpenAiTextBase
+public class GPT41Mini : OpenAiChatBase
 {
     public override string Name => "gpt-4.1-mini-2025-04-14";
 

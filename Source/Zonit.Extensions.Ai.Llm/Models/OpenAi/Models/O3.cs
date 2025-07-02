@@ -1,6 +1,6 @@
 ﻿namespace Zonit.Extensions.Ai.Llm.OpenAi;
 
-public class O3 : OpenAiTextBase
+public class O3 : OpenAiReasoningBase
 {
     public override string Name => "o3-2025-04-16";
 

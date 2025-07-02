@@ -2,4 +2,5 @@
 
 public abstract class OpenAiBase : LlmBase
 {
+    public bool StoreLogs { get; set; } = false;
 }

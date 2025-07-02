@@ -1,8 +1,10 @@
-﻿namespace Zonit.Extensions.Ai;
+﻿using Zonit.Extensions.Ai.Llm;
 
-public class MetaData(IBaseModel model, Usage usage, TimeSpan? duration = default)
+namespace Zonit.Extensions.Ai;
+
+public class MetaData(ILlmBase model, Usage usage, TimeSpan? duration = default)
 {
-    public IBaseModel Model { get; } = model;
+    public ILlmBase Model { get; } = model;
     public Usage Usage { get; } = usage;
 
     public long InputTokenCount => Usage.Input;
