@@ -3,4 +3,20 @@
 public abstract class OpenAiTextBase : OpenAiBase
 {
     public virtual decimal? PriceCachedInput { get; } = null;
+
+    public virtual ReasonType? Reason { get; }
+    public virtual ReasonSummaryType? ReasonSummary { get; }
+
+    public enum ReasonType
+    {
+        Low,
+        Medium,
+        High
+    }
+    public enum ReasonSummaryType
+    {
+        None,
+        Auto,
+        Detailed,
+    }
 }
