@@ -1,14 +1,11 @@
 ﻿using Microsoft.Extensions.Hosting;
-using OpenAI.Images;
 using Zonit.Extensions.Ai;
-using Zonit.Extensions.Ai.Application.Services;
-using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Llm.OpenAi;
 using Zonit.Extensions.Ai.Prompts;
 
 namespace Example.Backgrounds;
 //IImageClient imageClient
-internal class TextBackground(IAiRepository aiRepository) : BackgroundService
+internal class TextBackground(IAiClient client) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,35 +27,39 @@ internal class TextBackground(IAiRepository aiRepository) : BackgroundService
             Age = 30
         };
 
-        var test = await aiRepository.ResponseAsync(new GPT41 { }, personal);
+        var test = await client.GenerateAsync(personal, new GPT41 { });
 
         Console.WriteLine(test);
-        //var image = await imageClient
-        //    .AddVariable("color", "red")
-        //    .GenerateImageAsync(prompt, new GPTImage1 { 
-        //    Quality = GPTImage1.QualityType.Low,
-        //    Size = GPTImage1.SizeType.Landscape
-        //}, stoppingToken);
 
+        var animal = new AnimalPrompt
+        {
+            Animal = "pies",
+        };
 
-        //if (image?.Value != null)
-        //{
-        //    var imageBytes = image.Value;
+        var image = await client.GenerateAsync(animal, new GPTImage1
+        {
+            Quality = GPTImage1.QualityType.Low,
+            Size = GPTImage1.SizeType.Landscape
+        }, stoppingToken);
 
-        //    var directory = @"D:\image";
-        //    Directory.CreateDirectory(directory); // upewniamy się, że katalog istnieje
+        if (image?.Value != null)
+        {
+            var imageBytes = image.Value;
 
-        //    var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff"); // format np. 20250428_154312_123
-        //    var filePath = Path.Combine(directory, $"generated_image_{timestamp}.png");
+            var directory = @"D:\image";
+            Directory.CreateDirectory(directory); // upewniamy się, że katalog istnieje
 
-        //    await File.WriteAllBytesAsync(filePath, image.Value.Data, stoppingToken);
+            var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff"); // format np. 20250428_154312_123
+            var filePath = Path.Combine(directory, $"generated_image_{timestamp}.png");
 
-        //    Console.WriteLine($"Obraz zapisano w lokalizacji: {filePath}");
-        //    Console.WriteLine($"Koszt wejściowy: {image.MetaData.PriceInput} wyjściowy: {image.MetaData.PriceOutput} całkowity: {image.MetaData.PriceTotal}");
-        //}
-        //else
-        //{
-        //    Console.WriteLine("Nie udało się wygenerować obrazu.");
-        //}
+            await File.WriteAllBytesAsync(filePath, image.Value.Data, stoppingToken);
+
+            Console.WriteLine($"Obraz zapisano w lokalizacji: {filePath}");
+            Console.WriteLine($"Koszt wejściowy: {image.MetaData.PriceInput} wyjściowy: {image.MetaData.PriceOutput} całkowity: {image.MetaData.PriceTotal}");
+        }
+        else
+        {
+            Console.WriteLine("Nie udało się wygenerować obrazu.");
+        }
     }
 }

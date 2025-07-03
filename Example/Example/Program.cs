@@ -31,7 +31,6 @@ internal class Program
 
         builder.Configuration.AddConfiguration(CreateConfiguration(args));
 
-        builder.Services.AddHttpClient();
         builder.Services.AddAiExtension();
         builder.Services.AddHostedService<TextBackground>();
 

@@ -1,6 +1,6 @@
 ﻿using Zonit.Extensions.Ai.Llm;
 
-namespace Zonit.Extensions.Ai.Abstractions;
+namespace Zonit.Extensions.Ai;
 
 public interface IPromptBase
 {

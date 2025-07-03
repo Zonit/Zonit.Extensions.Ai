@@ -1,6 +1,4 @@
-﻿using Zonit.Extensions.Ai.Abstractions;
-
-namespace Zonit.Extensions.Ai.Prompts;
+﻿namespace Zonit.Extensions.Ai.Prompts;
 
 public class TranslatePrompt : PromptBase<string>
 {

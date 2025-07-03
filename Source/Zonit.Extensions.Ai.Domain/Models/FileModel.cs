@@ -1,4 +1,4 @@
-namespace Zonit.Extensions.Ai.Models;
+namespace Zonit.Extensions.Ai.Domain.Models;
 
 // TODO: Zwróæ extension pliku, np jpg, png itp
 
@@ -27,11 +27,11 @@ public class FileModel : IFile
         if (string.IsNullOrEmpty(filePath))
             throw new ArgumentNullException(nameof(filePath));
 
-        if (!System.IO.File.Exists(filePath))
+        if (!File.Exists(filePath))
             throw new FileNotFoundException("Nie znaleziono pliku", filePath);
 
         var name = Path.GetFileName(filePath);
-        var data = await System.IO.File.ReadAllBytesAsync(filePath);
+        var data = await File.ReadAllBytesAsync(filePath);
         
         // Okreœl typ MIME na podstawie rozszerzenia jeœli nie zosta³ podany
         mimeType ??= GetMimeTypeFromExtension(Path.GetExtension(filePath));
@@ -91,7 +91,7 @@ public class FileModel : IFile
             Directory.CreateDirectory(directory);
         }
 
-        await System.IO.File.WriteAllBytesAsync(outputPath, Data, cancellationToken);
+        await File.WriteAllBytesAsync(outputPath, Data, cancellationToken);
     }
 
     /// <summary>

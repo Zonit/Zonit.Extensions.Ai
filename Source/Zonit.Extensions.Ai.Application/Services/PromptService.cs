@@ -1,12 +1,12 @@
 ﻿using Scriban;
 using Scriban.Runtime;
 using System.Reflection;
-using Zonit.Extensions.Ai.Abstractions;
 
 namespace Zonit.Extensions.Ai.Application.Services;
 
 public static class PromptService
 {
+    // TODO: Dodaj takie typy jak np IFile do blokowania
     public static string BuildPrompt(IPromptBase prompt)
     {
         var template = Template.Parse(prompt.Prompt);

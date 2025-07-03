@@ -1,6 +1,6 @@
 ﻿namespace Zonit.Extensions.Ai.Llm;
 
-public interface IImageBase : ILlmBase
+public interface IImageLlmBase : ILlmBase
 {
     string QualityValue { get; }
     string SizeValue { get; }

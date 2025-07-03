@@ -1,5 +1,4 @@
 ﻿using System.ComponentModel;
-using Zonit.Extensions.Ai.Abstractions;
 
 namespace Zonit.Extensions.Ai.Prompts;
 

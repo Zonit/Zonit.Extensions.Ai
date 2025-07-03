@@ -1,6 +1,6 @@
 ﻿namespace Zonit.Extensions.Ai.Llm;
 
-public abstract class OpenAiImageBase<TQuality, TSize> : OpenAiBase, IImageBase
+public abstract class OpenAiImageBase<TQuality, TSize> : OpenAiBase, IImageLlmBase
     where TQuality : Enum
     where TSize : Enum
 {
