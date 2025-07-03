@@ -23,8 +23,5 @@ public class MetaData(ILlmBase model, Usage usage, TimeSpan? duration = default)
     /// <summary>
     /// Nazwa procesu który został wykonany
     /// </summary>
-    public string? Process { get; private set; }
-
-    public void SetProcessName(string processName)
-        => Process = processName;
+    public string? Process { get; internal set; }
 }
