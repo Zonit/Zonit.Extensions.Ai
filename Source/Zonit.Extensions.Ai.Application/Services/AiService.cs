@@ -9,7 +9,7 @@ public class AiService(
     [FromKeyedServices("OpenAi")] IImageRepository openAiImageRepository
     ) : IAiClient
 {
-    public async Task<Result<TResponse>?> GenerateAsync<TResponse>(IPromptBase<TResponse> prompt, ITextLlmBase model, CancellationToken cancellationToken = default)
+    public async Task<Result<TResponse>> GenerateAsync<TResponse>(IPromptBase<TResponse> prompt, ITextLlmBase model, CancellationToken cancellationToken = default)
     {
         if (model is OpenAiBase)
             return await openAiRepository.ResponseAsync(model, prompt, cancellationToken);
@@ -17,7 +17,7 @@ public class AiService(
         return default;
     }
 
-    public async Task<Result<IFile>?> GenerateAsync(IPromptBase<IFile> prompt, IImageLlmBase model, CancellationToken cancellationToken = default)
+    public async Task<Result<IFile>> GenerateAsync(IPromptBase<IFile> prompt, IImageLlmBase model, CancellationToken cancellationToken = default)
     {
         if (model is OpenAiBase)
             return await openAiImageRepository.GenerateAsync(model, prompt, cancellationToken);
@@ -26,7 +26,7 @@ public class AiService(
     }
 
 
-    public async Task<Result<IReadOnlyCollection<IFile>>?> GenerateAsync(IPromptBase<IReadOnlyCollection<IFile>> prompt, IImageLlmBase model, CancellationToken cancellationToken = default)
+    public async Task<Result<IReadOnlyCollection<IFile>>> GenerateAsync(IPromptBase<IReadOnlyCollection<IFile>> prompt, IImageLlmBase model, CancellationToken cancellationToken = default)
     {
         if (prompt is OpenAiBase)
         {
