@@ -12,11 +12,13 @@ namespace Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 
 internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepository
 {
+#pragma warning disable OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
+
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
         var client = new OpenAIResponseClient(model: llm.Name, apiKey: options.Value.OpenAiKey);
 
-        var messages = new List<ResponseItem>
+       var messages = new List<ResponseItem>
         {
             ResponseItem.CreateSystemMessageItem(PromptService.BuildPrompt(prompt))
         };
@@ -90,12 +92,13 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
                 if (tool is WebSearchTool webSearch)
                 {
                     responseOptions.Tools.Add(ResponseTool.CreateWebSearchTool(
-                        webSearchToolContextSize: webSearch.ContextSize switch
+                        // TODO: Dodaj region
+                        searchContextSize: webSearch.ContextSize switch
                         {
-                            WebSearchTool.ContextSizeType.Low => WebSearchToolContextSize.Low,
-                            WebSearchTool.ContextSizeType.Medium => WebSearchToolContextSize.Medium,
-                            WebSearchTool.ContextSizeType.High => WebSearchToolContextSize.High,
-                            _ => WebSearchToolContextSize.Medium
+                            WebSearchTool.ContextSizeType.Low => WebSearchContextSize.Low,
+                            WebSearchTool.ContextSizeType.Medium => WebSearchContextSize.Medium,
+                            WebSearchTool.ContextSizeType.High => WebSearchContextSize.High,
+                            _ => WebSearchContextSize.Medium
                         }
                     ));
                 }
@@ -160,4 +163,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
             throw new JsonException($"Failed to parse JSON: {responseJson}", ex);
         }
     }
+
+#pragma warning restore OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
+
 }
