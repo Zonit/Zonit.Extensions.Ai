@@ -4,8 +4,8 @@ public abstract class OpenAiReasoningBase : OpenAiBase
 {
     public virtual decimal? PriceCachedInput { get; } = null;
 
-    public virtual ReasonType? Reason { get; }
-    public virtual ReasonSummaryType? ReasonSummary { get; }
+    public virtual ReasonType? Reason { get; init; }
+    public virtual ReasonSummaryType? ReasonSummary { get; init; }
 
     public enum ReasonType
     {
