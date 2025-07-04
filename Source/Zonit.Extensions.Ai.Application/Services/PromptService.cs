@@ -1,5 +1,6 @@
 ﻿using Scriban;
 using Scriban.Runtime;
+using System.Collections;
 using System.Reflection;
 using System.Text.Json;
 
@@ -12,10 +13,15 @@ public static class PromptService
     {
         var template = Template.Parse(prompt.Prompt);
 
+        if (template.HasErrors)
+        {
+            var errorMessage = string.Join("\n", template.Messages.Select(m => m.Message));
+            throw new InvalidOperationException($"Scriban template parse error:\n{errorMessage}");
+        }
+
         var context = new TemplateContext();
         var scriptObject = new ScriptObject();
 
-        // Lista nazw właściwości do zablokowania
         var blockedProperties = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             nameof(prompt.Tools),
@@ -24,7 +30,6 @@ public static class PromptService
             "ModelType"
         };
 
-        // Pobierz wszystkie publiczne właściwości z obiektu prompt
         var properties = prompt.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
         foreach (var prop in properties)
@@ -32,7 +37,22 @@ public static class PromptService
             if (!blockedProperties.Contains(prop.Name))
             {
                 var snakeCaseName = JsonNamingPolicy.SnakeCaseLower.ConvertName(prop.Name);
-                scriptObject[snakeCaseName] = prop.GetValue(prompt);
+                var value = prop.GetValue(prompt);
+
+                // Jeżeli wartość to null i to kolekcja, podstaw pustą
+                if (value == null)
+                {
+                    if (typeof(IEnumerable).IsAssignableFrom(prop.PropertyType) && prop.PropertyType != typeof(string))
+                    {
+                        value = Activator.CreateInstance(prop.PropertyType);
+                    }
+                    else
+                    {
+                        continue; // pomiń null jeśli nie kolekcja
+                    }
+                }
+
+                scriptObject[snakeCaseName] = value;
             }
         }
 
@@ -40,4 +60,5 @@ public static class PromptService
 
         return template.Render(context);
     }
+
 }
