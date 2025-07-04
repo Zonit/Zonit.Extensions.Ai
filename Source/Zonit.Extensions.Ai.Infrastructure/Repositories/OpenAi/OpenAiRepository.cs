@@ -46,22 +46,23 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
         // Model myślący
         if (llm is OpenAiReasoningBase variableReasoning)
         {
+            // Inicjalizuj ReasoningOptions jeśli jeszcze nie istnieje
+            responseOptions.ReasoningOptions ??= new ResponseReasoningOptions();
             responseOptions.ReasoningOptions.ReasoningEffortLevel = variableReasoning.Reason switch
             {
                 OpenAiReasoningBase.ReasonType.Low => ResponseReasoningEffortLevel.Low,
                 OpenAiReasoningBase.ReasonType.Medium => ResponseReasoningEffortLevel.Medium,
                 OpenAiReasoningBase.ReasonType.High => ResponseReasoningEffortLevel.High,
-                null => ResponseReasoningEffortLevel.High,
-                _ => ResponseReasoningEffortLevel.High
+                null => ResponseReasoningEffortLevel.Medium,
+                _ => ResponseReasoningEffortLevel.Medium
             };
-
             responseOptions.ReasoningOptions.ReasoningSummaryVerbosity = variableReasoning.ReasonSummary switch
             {
                 OpenAiReasoningBase.ReasonSummaryType.None => ResponseReasoningSummaryVerbosity.Concise,
                 OpenAiReasoningBase.ReasonSummaryType.Auto => new ResponseReasoningSummaryVerbosity("auto"),
                 OpenAiReasoningBase.ReasonSummaryType.Detailed => ResponseReasoningSummaryVerbosity.Detailed,
-                null => ResponseReasoningSummaryVerbosity.Detailed, // domyślna wartość
-                _ => ResponseReasoningSummaryVerbosity.Detailed
+                null => new ResponseReasoningSummaryVerbosity("auto"),
+                _ => new ResponseReasoningSummaryVerbosity("auto")
             };
         }
 

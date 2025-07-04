@@ -27,9 +27,14 @@ internal class TextBackground(IAiClient client) : BackgroundService
             Age = 30
         };
 
-        var test = await client.GenerateAsync(personal, new GPT41 { });
+        var test = await client.GenerateAsync(personal, new O3 {
+            MaxTokens = 5000,
+            Reason = Zonit.Extensions.Ai.Llm.OpenAiReasoningBase.ReasonType.High
+        });
 
         Console.WriteLine(test);
+
+        return;
 
         var animal = new AnimalPrompt
         {
