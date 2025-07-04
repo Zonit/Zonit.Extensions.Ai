@@ -47,48 +47,57 @@ internal static partial class JsonSchemaGenerator
     /// <returns></returns>
     public static Dictionary<string, object> GenerateJsonSchemaForType(Type type)
     {
-        if (type == typeof(string) || type.IsPrimitive || type == typeof(bool) || type == typeof(decimal))
-        {
-            return new Dictionary<string, object> { ["type"] = GetJsonType(type) };
-        }
+        // Sprawdź czy typ jest nullable
+        var underlyingType = Nullable.GetUnderlyingType(type);
+        bool isNullable = underlyingType != null;
+        var actualType = underlyingType ?? type;
 
-        if (type.IsEnum)
+        if (actualType == typeof(string))
         {
-            var enumValues = Enum.GetNames(type).ToList();
+            // String jest naturalnie nullable, ale sprawdzamy czy to string? czy string
+            bool isExplicitlyNullable = type == typeof(string) || isNullable;
             return new Dictionary<string, object>
             {
-                ["type"] = "string",
-                ["enum"] = enumValues
+                ["type"] = isExplicitlyNullable ? new[] { "string", "null" } : "string"
             };
         }
 
-        // Obsługa nullable enum
-        if (Nullable.GetUnderlyingType(type)?.IsEnum == true)
+        if (actualType.IsPrimitive || actualType == typeof(bool) || actualType == typeof(decimal))
         {
-            var underlyingEnumType = Nullable.GetUnderlyingType(type)!;
-            var enumValues = Enum.GetNames(underlyingEnumType).ToList();
+            var jsonType = GetJsonType(actualType);
             return new Dictionary<string, object>
             {
-                ["type"] = "string",
-                ["enum"] = enumValues
+                ["type"] = isNullable ? new[] { jsonType, "null" } : jsonType
             };
         }
 
-        if (type.IsArray || IsGenericList(type))
+        if (actualType.IsEnum)
         {
-            var elementType = type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[0];
-            return new Dictionary<string, object>
+            var enumValues = Enum.GetNames(actualType).ToList();
+            var schemaE = new Dictionary<string, object>
             {
-                ["type"] = "array",
+                ["type"] = isNullable ? new[] { "string", "null" } : "string",
+                ["enum"] = enumValues
+            };
+            return schemaE;
+        }
+
+        if (actualType.IsArray || IsGenericList(actualType))
+        {
+            var elementType = actualType.IsArray ? actualType.GetElementType()! : actualType.GetGenericArguments()[0];
+            var schemaA = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new[] { "array", "null" } : "array",
                 ["items"] = GenerateJsonSchemaForType(elementType),
                 ["additionalProperties"] = false
             };
+            return schemaA;
         }
 
         var properties = new Dictionary<string, object>();
         var requiredProperties = new List<string>();
 
-        foreach (var prop in type.GetProperties())
+        foreach (var prop in actualType.GetProperties())
         {
             var propSchema = GenerateJsonSchemaForType(prop.PropertyType);
 
@@ -101,13 +110,14 @@ internal static partial class JsonSchemaGenerator
 
             properties[prop.Name] = propSchema;
 
-            // W strict mode OpenAI wymaga wszystkich właściwości w required
+            // OpenAI w strict mode wymaga wszystkich właściwości w required
+            // niezależnie od tego czy są nullable czy nie
             requiredProperties.Add(prop.Name);
         }
 
         var schema = new Dictionary<string, object>
         {
-            ["type"] = "object",
+            ["type"] = isNullable ? new[] { "object", "null" } : "object",
             ["properties"] = properties,
             ["additionalProperties"] = false
         };
@@ -119,6 +129,24 @@ internal static partial class JsonSchemaGenerator
         }
 
         return schema;
+    }
+
+    /// <summary>
+    /// Sprawdź czy właściwość jest nullable.
+    /// </summary>
+    /// <param name="property"></param>
+    /// <returns></returns>
+    static bool IsPropertyNullable(PropertyInfo property)
+    {
+        // Sprawdź czy typ właściwości jest Nullable<T>
+        if (Nullable.GetUnderlyingType(property.PropertyType) != null)
+            return true;
+
+        // Sprawdź czy typ właściwości to reference type (może być null)
+        if (!property.PropertyType.IsValueType)
+            return true;
+
+        return false;
     }
 
     /// <summary>

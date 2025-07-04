@@ -29,7 +29,8 @@ internal class TextBackground(IAiClient client) : BackgroundService
 
         var test = await client.GenerateAsync(personal, new O3 {
             MaxTokens = 5000,
-            Reason = Zonit.Extensions.Ai.Llm.OpenAiReasoningBase.ReasonType.High
+            Reason = Zonit.Extensions.Ai.Llm.OpenAiReasoningBase.ReasonType.Low,
+            StoreLogs = true
         });
 
         Console.WriteLine(test);
