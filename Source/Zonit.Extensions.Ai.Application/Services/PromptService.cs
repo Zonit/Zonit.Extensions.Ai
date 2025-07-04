@@ -1,6 +1,7 @@
 ﻿using Scriban;
 using Scriban.Runtime;
 using System.Reflection;
+using System.Text.Json;
 
 namespace Zonit.Extensions.Ai.Application.Services;
 
@@ -30,7 +31,8 @@ public static class PromptService
         {
             if (!blockedProperties.Contains(prop.Name))
             {
-                scriptObject[prop.Name.ToLower()] = prop.GetValue(prompt);
+                var snakeCaseName = JsonNamingPolicy.SnakeCaseLower.ConvertName(prop.Name);
+                scriptObject[snakeCaseName] = prop.GetValue(prompt);
             }
         }
 
