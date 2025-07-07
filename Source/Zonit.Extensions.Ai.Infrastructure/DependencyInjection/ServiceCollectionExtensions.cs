@@ -4,7 +4,9 @@ using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Zonit.Extensions.Ai.Application.Options;
 using Zonit.Extensions.Ai.Domain.Repositories;
+using Zonit.Extensions.Ai.Infrastructure.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
+using Zonit.Extensions.Ai.Infrastructure.Repositories.X;
 
 namespace Zonit.Extensions;
 
@@ -46,6 +48,8 @@ public static class ServiceCollectionExtensions
 
         services.AddKeyedTransient<IImageRepository>("OpenAi", (serviceProvider, key) =>
             serviceProvider.GetRequiredService<OpenAiImageRepository>());
+
+        services.AddKeyedTransient<ITextRepository, XRepository>("X");
 
         return services;
     }

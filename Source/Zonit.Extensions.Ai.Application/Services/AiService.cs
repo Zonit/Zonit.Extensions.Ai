@@ -6,13 +6,18 @@ namespace Zonit.Extensions.Ai.Application.Services;
 
 public class AiService(
     [FromKeyedServices("OpenAi")] ITextRepository openAiRepository,
-    [FromKeyedServices("OpenAi")] IImageRepository openAiImageRepository
+    [FromKeyedServices("OpenAi")] IImageRepository openAiImageRepository,
+
+
+    [FromKeyedServices("X")] ITextRepository xAiRepository
     ) : IAiClient
 {
     public async Task<Result<TResponse>> GenerateAsync<TResponse>(IPromptBase<TResponse> prompt, ITextLlmBase model, CancellationToken cancellationToken = default)
     {
         if (model is OpenAiBase)
             return await openAiRepository.ResponseAsync(model, prompt, cancellationToken);
+        else if (model is XBase)
+            return await xAiRepository.ResponseAsync(model, prompt, cancellationToken);
 
         return default;
     }
