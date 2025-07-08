@@ -15,26 +15,16 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
 {
 #pragma warning disable OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
 
-    // Custom HttpClientFactory implementacja dla timeoutu 10 minut
-    private class CustomHttpClientFactory : IHttpClientFactory
-    {
-        public HttpClient CreateClient(string name)
-        {
-            var httpClient = new HttpClient();
-            httpClient.Timeout = TimeSpan.FromMinutes(10);
-            return httpClient;
-        }
-    }
-
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
         var client = new OpenAIResponseClient(model: llm.Name, apiKey: options.Value.OpenAiKey);
-        
-        // Spróbuj ustawić custom HttpClientFactory (jeśli właściwość istnieje)
-        if (client.GetType().GetProperty("HttpClientFactory") != null)
-        {
-            client.GetType().GetProperty("HttpClientFactory")?.SetValue(client, new CustomHttpClientFactory());
-        }
+
+        // Utwórz CancellationToken z 10-minutowym timeout (600 sekund)
+        using var timeoutTokenSource = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+        using var combinedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken, 
+            timeoutTokenSource.Token
+        );
 
         var messages = new List<ResponseItem>
         {
@@ -126,60 +116,76 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
 
         var stopwatch = new Stopwatch();
         stopwatch.Start();
-        OpenAIResponse response = await client.CreateResponseAsync(inputItems: messages, responseOptions, cancellationToken);
-        stopwatch.Stop();
-
-        // Znajdź pierwszą wiadomość z odpowiedzią (pomiń web search items)
-        MessageResponseItem? message = response.OutputItems
-            .OfType<MessageResponseItem>()
-            .FirstOrDefault();
-
-        if (message == null)
-        {
-            throw new InvalidOperationException("Brak wiadomości z odpowiedzią w odpowiedzi OpenAI.");
-        }
-
-        var responseJson = message.Content?.FirstOrDefault()?.Text;
-
-        if (string.IsNullOrEmpty(responseJson))
-        {
-            throw new InvalidOperationException("Odpowiedź OpenAI nie zawiera treści tekstowej.");
-        }
-
+        
         try
         {
-            var parsedResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
+            // Użyj combined token który zawiera timeout 10 minut
+            OpenAIResponse response = await client.CreateResponseAsync(
+                inputItems: messages, 
+                responseOptions, 
+                combinedTokenSource.Token
+            );
+            stopwatch.Stop();
 
-            // Pobierz "result" jeśli istnieje, inaczej użyj całego JSON-a
-            var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
-                ? resultElement.GetRawText()
-                : responseJson;
+            // Znajdź pierwszą wiadomość z odpowiedzią (pomiń web search items)
+            MessageResponseItem? message = response.OutputItems
+                .OfType<MessageResponseItem>()
+                .FirstOrDefault();
 
-            var optionsJson = new JsonSerializerOptions
+            if (message == null)
             {
-                PropertyNameCaseInsensitive = true,
-                Converters = { new NullableEnumJsonConverter() }
-            };
+                throw new InvalidOperationException("Brak wiadomości z odpowiedzią w odpowiedzi OpenAI.");
+            }
 
-            var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)
-                ?? throw new JsonException("Deserialization returned null.");
+            var responseJson = message.Content?.FirstOrDefault()?.Text;
 
-            // Utwórz obiekt Usage na podstawie danych z response
-            var usage = new Usage
+            if (string.IsNullOrEmpty(responseJson))
             {
-                Input = response.Usage?.InputTokenCount ?? 0,
-                Output = response.Usage?.OutputTokenCount ?? 0
-            };
+                throw new InvalidOperationException("Odpowiedź OpenAI nie zawiera treści tekstowej.");
+            }
 
-            return new Result<TResponse>()
+            try
             {
-                Value = result,
-                MetaData = new(llm, usage, stopwatch.Elapsed)
-            };
+                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
+
+                // Pobierz "result" jeśli istnieje, inaczej użyj całego JSON-a
+                var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
+                    ? resultElement.GetRawText()
+                    : responseJson;
+
+                var optionsJson = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true,
+                    Converters = { new NullableEnumJsonConverter() }
+                };
+
+                var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)
+                    ?? throw new JsonException("Deserialization returned null.");
+
+                // Utwórz obiekt Usage na podstawie danych z response
+                var usage = new Usage
+                {
+                    Input = response.Usage?.InputTokenCount ?? 0,
+                    Output = response.Usage?.OutputTokenCount ?? 0
+                };
+
+                return new Result<TResponse>()
+                {
+                    Value = result,
+                    MetaData = new(llm, usage, stopwatch.Elapsed)
+                };
+            }
+            catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException)
+            {
+                throw new JsonException($"Failed to parse JSON: {responseJson}", ex);
+            }
         }
-        catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException)
+        catch (OperationCanceledException ex) when (timeoutTokenSource.Token.IsCancellationRequested)
         {
-            throw new JsonException($"Failed to parse JSON: {responseJson}", ex);
+            // Specjalne obsłużenie timeout - dodaj więcej informacji o błędzie
+            throw new TimeoutException(
+                $"OpenAI request timed out after 10 minutes. Model: {llm.Name}. " +
+                $"Consider using a simpler model or reducing the complexity of the request.", ex);
         }
     }
 

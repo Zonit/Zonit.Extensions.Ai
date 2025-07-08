@@ -14,24 +14,6 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddAiInfrastructureExtension(this IServiceCollection services)
     {
-        // Konfiguracja globalnych ustawień HttpClient timeout
-        // Ustawiamy wszystkie możliwe sposoby konfiguracji timeout dla OpenAI
-        
-        // 1. Globalna konfiguracja dla wszystkich HttpClient z 10-minutowym timeout
-        services.ConfigureHttpClientDefaults(options =>
-        {
-            options.ConfigureHttpClient(client =>
-            {
-                client.Timeout = TimeSpan.FromMinutes(10);
-            });
-        });
-
-        // 2. Próba ustawienia globalnych ustawień przez AppContext (może być używane przez niektóre biblioteki)
-        AppContext.SetSwitch("System.Net.Http.UseSocketsHttpHandler", true);
-        
-        // 3. Ustawienie timeout przez zmienną środowiskową (backup metoda)
-        Environment.SetEnvironmentVariable("DOTNET_SYSTEM_NET_HTTP_TIMEOUT", "600"); // 600 sekund = 10 minut
-
         services.AddKeyedTransient<ITextRepository, OpenAiRepository>("OpenAi");
         //services.AddKeyedTransient<IImageRepository, OpenAiImageRepository>("OpenAi");
 
