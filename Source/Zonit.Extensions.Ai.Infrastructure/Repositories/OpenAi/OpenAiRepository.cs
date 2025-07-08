@@ -7,6 +7,7 @@ using Zonit.Extensions.Ai.Application.Services;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Serialization;
 using Zonit.Extensions.Ai.Llm;
+using OpenAI;
 
 namespace Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 
@@ -14,11 +15,28 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
 {
 #pragma warning disable OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
 
+    // Custom HttpClientFactory implementacja dla timeoutu 10 minut
+    private class CustomHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name)
+        {
+            var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromMinutes(10);
+            return httpClient;
+        }
+    }
+
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
         var client = new OpenAIResponseClient(model: llm.Name, apiKey: options.Value.OpenAiKey);
+        
+        // Spróbuj ustawić custom HttpClientFactory (jeśli właściwość istnieje)
+        if (client.GetType().GetProperty("HttpClientFactory") != null)
+        {
+            client.GetType().GetProperty("HttpClientFactory")?.SetValue(client, new CustomHttpClientFactory());
+        }
 
-       var messages = new List<ResponseItem>
+        var messages = new List<ResponseItem>
         {
             ResponseItem.CreateSystemMessageItem(PromptService.BuildPrompt(prompt))
         };
@@ -108,7 +126,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
 
         var stopwatch = new Stopwatch();
         stopwatch.Start();
-        OpenAIResponse response = await client.CreateResponseAsync(inputItems: messages, responseOptions);
+        OpenAIResponse response = await client.CreateResponseAsync(inputItems: messages, responseOptions, cancellationToken);
         stopwatch.Stop();
 
         // Znajdź pierwszą wiadomość z odpowiedzią (pomiń web search items)
