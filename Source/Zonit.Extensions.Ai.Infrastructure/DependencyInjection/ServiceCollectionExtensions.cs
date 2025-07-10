@@ -14,50 +14,50 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddAiInfrastructureExtension(this IServiceCollection services)
     {
-        // Add HttpClient for OpenAiRepository
+        // Configure OpenAI repositories with shared configuration
+        services.AddOpenAiRepositories();
+        
+        // Configure X repository
+        services.AddXRepository();
+
+        return services;
+    }
+
+    private static IServiceCollection AddOpenAiRepositories(this IServiceCollection services)
+    {
+        // Shared OpenAI HttpClient configuration
+        static void ConfigureOpenAiClient(IServiceProvider serviceProvider, HttpClient client)
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
+            client.BaseAddress = new Uri("https://api.openai.com/");
+            client.Timeout = options.Value.Resilience.HttpClientTimeout;
+            client.DefaultRequestHeaders.Authorization = 
+                new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
+        }
+
+        // Add OpenAI text repository
         services
-            .AddHttpClient<OpenAiRepository>((serviceProvider, client) =>
-            {
-                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
-                client.BaseAddress = new Uri("https://api.openai.com/");
-                client.Timeout = options.Value.Resilience.HttpClientTimeout;
-
-                client.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
-            })
+            .AddHttpClient<OpenAiRepository>(ConfigureOpenAiClient)
             .AddStandardResilienceHandler()
-            .Configure((options, serviceProvider) =>
-            {
-                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
-                ConfigureResilience(options, aiOptions.Resilience);
-            });
+            .Configure(ConfigureResilienceFromOptions);
 
-        services.AddKeyedTransient<ITextRepository>("OpenAi", (serviceProvider, key) =>
+        services.AddKeyedTransient<ITextRepository>("OpenAi", (serviceProvider, _) =>
             serviceProvider.GetRequiredService<OpenAiRepository>());
 
-        services.AddHttpClient();
-
+        // Add OpenAI image repository
         services
-            .AddHttpClient<OpenAiImageRepository>((serviceProvider, client) =>
-            {
-                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
-                client.BaseAddress = new Uri("https://api.openai.com/");
-                client.Timeout = options.Value.Resilience.HttpClientTimeout;
-
-                client.DefaultRequestHeaders.Authorization =
-                    new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
-            })
+            .AddHttpClient<OpenAiImageRepository>(ConfigureOpenAiClient)
             .AddStandardResilienceHandler()
-            .Configure((options, serviceProvider) =>
-            {
-                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
-                ConfigureResilience(options, aiOptions.Resilience);
-            });
+            .Configure(ConfigureResilienceFromOptions);
 
-        services.AddKeyedTransient<IImageRepository>("OpenAi", (serviceProvider, key) =>
+        services.AddKeyedTransient<IImageRepository>("OpenAi", (serviceProvider, _) =>
             serviceProvider.GetRequiredService<OpenAiImageRepository>());
 
-        // Add HttpClient for XRepository - now uses same configuration as other providers
+        return services;
+    }
+
+    private static IServiceCollection AddXRepository(this IServiceCollection services)
+    {
         services
             .AddHttpClient<XRepository>((serviceProvider, client) =>
             {
@@ -66,16 +66,21 @@ public static class ServiceCollectionExtensions
                 client.Timeout = options.Value.Resilience.HttpClientTimeout;
             })
             .AddStandardResilienceHandler()
-            .Configure((options, serviceProvider) =>
-            {
-                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
-                ConfigureResilience(options, aiOptions.Resilience);
-            });
+            .Configure(ConfigureResilienceFromOptions);
 
-        services.AddKeyedTransient<ITextRepository>("X", (serviceProvider, key) =>
+        services.AddKeyedTransient<ITextRepository>("X", (serviceProvider, _) =>
             serviceProvider.GetRequiredService<XRepository>());
 
         return services;
+    }
+
+    /// <summary>
+    /// Configures resilience settings from AiOptions
+    /// </summary>
+    private static void ConfigureResilienceFromOptions(HttpStandardResilienceOptions options, IServiceProvider serviceProvider)
+    {
+        var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
+        ConfigureResilience(options, aiOptions.Resilience);
     }
 
     /// <summary>

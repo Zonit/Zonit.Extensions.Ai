@@ -18,17 +18,17 @@ public class ResilienceOptions
     /// <summary>
     /// HTTP client timeout for AI requests (increased for AI model processing)
     /// </summary>
-    public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(30);
+    public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(45);
     
     /// <summary>
     /// Total request timeout including all retries (generous timeout for AI processing)
     /// </summary>
-    public TimeSpan TotalRequestTimeout { get; set; } = TimeSpan.FromMinutes(25);
+    public TimeSpan TotalRequestTimeout { get; set; } = TimeSpan.FromMinutes(40);
     
     /// <summary>
     /// Individual attempt timeout (per single request attempt)
     /// </summary>
-    public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromMinutes(20);
+    public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromMinutes(10);
     
     /// <summary>
     /// Retry configuration with exponential backoff
@@ -77,9 +77,9 @@ public class CircuitBreakerOptions
     public int MinimumThroughput { get; set; } = 10;
     
     /// <summary>
-    /// Duration to sample failure ratio
+    /// Duration to sample failure ratio (must be at least 2x AttemptTimeout)
     /// </summary>
-    public TimeSpan SamplingDuration { get; set; } = TimeSpan.FromMinutes(2);
+    public TimeSpan SamplingDuration { get; set; } = TimeSpan.FromMinutes(25);
     
     /// <summary>
     /// Duration the circuit stays open before attempting to close
