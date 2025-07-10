@@ -20,32 +20,20 @@ public static class ServiceCollectionExtensions
             {
                 var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
                 client.BaseAddress = new Uri("https://api.openai.com/");
-                client.Timeout = TimeSpan.FromMinutes(10);
+                client.Timeout = options.Value.Resilience.HttpClientTimeout;
 
                 client.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
             })
             .AddStandardResilienceHandler()
-            .Configure(options =>
+            .Configure((options, serviceProvider) =>
             {
-                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
-                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
-
-                options.Retry.MaxRetryAttempts = 3;
-                options.Retry.Delay = TimeSpan.FromSeconds(5);
-                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
-
-                options.CircuitBreaker.FailureRatio = 0.5;
-                options.CircuitBreaker.MinimumThroughput = 10;
-                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
-                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
+                ConfigureResilience(options, aiOptions.Resilience);
             });
 
         services.AddKeyedTransient<ITextRepository>("OpenAi", (serviceProvider, key) =>
             serviceProvider.GetRequiredService<OpenAiRepository>());
-
-        //services.AddKeyedTransient<IImageRepository, OpenAiImageRepository>("OpenAi");
 
         services.AddHttpClient();
 
@@ -54,58 +42,61 @@ public static class ServiceCollectionExtensions
             {
                 var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
                 client.BaseAddress = new Uri("https://api.openai.com/");
-                client.Timeout = TimeSpan.FromMinutes(10);
+                client.Timeout = options.Value.Resilience.HttpClientTimeout;
 
                 client.DefaultRequestHeaders.Authorization =
                     new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
             })
             .AddStandardResilienceHandler()
-            .Configure(options =>
+            .Configure((options, serviceProvider) =>
             {
-                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
-                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
-
-                options.Retry.MaxRetryAttempts = 3;
-                options.Retry.Delay = TimeSpan.FromSeconds(5);
-                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
-
-                options.CircuitBreaker.FailureRatio = 0.5;
-                options.CircuitBreaker.MinimumThroughput = 10;
-                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
-                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
+                ConfigureResilience(options, aiOptions.Resilience);
             });
 
         services.AddKeyedTransient<IImageRepository>("OpenAi", (serviceProvider, key) =>
             serviceProvider.GetRequiredService<OpenAiImageRepository>());
 
-        // Add HttpClient for XRepository
+        // Add HttpClient for XRepository - now uses same configuration as other providers
         services
             .AddHttpClient<XRepository>((serviceProvider, client) =>
             {
+                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
                 client.BaseAddress = new Uri("https://api.x.ai/");
-                client.Timeout = TimeSpan.FromMinutes(10);
+                client.Timeout = options.Value.Resilience.HttpClientTimeout;
             })
             .AddStandardResilienceHandler()
-            .Configure(options =>
+            .Configure((options, serviceProvider) =>
             {
-                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
-                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
-
-                options.Retry.MaxRetryAttempts = 3;
-                options.Retry.Delay = TimeSpan.FromSeconds(5);
-                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
-
-                options.CircuitBreaker.FailureRatio = 0.5;
-                options.CircuitBreaker.MinimumThroughput = 10;
-                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
-                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+                var aiOptions = serviceProvider.GetRequiredService<IOptions<AiOptions>>().Value;
+                ConfigureResilience(options, aiOptions.Resilience);
             });
 
         services.AddKeyedTransient<ITextRepository>("X", (serviceProvider, key) =>
             serviceProvider.GetRequiredService<XRepository>());
 
         return services;
+    }
+
+    /// <summary>
+    /// Configures standardized resilience settings for all AI providers using modern .NET Resilience
+    /// </summary>
+    private static void ConfigureResilience(HttpStandardResilienceOptions options, ResilienceOptions resilienceConfig)
+    {
+        // Configure timeouts
+        options.TotalRequestTimeout.Timeout = resilienceConfig.TotalRequestTimeout;
+        options.AttemptTimeout.Timeout = resilienceConfig.AttemptTimeout;
+
+        // Configure retry policy with exponential backoff and jitter
+        options.Retry.MaxRetryAttempts = resilienceConfig.Retry.MaxRetryAttempts;
+        options.Retry.Delay = resilienceConfig.Retry.BaseDelay;
+        options.Retry.MaxDelay = resilienceConfig.Retry.MaxDelay;
+        options.Retry.UseJitter = resilienceConfig.Retry.UseJitter;
+
+        // Configure circuit breaker
+        options.CircuitBreaker.FailureRatio = resilienceConfig.CircuitBreaker.FailureRatio;
+        options.CircuitBreaker.MinimumThroughput = resilienceConfig.CircuitBreaker.MinimumThroughput;
+        options.CircuitBreaker.SamplingDuration = resilienceConfig.CircuitBreaker.SamplingDuration;
+        options.CircuitBreaker.BreakDuration = resilienceConfig.CircuitBreaker.BreakDuration;
     }
 }

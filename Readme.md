@@ -11,6 +11,7 @@ A .NET library for integrating with AI models (OpenAI GPT, X Grok) in applicatio
 - **AI Tools**: Web search, file search with configuration  
 - **File Management**: Built-in support for images and documents  
 - **Metadata Tracking**: Automatic logging of cost, token counts, and execution time  
+- **Modern Resilience**: Built-in retry policies, circuit breakers, and configurable timeouts using .NET Resilience
 
 ## Installation
 
@@ -26,6 +27,7 @@ Install-Package Zonit.Extensions.Ai
 services.AddAi(options =>
 {
     options.OpenAiKey = "your-openai-api-key";
+    options.XKey = "your-x-api-key";
 });
 ```
 
@@ -34,10 +36,61 @@ services.AddAi(options =>
 ```json
 {
   "Ai": {
-    "OpenAiKey": "your-openai-api-key"
-  }
-}
+    "OpenAiKey": "your-openai-api-key",
+    "XKey": "your-x-api-key",
+    "Resilience": {
+      "HttpClientTimeout": "00:30:00",
+      "TotalRequestTimeout": "00:25:00", 
+      "AttemptTimeout": "00:20:00",
+      "Retry": {
+        "MaxRetryAttempts": 3,
+        "BaseDelay": "00:00:02",
+        "MaxDelay": "00:00:30",
+        "UseJitter": true
+      },
+      "CircuitBreaker": {
+        "FailureRatio": 0.5,
+        "MinimumThroughput": 10,
+        "SamplingDuration": "00:02:00",
+        "BreakDuration": "00:00:30"
+      }
+    }
 ```
+
+The library uses **Microsoft.Extensions.Http.Resilience** (the modern replacement for Polly) to provide robust error handling and retry mechanisms for all AI providers.
+
+### Unified Configuration
+
+**All AI providers** (OpenAI, X AI, etc.) now use the **same resilience configuration**, eliminating the need for provider-specific settings. This simplifies configuration and ensures consistent behavior across all services.
+
+### Improved Default Timeouts
+
+- **HTTP Client Timeout**: 30 minutes (increased from 15 minutes)
+- **Total Request Timeout**: 25 minutes (including all retries)  
+- **Attempt Timeout**: 20 minutes (per individual request)
+
+These generous timeouts accommodate AI model processing times, especially for complex reasoning models.
+
+### Intelligent Retry Strategy
+
+- **Max Retry Attempts**: 3 retries (4 total attempts)
+- **Exponential Backoff**: Starts at 2 seconds, doubles each time (2s ? 4s ? 8s ? 16s ? 30s max)
+- **Jitter**: Randomizes delays to prevent retry storms
+- **Max Delay**: 30 seconds to prevent excessive wait times
+
+### Circuit Breaker Protection
+
+- **Failure Ratio**: 50% failure threshold to open circuit
+- **Minimum Throughput**: 10 requests before activation
+- **Sampling Duration**: 2 minutes for failure rate calculation
+- **Break Duration**: 30 seconds before attempting to close
+
+### Example Retry Behavior
+Request 1: Fails ? Wait 2 seconds (+ jitter)
+Request 2: Fails ? Wait 4 seconds (+ jitter) 
+Request 3: Fails ? Wait 8 seconds (+ jitter)
+Request 4: Success ?
+If all attempts fail, the request is rejected with detailed error information.
 
 ## Basic Usage
 
@@ -122,6 +175,16 @@ var reasoning = new GPT4Reasoning
 };
 ```
 
+// X AI (Grok) models - now with same resilience as OpenAI
+var grok = new Grok4
+{
+    MaxTokens = 4000,
+    WebSearch = new Search 
+    { 
+        Mode = ModeType.Auto,
+        Citations = true 
+    }
+};
 ### Image Models
 
 ```csharp
@@ -249,13 +312,19 @@ try
 catch (JsonException ex)
 {
     // JSON parsing error
+    Console.WriteLine($"Failed to parse response: {ex.Message}");
 }
 catch (InvalidOperationException ex)
 {
-    // API communication error
+    // API communication error (after all retries exhausted)
+    Console.WriteLine($"API request failed: {ex.Message}");
 }
 ```
 
+The library logs resilience events for monitoring:
+[INFO] Resilience event occurred. EventName: 'OnRetry', Attempt: '1'
+[WARN] Resilience event occurred. EventName: 'OnTimeout', Source: 'OpenAiRepository-standard'
+[ERROR] Resilience event occurred. EventName: 'OnCircuitBreakerOpened'
 ## Architecture
 
 The library follows Clean Architecture with layered separation:
@@ -263,7 +332,7 @@ The library follows Clean Architecture with layered separation:
 - **Abstractions**: Interfaces and contracts  
 - **Domain**: Domain models and business logic  
 - **Application**: Application services and configuration  
-- **Infrastructure**: Repository implementations (OpenAI)  
+- **Infrastructure**: Repository implementations (OpenAI, X AI)  
 - **LLM**: Language model definitions  
 
 ## Complete Application Example
@@ -305,6 +374,27 @@ public class AiService
         );
 
         return result.Value.Data;
+    }
+
+    public async Task<string> SearchWithGrokAsync(string query)
+    {
+        var prompt = new SearchPrompt { Query = query };
+
+        // Grok with web search - now uses same resilience as OpenAI
+        var result = await _aiClient.GenerateAsync(
+            prompt, 
+            new Grok4 
+            { 
+                WebSearch = new Search 
+                { 
+                    Mode = ModeType.Always,
+                    Citations = true,
+                    MaxResults = 10
+                }
+            }
+        );
+
+        return result.Value.Answer;
     }
 }
 ```
