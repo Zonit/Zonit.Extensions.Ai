@@ -32,9 +32,6 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             WriteIndented = false
         });
 
-        // Debug: log the request payload
-        Console.WriteLine($"DEBUG - Request JSON: {jsonPayload}");
-
         var stopwatch = new Stopwatch();
         stopwatch.Start();
         
