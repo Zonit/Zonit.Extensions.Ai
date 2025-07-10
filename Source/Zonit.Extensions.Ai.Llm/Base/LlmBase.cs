@@ -33,4 +33,7 @@ public abstract class LlmBase : ILlmBase
     public virtual ToolsType Tools { get; } = ToolsType.None;
     public virtual FeaturesType Features { get; } = FeaturesType.None;
     public virtual EndpointsType Endpoints { get; } = EndpointsType.None;
+
+    public virtual decimal GetInputPrice(long tokenCount) => PriceInput;
+    public virtual decimal GetOutputPrice(long tokenCount) => PriceOutput;
 }

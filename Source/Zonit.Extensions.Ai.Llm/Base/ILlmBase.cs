@@ -20,4 +20,18 @@ public interface ILlmBase
 
     ToolsType Tools { get; }
     EndpointsType Endpoints { get; }
+
+    /// <summary>
+    /// Oblicza cenę za tokeny input na podstawie liczby tokenów (może być różna w zależności od wielkości kontekstu)
+    /// </summary>
+    /// <param name="tokenCount">Liczba tokenów input</param>
+    /// <returns>Cena za 1M tokenów</returns>
+    decimal GetInputPrice(long tokenCount);
+
+    /// <summary>
+    /// Oblicza cenę za tokeny output na podstawie liczby tokenów
+    /// </summary>
+    /// <param name="tokenCount">Liczba tokenów output</param>
+    /// <returns>Cena za 1M tokenów</returns>
+    decimal GetOutputPrice(long tokenCount);
 }

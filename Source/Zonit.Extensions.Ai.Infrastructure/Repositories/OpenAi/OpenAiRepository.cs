@@ -1,157 +1,80 @@
 ﻿using Microsoft.Extensions.Options;
-using OpenAI.Responses;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text;
 using Zonit.Extensions.Ai.Application.Options;
-using Zonit.Extensions.Ai.Application.Services;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Serialization;
 using Zonit.Extensions.Ai.Llm;
-using OpenAI;
 
 namespace Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 
-internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepository
+internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient httpClient) : ITextRepository
 {
-#pragma warning disable OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
+    private readonly string _apiKey = options.Value.OpenAiKey ?? throw new ArgumentException("OpenAI API key is required");
+    private const string OpenAiApiUrl = "/v1/chat/completions";
 
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
-        var client = new OpenAIResponseClient(model: llm.Name, apiKey: options.Value.OpenAiKey);
-
-        // Utwórz CancellationToken z 10-minutowym timeout (600 sekund)
+        // Create CancellationToken with 10-minute timeout
         using var timeoutTokenSource = new CancellationTokenSource(TimeSpan.FromMinutes(10));
         using var combinedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken, 
             timeoutTokenSource.Token
         );
 
-        var messages = new List<ResponseItem>
+        // Build the request payload
+        var requestPayload = BuildRequestPayload(llm, prompt);
+        var jsonPayload = JsonSerializer.Serialize(requestPayload, new JsonSerializerOptions
         {
-            ResponseItem.CreateSystemMessageItem(PromptService.BuildPrompt(prompt))
-        };
-
-        var responseOptions = new ResponseCreationOptions()
-        {
-            MaxOutputTokenCount = llm.MaxTokens,
-            EndUserId = prompt.UserName,
-            TextOptions = new()
-            {
-                TextFormat = ResponseTextFormat.CreateJsonSchemaFormat(
-                    jsonSchemaFormatName: "response",
-                    jsonSchema: BinaryData.FromString(JsonSchemaGenerator.GenerateJsonSchema<TResponse>()),
-                    jsonSchemaFormatDescription: JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
-                    jsonSchemaIsStrict: true)
-            },
-        };
-
-        // Domyślne ustawienia
-        if (llm is OpenAiBase variable)
-        {
-            responseOptions.StoredOutputEnabled = variable.StoreLogs;
-        }
-
-        // Model myślący
-        if (llm is OpenAiReasoningBase variableReasoning)
-        {
-            // Inicjalizuj ReasoningOptions jeśli jeszcze nie istnieje
-            responseOptions.ReasoningOptions ??= new ResponseReasoningOptions();
-            responseOptions.ReasoningOptions.ReasoningEffortLevel = variableReasoning.Reason switch
-            {
-                OpenAiReasoningBase.ReasonType.Low => ResponseReasoningEffortLevel.Low,
-                OpenAiReasoningBase.ReasonType.Medium => ResponseReasoningEffortLevel.Medium,
-                OpenAiReasoningBase.ReasonType.High => ResponseReasoningEffortLevel.High,
-                null => ResponseReasoningEffortLevel.Medium,
-                _ => ResponseReasoningEffortLevel.Medium
-            };
-            responseOptions.ReasoningOptions.ReasoningSummaryVerbosity = variableReasoning.ReasonSummary switch
-            {
-                OpenAiReasoningBase.ReasonSummaryType.None => ResponseReasoningSummaryVerbosity.Concise,
-                OpenAiReasoningBase.ReasonSummaryType.Auto => new ResponseReasoningSummaryVerbosity("auto"),
-                OpenAiReasoningBase.ReasonSummaryType.Detailed => ResponseReasoningSummaryVerbosity.Detailed,
-                null => new ResponseReasoningSummaryVerbosity("auto"),
-                _ => new ResponseReasoningSummaryVerbosity("auto")
-            };
-        }
-
-        // Model chat typu GPT
-        if (llm is OpenAiChatBase variableChat)
-        {
-            responseOptions.Temperature = (float)variableChat.Temperature;
-            responseOptions.TopP = (float)variableChat.TopP;
-        }
-
-        // Tools
-        if (prompt.Tools is not null)
-        {
-            if (prompt.ToolChoice is not null)
-            {
-                responseOptions.ToolChoice = prompt.ToolChoice.Value switch
-                {
-                    ToolsType.None => ResponseToolChoice.CreateNoneChoice(),
-                    ToolsType.WebSearch => ResponseToolChoice.CreateWebSearchChoice(),
-                    ToolsType.FileSearch => ResponseToolChoice.CreateFileSearchChoice(),
-                    //ToolsType.CodeInterpreter => ResponseToolChoice.CreateComputerChoice(),
-                    _ => ResponseToolChoice.CreateAutoChoice()
-                };
-            }
-
-            foreach (var tool in prompt.Tools)
-            {
-                if (tool is WebSearchTool webSearch)
-                {
-                    responseOptions.Tools.Add(ResponseTool.CreateWebSearchTool(
-                        // TODO: Dodaj region
-                        searchContextSize: webSearch.ContextSize switch
-                        {
-                            WebSearchTool.ContextSizeType.Low => WebSearchContextSize.Low,
-                            WebSearchTool.ContextSizeType.Medium => WebSearchContextSize.Medium,
-                            WebSearchTool.ContextSizeType.High => WebSearchContextSize.High,
-                            _ => WebSearchContextSize.Medium
-                        }
-                    ));
-                }
-            }
-        }
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            WriteIndented = false
+        });
 
         var stopwatch = new Stopwatch();
         stopwatch.Start();
         
         try
         {
-            // Użyj combined token który zawiera timeout 10 minut
-            OpenAIResponse response = await client.CreateResponseAsync(
-                inputItems: messages, 
-                responseOptions, 
-                combinedTokenSource.Token
-            );
+            var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+
+            // Send HTTP request
+            using var response = await httpClient.PostAsync(OpenAiApiUrl, content, combinedTokenSource.Token);
             stopwatch.Stop();
 
-            // Znajdź pierwszą wiadomość z odpowiedzią (pomiń web search items)
-            MessageResponseItem? message = response.OutputItems
-                .OfType<MessageResponseItem>()
-                .FirstOrDefault();
+            var responseJson = await response.Content.ReadAsStringAsync(combinedTokenSource.Token);
 
-            if (message == null)
+            if (!response.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException("Brak wiadomości z odpowiedzią w odpowiedzi OpenAI.");
+                throw new HttpRequestException($"OpenAI API request failed with status {response.StatusCode}: {responseJson}");
             }
 
-            var responseJson = message.Content?.FirstOrDefault()?.Text;
-
-            if (string.IsNullOrEmpty(responseJson))
+            // Parse OpenAI response
+            var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, new JsonSerializerOptions
             {
-                throw new InvalidOperationException("Odpowiedź OpenAI nie zawiera treści tekstowej.");
+                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (openAiResponse?.Choices == null || !openAiResponse.Choices.Any())
+            {
+                throw new InvalidOperationException("No choices returned from OpenAI API");
+            }
+
+            var messageContent = openAiResponse.Choices[0].Message?.Content;
+            if (string.IsNullOrEmpty(messageContent))
+            {
+                throw new InvalidOperationException("OpenAI response does not contain text content");
             }
 
             try
             {
-                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
+                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(messageContent);
 
-                // Pobierz "result" jeśli istnieje, inaczej użyj całego JSON-a
+                // Get "result" if it exists, otherwise use the entire JSON
                 var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
                     ? resultElement.GetRawText()
-                    : responseJson;
+                    : messageContent;
 
                 var optionsJson = new JsonSerializerOptions
                 {
@@ -162,11 +85,11 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
                 var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)
                     ?? throw new JsonException("Deserialization returned null.");
 
-                // Utwórz obiekt Usage na podstawie danych z response
+                // Create Usage object based on response data
                 var usage = new Usage
                 {
-                    Input = response.Usage?.InputTokenCount ?? 0,
-                    Output = response.Usage?.OutputTokenCount ?? 0
+                    Input = openAiResponse.Usage?.PromptTokens ?? 0,
+                    Output = openAiResponse.Usage?.CompletionTokens ?? 0
                 };
 
                 return new Result<TResponse>()
@@ -177,18 +100,164 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options) : ITextRepo
             }
             catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException)
             {
-                throw new JsonException($"Failed to parse JSON: {responseJson}", ex);
+                throw new JsonException($"Failed to parse JSON: {messageContent}", ex);
             }
         }
         catch (OperationCanceledException ex) when (timeoutTokenSource.Token.IsCancellationRequested)
         {
-            // Specjalne obsłużenie timeout - dodaj więcej informacji o błędzie
+            throw new TimeoutException(
+                $"OpenAI request timed out after 10 minutes. Model: {llm.Name}. " +
+                $"Consider using a simpler model or reducing the complexity of the request.", ex);
+        }
+        catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+        {
             throw new TimeoutException(
                 $"OpenAI request timed out after 10 minutes. Model: {llm.Name}. " +
                 $"Consider using a simpler model or reducing the complexity of the request.", ex);
         }
     }
 
-#pragma warning restore OPENAI001 // Typ jest przeznaczony wyłącznie do celów ewaluacyjnych i może zostać zmieniony albo usunięty w przyszłych aktualizacjach. Wstrzymaj tę diagnostykę, aby kontynuować.
+    private object BuildRequestPayload<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt)
+    {
+        var messages = new List<object>
+        {
+            new
+            {
+                role = "system",
+                content = PromptService.BuildPrompt(prompt)
+            }
+        };
 
+        var requestPayload = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["messages"] = messages,
+            ["max_completion_tokens"] = llm.MaxTokens
+        };
+
+        // Add user ID if provided
+        if (!string.IsNullOrEmpty(prompt.UserName))
+        {
+            requestPayload["user"] = prompt.UserName;
+        }
+
+        // Add JSON schema for structured output
+        var jsonSchema = JsonSchemaGenerator.GenerateJsonSchema<TResponse>();
+        requestPayload["response_format"] = new
+        {
+            type = "json_schema",
+            json_schema = new
+            {
+                name = "response",
+                schema = JsonSerializer.Deserialize<object>(jsonSchema),
+                description = JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
+                strict = true
+            }
+        };
+
+        // Handle different LLM types
+        if (llm is OpenAiBase openAiBase)
+        {
+            if (openAiBase.StoreLogs)
+            {
+                requestPayload["store"] = true;
+            }
+        }
+
+        // Handle reasoning models - use reasoning_effort parameter
+        if (llm is OpenAiReasoningBase reasoningModel)
+        {
+            requestPayload["reasoning_effort"] = reasoningModel.Reason switch
+            {
+                OpenAiReasoningBase.ReasonType.Low => "low",
+                OpenAiReasoningBase.ReasonType.Medium => "medium",
+                OpenAiReasoningBase.ReasonType.High => "high",
+                null => "medium",
+                _ => "medium"
+            };
+        }
+
+        // Handle chat models (GPT)
+        if (llm is OpenAiChatBase chatModel)
+        {
+            requestPayload["temperature"] = chatModel.Temperature;
+            requestPayload["top_p"] = chatModel.TopP;
+        }
+
+        // Handle tools
+        if (prompt.Tools is not null && prompt.Tools.Any())
+        {
+            var tools = new List<object>();
+            
+            foreach (var tool in prompt.Tools)
+            {
+                if (tool is WebSearchTool webSearch)
+                {
+                    tools.Add(new
+                    {
+                        type = "web_search",
+                        web_search = new
+                        {
+                            search_context_size = webSearch.ContextSize switch
+                            {
+                                WebSearchTool.ContextSizeType.Low => "low",
+                                WebSearchTool.ContextSizeType.Medium => "medium",
+                                WebSearchTool.ContextSizeType.High => "high",
+                                _ => "medium"
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (tools.Any())
+            {
+                requestPayload["tools"] = tools;
+
+                // Handle tool choice
+                if (prompt.ToolChoice is not null)
+                {
+                    requestPayload["tool_choice"] = prompt.ToolChoice.Value switch
+                    {
+                        ToolsType.None => "none",
+                        ToolsType.WebSearch => new { type = "web_search" },
+                        ToolsType.FileSearch => new { type = "file_search" },
+                        _ => "auto"
+                    };
+                }
+            }
+        }
+
+        return requestPayload;
+    }
+}
+
+// DTOs for OpenAI API response
+internal class OpenAiResponse
+{
+    public List<Choice>? Choices { get; set; }
+    public UsageInfo? Usage { get; set; }
+}
+
+internal class Choice
+{
+    public Message? Message { get; set; }
+}
+
+internal class Message
+{
+    public string? Content { get; set; }
+}
+
+internal class UsageInfo
+{
+    public int PromptTokens { get; set; }
+    public int CompletionTokens { get; set; }
+    public int TotalTokens { get; set; }
+    public CompletionTokensDetails? CompletionTokensDetails { get; set; }
+}
+
+internal class CompletionTokensDetails
+{
+    public int ReasoningTokens { get; set; }
 }

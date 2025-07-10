@@ -14,7 +14,37 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddAiInfrastructureExtension(this IServiceCollection services)
     {
-        services.AddKeyedTransient<ITextRepository, OpenAiRepository>("OpenAi");
+        // Add HttpClient for OpenAiRepository
+        services
+            .AddHttpClient<OpenAiRepository>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
+                client.BaseAddress = new Uri("https://api.openai.com/");
+                client.Timeout = TimeSpan.FromMinutes(10);
+
+                client.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
+            })
+            .AddStandardResilienceHandler()
+            .Configure(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
+                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
+
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.Delay = TimeSpan.FromSeconds(5);
+                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
+
+                options.CircuitBreaker.FailureRatio = 0.5;
+                options.CircuitBreaker.MinimumThroughput = 10;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
+                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+            });
+
+        services.AddKeyedTransient<ITextRepository>("OpenAi", (serviceProvider, key) =>
+            serviceProvider.GetRequiredService<OpenAiRepository>());
+
         //services.AddKeyedTransient<IImageRepository, OpenAiImageRepository>("OpenAi");
 
         services.AddHttpClient();

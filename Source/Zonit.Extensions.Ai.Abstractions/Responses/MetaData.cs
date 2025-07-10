@@ -10,9 +10,9 @@ public class MetaData(ILlmBase model, Usage usage, TimeSpan? duration = default)
     public long InputTokenCount => Usage.Input;
     public long OutputTokenCount => Usage.Output;
 
-    // Price per 1,000,000 tokens
-    public decimal PriceInput => (Model.PriceInput * InputTokenCount) / 1_000_000m;
-    public decimal PriceOutput => (Model.PriceOutput * OutputTokenCount) / 1_000_000m;
+    // Price per 1,000,000 tokens - używa dynamicznych cen z modelu
+    public decimal PriceInput => (Model.GetInputPrice(InputTokenCount) * InputTokenCount) / 1_000_000m;
+    public decimal PriceOutput => (Model.GetOutputPrice(OutputTokenCount) * OutputTokenCount) / 1_000_000m;
     public decimal PriceTotal => PriceInput + PriceOutput;
 
     /// <summary>

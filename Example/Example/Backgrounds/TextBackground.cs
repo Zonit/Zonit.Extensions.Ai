@@ -29,9 +29,8 @@ internal class TextBackground(IAiClient client) : BackgroundService
 
         var testPrompt = new TestPrompt();
 
-        var test = await client.GenerateAsync(testPrompt, new O3 {
+        var test = await client.GenerateAsync(testPrompt, new GPT41 {
             MaxTokens = 5000,
-            Reason = Zonit.Extensions.Ai.Llm.OpenAiReasoningBase.ReasonType.Low,
             StoreLogs = true
         });
 
