@@ -12,16 +12,17 @@ namespace Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient httpClient) : ITextRepository
 {
     private readonly string _apiKey = options.Value.OpenAiKey ?? throw new ArgumentException("OpenAI API key is required");
-    private const string OpenAiApiUrl = "/v1/chat/completions";
+    private const string OpenAiApiUrl = "/v1/responses";
 
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
-        // Create CancellationToken with 10-minute timeout
-        using var timeoutTokenSource = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-        using var combinedTokenSource = CancellationTokenSource.CreateLinkedTokenSource(
-            cancellationToken, 
-            timeoutTokenSource.Token
-        );
+        // Validate that the model supports the Responses API endpoint
+        if (!llm.Endpoints.HasFlag(EndpointsType.Response))
+        {
+            throw new ArgumentException($"Model '{llm.Name}' does not support the Responses API endpoint. " +
+                                      $"Supported endpoints: {llm.Endpoints}. " +
+                                      $"Please use a model that supports EndpointsType.Response.");
+        }
 
         // Build the request payload
         var requestPayload = BuildRequestPayload(llm, prompt);
@@ -31,6 +32,9 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             WriteIndented = false
         });
 
+        // Debug: log the request payload
+        Console.WriteLine($"DEBUG - Request JSON: {jsonPayload}");
+
         var stopwatch = new Stopwatch();
         stopwatch.Start();
         
@@ -38,11 +42,11 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         {
             var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-            // Send HTTP request
-            using var response = await httpClient.PostAsync(OpenAiApiUrl, content, combinedTokenSource.Token);
+            // Send HTTP request - let Polly handle the timeout
+            using var response = await httpClient.PostAsync(OpenAiApiUrl, content, cancellationToken);
             stopwatch.Stop();
 
-            var responseJson = await response.Content.ReadAsStringAsync(combinedTokenSource.Token);
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -50,22 +54,46 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             }
 
             // Parse OpenAI response
-            var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, new JsonSerializerOptions
+            var openAiResponse = JsonSerializer.Deserialize<OpenAiResponsesApiResponse>(responseJson, new JsonSerializerOptions
             {
                 PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
                 PropertyNameCaseInsensitive = true
             });
 
-            if (openAiResponse?.Choices == null || !openAiResponse.Choices.Any())
+            if (openAiResponse == null)
             {
-                throw new InvalidOperationException("No choices returned from OpenAI API");
+                throw new InvalidOperationException("Failed to deserialize OpenAI Responses API response");
             }
 
-            var messageContent = openAiResponse.Choices[0].Message?.Content;
-            if (string.IsNullOrEmpty(messageContent))
+            // Check for API errors
+            if (openAiResponse.Status != "completed")
+            {
+                var errorMessage = openAiResponse.Error != null 
+                    ? JsonSerializer.Serialize(openAiResponse.Error)
+                    : $"Response status: {openAiResponse.Status}";
+                throw new InvalidOperationException($"OpenAI Responses API returned non-completed status: {errorMessage}");
+            }
+
+            if (openAiResponse.Output == null || !openAiResponse.Output.Any())
+            {
+                throw new InvalidOperationException("No output returned from OpenAI Responses API");
+            }
+
+            // Find the first message output
+            var messageOutput = openAiResponse.Output.FirstOrDefault(o => o.Type == "message");
+            if (messageOutput?.Content == null || !messageOutput.Content.Any())
+            {
+                throw new InvalidOperationException("No message content returned from OpenAI Responses API");
+            }
+
+            // Find the first text content
+            var textContent = messageOutput.Content.FirstOrDefault(c => c.Type == "output_text");
+            if (string.IsNullOrEmpty(textContent?.Text))
             {
                 throw new InvalidOperationException("OpenAI response does not contain text content");
             }
+
+            var messageContent = textContent.Text;
 
             try
             {
@@ -88,8 +116,20 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
                 // Create Usage object based on response data
                 var usage = new Usage
                 {
-                    Input = openAiResponse.Usage?.PromptTokens ?? 0,
-                    Output = openAiResponse.Usage?.CompletionTokens ?? 0
+                    Input = openAiResponse.Usage?.InputTokens ?? 0,
+                    Output = openAiResponse.Usage?.OutputTokens ?? 0,
+                    InputDetails = openAiResponse.Usage?.InputTokensDetails != null ? new Usage.Details
+                    {
+                        Text = openAiResponse.Usage.InputTokensDetails.CachedTokens,
+                        // Note: OpenAI Responses API currently only provides cached_tokens in input_tokens_details
+                        // Other details like text tokens, image tokens are not separately provided
+                    } : null,
+                    OutputDetails = openAiResponse.Usage?.OutputTokensDetails != null ? new Usage.Details
+                    {
+                        Text = openAiResponse.Usage.OutputTokensDetails.ReasoningTokens,
+                        // Note: reasoning_tokens in output_tokens_details represents reasoning tokens used
+                        // Total output tokens include both reasoning and visible output tokens
+                    } : null
                 };
 
                 return new Result<TResponse>()
@@ -103,36 +143,27 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
                 throw new JsonException($"Failed to parse JSON: {messageContent}", ex);
             }
         }
-        catch (OperationCanceledException ex) when (timeoutTokenSource.Token.IsCancellationRequested)
+        catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"OpenAI request timed out after 10 minutes. Model: {llm.Name}. " +
+                $"OpenAI request was cancelled. Model: {llm.Name}. " +
                 $"Consider using a simpler model or reducing the complexity of the request.", ex);
         }
         catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
         {
             throw new TimeoutException(
-                $"OpenAI request timed out after 10 minutes. Model: {llm.Name}. " +
+                $"OpenAI request timed out. Model: {llm.Name}. " +
                 $"Consider using a simpler model or reducing the complexity of the request.", ex);
         }
     }
 
     private object BuildRequestPayload<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt)
     {
-        var messages = new List<object>
-        {
-            new
-            {
-                role = "system",
-                content = PromptService.BuildPrompt(prompt)
-            }
-        };
-
         var requestPayload = new Dictionary<string, object>
         {
             ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_completion_tokens"] = llm.MaxTokens
+            ["input"] = PromptService.BuildPrompt(prompt),
+            ["max_output_tokens"] = llm.MaxTokens
         };
 
         // Add user ID if provided
@@ -141,17 +172,19 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             requestPayload["user"] = prompt.UserName;
         }
 
-        // Add JSON schema for structured output
+        // Add JSON schema for structured output - use explicit property names to avoid snake_case conversion issues
         var jsonSchema = JsonSchemaGenerator.GenerateJsonSchema<TResponse>();
-        requestPayload["response_format"] = new
+        var schemaObject = JsonSerializer.Deserialize<object>(jsonSchema);
+        
+        requestPayload["text"] = new Dictionary<string, object>
         {
-            type = "json_schema",
-            json_schema = new
+            ["format"] = new Dictionary<string, object>
             {
-                name = "response",
-                schema = JsonSerializer.Deserialize<object>(jsonSchema),
-                description = JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
-                strict = true
+                ["type"] = "json_schema",
+                ["name"] = "response",
+                ["description"] = JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
+                ["schema"] = schemaObject,
+                ["strict"] = true
             }
         };
 
@@ -164,16 +197,19 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             }
         }
 
-        // Handle reasoning models - use reasoning_effort parameter
+        // Handle reasoning models - use reasoning parameter
         if (llm is OpenAiReasoningBase reasoningModel)
         {
-            requestPayload["reasoning_effort"] = reasoningModel.Reason switch
+            requestPayload["reasoning"] = new
             {
-                OpenAiReasoningBase.ReasonType.Low => "low",
-                OpenAiReasoningBase.ReasonType.Medium => "medium",
-                OpenAiReasoningBase.ReasonType.High => "high",
-                null => "medium",
-                _ => "medium"
+                effort = reasoningModel.Reason switch
+                {
+                    OpenAiReasoningBase.ReasonType.Low => "low",
+                    OpenAiReasoningBase.ReasonType.Medium => "medium",
+                    OpenAiReasoningBase.ReasonType.High => "high",
+                    null => "medium",
+                    _ => "medium"
+                }
             };
         }
 
@@ -232,7 +268,86 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
     }
 }
 
-// DTOs for OpenAI API response
+// DTOs for OpenAI Responses API response
+internal class OpenAiResponsesApiResponse
+{
+    public string? Id { get; set; }
+    public string? Object { get; set; }
+    public long? CreatedAt { get; set; }
+    public string? Status { get; set; }
+    public object? Error { get; set; }
+    public object? IncompleteDetails { get; set; }
+    public string? Instructions { get; set; }
+    public int? MaxOutputTokens { get; set; }
+    public string? Model { get; set; }
+    public List<ResponseOutput>? Output { get; set; }
+    public bool? ParallelToolCalls { get; set; }
+    public string? PreviousResponseId { get; set; }
+    public ResponseReasoning? Reasoning { get; set; }
+    public bool? Store { get; set; }
+    public double? Temperature { get; set; }
+    public ResponseText? Text { get; set; }
+    public object? ToolChoice { get; set; }
+    public List<object>? Tools { get; set; }
+    public double? TopP { get; set; }
+    public string? Truncation { get; set; }
+    public ResponseUsageInfo? Usage { get; set; }
+    public string? User { get; set; }
+    public object? Metadata { get; set; }
+}
+
+internal class ResponseOutput
+{
+    public string? Type { get; set; }
+    public string? Id { get; set; }
+    public string? Status { get; set; }
+    public string? Role { get; set; }
+    public List<ResponseContent>? Content { get; set; }
+}
+
+internal class ResponseContent
+{
+    public string? Type { get; set; }
+    public string? Text { get; set; }
+    public List<object>? Annotations { get; set; }
+}
+
+internal class ResponseReasoning
+{
+    public string? Effort { get; set; }
+    public string? Summary { get; set; }
+}
+
+internal class ResponseText
+{
+    public ResponseTextFormat? Format { get; set; }
+}
+
+internal class ResponseTextFormat
+{
+    public string? Type { get; set; }
+}
+
+internal class ResponseUsageInfo
+{
+    public int InputTokens { get; set; }
+    public ResponseInputTokensDetails? InputTokensDetails { get; set; }
+    public int OutputTokens { get; set; }
+    public ResponseOutputTokensDetails? OutputTokensDetails { get; set; }
+    public int TotalTokens { get; set; }
+}
+
+internal class ResponseInputTokensDetails
+{
+    public int CachedTokens { get; set; }
+}
+
+internal class ResponseOutputTokensDetails
+{
+    public int ReasoningTokens { get; set; }
+}
+
+// Legacy DTOs kept for compatibility (can be removed if not used elsewhere)
 internal class OpenAiResponse
 {
     public List<Choice>? Choices { get; set; }

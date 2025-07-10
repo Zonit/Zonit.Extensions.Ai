@@ -79,7 +79,32 @@ public static class ServiceCollectionExtensions
         services.AddKeyedTransient<IImageRepository>("OpenAi", (serviceProvider, key) =>
             serviceProvider.GetRequiredService<OpenAiImageRepository>());
 
-        services.AddKeyedTransient<ITextRepository, XRepository>("X");
+        // Add HttpClient for XRepository
+        services
+            .AddHttpClient<XRepository>((serviceProvider, client) =>
+            {
+                client.BaseAddress = new Uri("https://api.x.ai/");
+                client.Timeout = TimeSpan.FromMinutes(10);
+            })
+            .AddStandardResilienceHandler()
+            .Configure(options =>
+            {
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(10);
+                options.AttemptTimeout.Timeout = TimeSpan.FromMinutes(5);
+
+                options.Retry.MaxRetryAttempts = 3;
+                options.Retry.Delay = TimeSpan.FromSeconds(5);
+                options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+                options.Retry.UseJitter = true; // zabezpieczenie przed "retry storm"
+
+                options.CircuitBreaker.FailureRatio = 0.5;
+                options.CircuitBreaker.MinimumThroughput = 10;
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(10);
+                options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+            });
+
+        services.AddKeyedTransient<ITextRepository>("X", (serviceProvider, key) =>
+            serviceProvider.GetRequiredService<XRepository>());
 
         return services;
     }
