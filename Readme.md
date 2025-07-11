@@ -4,8 +4,8 @@ A .NET library for integrating with AI models (OpenAI GPT, X Grok) in applicatio
 
 ## Main Features
 
-- **OpenAI Model Support**: GPT-4, GPT-4 Turbo, reasoning models (o1, o3), DALL·E image generation  
-- **X (Grok) Model Support**: Grok-3, Grok-3 Fast, Grok-3 Mini with advanced web search capabilities  
+- **OpenAI Model Support**: GPT-4, GPT-4 Turbo, reasoning models (o1, o3), DALL•E image generation  
+- **X (Grok) Model Support**: Grok-3, Grok-3 Fast, Grok-3 Mini, Grok-4 with advanced web search and reasoning capabilities  
 - **Flexible Architecture**: Interface-driven, based on Clean Architecture  
 - **Type-safe Prompts**: Strongly-typed prompts with automatic JSON Schema validation  
 - **AI Tools**: Web search, file search with configuration  

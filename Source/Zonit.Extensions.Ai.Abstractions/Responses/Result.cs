@@ -7,4 +7,9 @@ public class Result<T>
 
     public void SetProcessName(string processName)
         => MetaData.Process = processName;
+
+    public override string ToString()
+    {
+        return Value?.ToString() ?? string.Empty;
+    }
 }

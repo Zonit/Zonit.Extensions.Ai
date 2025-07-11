@@ -1,6 +1,6 @@
 namespace Zonit.Extensions.Ai.Llm.X;
 
-public class Grok4 : XReasoningBase
+public class Grok4 : XChatBase
 {
     public override string Name => "grok-4-0709";
 

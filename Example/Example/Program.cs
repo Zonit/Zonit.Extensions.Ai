@@ -1,4 +1,5 @@
-﻿using Example.Backgrounds;
+﻿using System.Text;
+using Example.Backgrounds;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -24,6 +25,10 @@ internal class Program
     }
     static void Main(string[] args)
     {
+        // Set console encoding to UTF-8 to properly display Polish characters
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
+
         var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
         {
             Args = args

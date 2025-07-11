@@ -2,6 +2,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Unicode;
 using Zonit.Extensions.Ai.Application.Options;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Serialization;
@@ -13,6 +15,21 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
 {
     private readonly string _apiKey = options.Value.OpenAiKey ?? throw new ArgumentException("OpenAI API key is required");
     private const string OpenAiApiUrl = "/v1/responses";
+
+    // JSON serializer options with proper UTF-8 support
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
+
+    private static readonly JsonSerializerOptions DeserializationOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+    };
 
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
@@ -26,11 +43,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
 
         // Build the request payload
         var requestPayload = BuildRequestPayload(llm, prompt);
-        var jsonPayload = JsonSerializer.Serialize(requestPayload, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            WriteIndented = false
-        });
+        var jsonPayload = JsonSerializer.Serialize(requestPayload, JsonOptions);
 
         var stopwatch = new Stopwatch();
         stopwatch.Start();
@@ -43,19 +56,17 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             using var response = await httpClient.PostAsync(OpenAiApiUrl, content, cancellationToken);
             stopwatch.Stop();
 
-            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            // Read response with explicit UTF-8 encoding
+            var responseBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            var responseJson = Encoding.UTF8.GetString(responseBytes);
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new HttpRequestException($"OpenAI API request failed with status {response.StatusCode}: {responseJson}");
             }
 
-            // Parse OpenAI response
-            var openAiResponse = JsonSerializer.Deserialize<OpenAiResponsesApiResponse>(responseJson, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                PropertyNameCaseInsensitive = true
-            });
+            // Parse OpenAI response with proper UTF-8 support
+            var openAiResponse = JsonSerializer.Deserialize<OpenAiResponsesApiResponse>(responseJson, DeserializationOptions);
 
             if (openAiResponse == null)
             {
@@ -66,7 +77,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             if (openAiResponse.Status != "completed")
             {
                 var errorMessage = openAiResponse.Error != null 
-                    ? JsonSerializer.Serialize(openAiResponse.Error)
+                    ? JsonSerializer.Serialize(openAiResponse.Error, JsonOptions)
                     : $"Response status: {openAiResponse.Status}";
                 throw new InvalidOperationException($"OpenAI Responses API returned non-completed status: {errorMessage}");
             }
@@ -94,7 +105,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
 
             try
             {
-                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(messageContent);
+                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(messageContent, DeserializationOptions);
 
                 // Get "result" if it exists, otherwise use the entire JSON
                 var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
@@ -104,6 +115,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
                 var optionsJson = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
+                    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
                     Converters = { new NullableEnumJsonConverter() }
                 };
 
@@ -217,7 +229,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             requestPayload["top_p"] = chatModel.TopP;
         }
 
-        // Handle tools
+        // Handle tools - simplified format for Responses API
         if (prompt.Tools is not null && prompt.Tools.Any())
         {
             var tools = new List<object>();
@@ -226,19 +238,10 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             {
                 if (tool is WebSearchTool webSearch)
                 {
+                    // Use simplified format for Responses API
                     tools.Add(new
                     {
-                        type = "web_search",
-                        web_search = new
-                        {
-                            search_context_size = webSearch.ContextSize switch
-                            {
-                                WebSearchTool.ContextSizeType.Low => "low",
-                                WebSearchTool.ContextSizeType.Medium => "medium",
-                                WebSearchTool.ContextSizeType.High => "high",
-                                _ => "medium"
-                            }
-                        }
+                        type = "web_search"
                     });
                 }
             }
@@ -253,8 +256,8 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
                     requestPayload["tool_choice"] = prompt.ToolChoice.Value switch
                     {
                         ToolsType.None => "none",
-                        ToolsType.WebSearch => new { type = "web_search" },
-                        ToolsType.FileSearch => new { type = "file_search" },
+                        ToolsType.WebSearch => "auto", // Changed from specific object to auto
+                        ToolsType.FileSearch => "auto", // Changed from specific object to auto
                         _ => "auto"
                     };
                 }

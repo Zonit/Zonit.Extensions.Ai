@@ -1,4 +1,5 @@
 ﻿using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
@@ -33,6 +34,15 @@ public static class ServiceCollectionExtensions
             client.Timeout = options.Value.Resilience.HttpClientTimeout;
             client.DefaultRequestHeaders.Authorization = 
                 new AuthenticationHeaderValue("Bearer", options.Value.OpenAiKey);
+            
+            // Add proper UTF-8 headers
+            client.DefaultRequestHeaders.AcceptCharset.Clear();
+            client.DefaultRequestHeaders.AcceptCharset.Add(new StringWithQualityHeaderValue("utf-8"));
+            client.DefaultRequestHeaders.Accept.Clear();
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json") 
+            { 
+                CharSet = "utf-8" 
+            });
         }
 
         // Add OpenAI text repository
@@ -64,6 +74,15 @@ public static class ServiceCollectionExtensions
                 var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
                 client.BaseAddress = new Uri("https://api.x.ai/");
                 client.Timeout = options.Value.Resilience.HttpClientTimeout;
+                
+                // Add proper UTF-8 headers for X AI as well
+                client.DefaultRequestHeaders.AcceptCharset.Clear();
+                client.DefaultRequestHeaders.AcceptCharset.Add(new StringWithQualityHeaderValue("utf-8"));
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json") 
+                { 
+                    CharSet = "utf-8" 
+                });
             })
             .AddStandardResilienceHandler()
             .Configure(ConfigureResilienceFromOptions);
