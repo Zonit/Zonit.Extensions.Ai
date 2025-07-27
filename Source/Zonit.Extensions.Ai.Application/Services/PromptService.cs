@@ -9,6 +9,7 @@ public static class PromptService
         nameof(IPromptBase.Tools),
         nameof(IPromptBase.ToolChoice),
         nameof(IPromptBase.UserName),
+        nameof(IPromptBase.Files),
         "ModelType"
     };
 

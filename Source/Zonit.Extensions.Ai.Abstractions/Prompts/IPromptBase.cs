@@ -19,6 +19,11 @@ public interface IPromptBase
     /// </summary>
     public string? UserName { get; set; }
 
+    /// <summary>
+    /// Lista plików dołączonych do promptu.
+    /// </summary>
+    public IReadOnlyList<IFile>? Files { get; }
+
     public string Prompt { get; }
 }
 
@@ -35,6 +40,7 @@ public abstract class PromptBase<TResponse> : IPromptBase<TResponse> where TResp
     public virtual IReadOnlyList<ITool>? Tools { get; }
     public virtual ToolsType? ToolChoice { get; }
     public virtual string? UserName { get; set; }
+    public virtual IReadOnlyList<IFile>? Files { get; set; }
     public virtual TResponse? ModelType { get; }
     public abstract string Prompt { get; }
 }

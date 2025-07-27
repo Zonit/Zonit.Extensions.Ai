@@ -171,8 +171,45 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         var requestPayload = new Dictionary<string, object>
         {
             ["model"] = llm.Name,
-            ["input"] = PromptService.BuildPrompt(prompt),
             ["max_output_tokens"] = llm.MaxTokens
+        };
+
+        // Build input as message format for Responses API
+        var content = new List<object>();
+        
+        // Add text prompt
+        content.Add(new
+        {
+            type = "input_text",
+            text = PromptService.BuildPrompt(prompt)
+        });
+
+        // Add files if provided
+        if (prompt.Files != null && prompt.Files.Any())
+        {
+            foreach (var file in prompt.Files)
+            {
+                // Convert file to base64 and add to content
+                var base64Data = Convert.ToBase64String(file.Data);
+                var dataUri = $"data:{file.MimeType};base64,{base64Data}";
+                
+                content.Add(new
+                {
+                    type = "input_image",
+                    image_url = dataUri  // Direct string, not an object
+                });
+            }
+        }
+
+        // Create message format input
+        requestPayload["input"] = new[]
+        {
+            new
+            {
+                type = "message",
+                role = "user",
+                content = content
+            }
         };
 
         // Add user ID if provided
