@@ -8,6 +8,7 @@ using Zonit.Extensions.Ai.Application.Options;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Serialization;
 using Zonit.Extensions.Ai.Llm;
+using Zonit.Extensions.Ai.Domain.Models;
 
 namespace Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 
@@ -189,15 +190,31 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         {
             foreach (var file in prompt.Files)
             {
-                // Convert file to base64 and add to content
-                var base64Data = Convert.ToBase64String(file.Data);
-                var dataUri = $"data:{file.MimeType};base64,{base64Data}";
-                
-                content.Add(new
+                // Check if the file is an image or document based on MIME type
+                if (IsImageMimeType(file.MimeType))
                 {
-                    type = "input_image",
-                    image_url = dataUri  // Direct string, not an object
-                });
+                    // Handle images using input_image type
+                    var base64Data = Convert.ToBase64String(file.Data);
+                    var dataUri = $"data:{file.MimeType};base64,{base64Data}";
+                    
+                    content.Add(new
+                    {
+                        type = "input_image",
+                        image_url = dataUri  // Direct string, not an object
+                    });
+                }
+                else
+                {
+                    // Handle documents (PDFs, text files, etc.) using input_file type
+                    var base64Data = Convert.ToBase64String(file.Data);
+                    
+                    content.Add(new
+                    {
+                        type = "input_file",
+                        file_data = $"data:{file.MimeType};base64,{base64Data}",
+                        filename = file.Name
+                    });
+                }
             }
         }
 
@@ -302,6 +319,25 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         }
 
         return requestPayload;
+    }
+
+    /// <summary>
+    /// Determines if a MIME type represents an image that should be processed as input_image
+    /// </summary>
+    private static bool IsImageMimeType(string mimeType)
+    {
+        if (string.IsNullOrEmpty(mimeType))
+            return false;
+
+        var normalizedMimeType = mimeType.ToLowerInvariant();
+        
+        return normalizedMimeType switch
+        {
+            "image/jpeg" or "image/jpg" or "image/png" or "image/gif" or 
+            "image/bmp" or "image/webp" or "image/tiff" or "image/tif" or
+            "image/svg+xml" or "image/x-icon" or "image/vnd.microsoft.icon" => true,
+            _ => false
+        };
     }
 }
 

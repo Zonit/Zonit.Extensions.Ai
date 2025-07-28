@@ -104,26 +104,69 @@ public class FileModel : IFile
     }
 
     /// <summary>
+    /// Okreœla czy plik jest obrazem na podstawie typu MIME.
+    /// </summary>
+    /// <returns>True jeœli plik jest obrazem, false w przeciwnym razie.</returns>
+    public bool IsImage()
+    {
+        return IsImageMimeType(MimeType);
+    }
+
+    /// <summary>
+    /// Okreœla czy podany typ MIME reprezentuje obraz.
+    /// </summary>
+    /// <param name="mimeType">Typ MIME do sprawdzenia.</param>
+    /// <returns>True jeœli typ MIME reprezentuje obraz, false w przeciwnym razie.</returns>
+    public static bool IsImageMimeType(string mimeType)
+    {
+        if (string.IsNullOrEmpty(mimeType))
+            return false;
+
+        var normalizedMimeType = mimeType.ToLowerInvariant();
+        
+        return normalizedMimeType switch
+        {
+            "image/jpeg" or "image/jpg" or "image/png" or "image/gif" or 
+            "image/bmp" or "image/webp" or "image/tiff" or "image/tif" or
+            "image/svg+xml" or "image/x-icon" or "image/vnd.microsoft.icon" => true,
+            _ => false
+        };
+    }
+
+    /// <summary>
     /// Okreœla typ MIME na podstawie rozszerzenia pliku.
     /// </summary>
     private static string GetMimeTypeFromExtension(string extension)
     {
         return extension.ToLowerInvariant() switch
         {
+            // Image formats supported by OpenAI
             ".jpg" or ".jpeg" => "image/jpeg",
             ".png" => "image/png",
             ".gif" => "image/gif",
             ".bmp" => "image/bmp",
             ".webp" => "image/webp",
+            ".tiff" or ".tif" => "image/tiff",
+            ".svg" => "image/svg+xml",
+            ".ico" => "image/x-icon",
+            
+            // Document formats supported by OpenAI
             ".pdf" => "application/pdf",
             ".txt" => "text/plain",
+            ".md" => "text/markdown",
+            ".html" => "text/html",
             ".json" => "application/json",
             ".csv" => "text/csv",
             ".xml" => "application/xml",
-            ".doc" or ".docx" => "application/msword",
-            ".xls" or ".xlsx" => "application/vnd.ms-excel",
-            ".ppt" or ".pptx" => "application/vnd.ms-powerpoint",
-            _ => "application/octet-stream" // domyœlny typ dla nieznanych rozszerzeñ
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc" => "application/msword",
+            ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls" => "application/vnd.ms-excel",
+            ".pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt" => "application/vnd.ms-powerpoint",
+            
+            // Default for unknown extensions
+            _ => "application/octet-stream"
         };
     }
 }
