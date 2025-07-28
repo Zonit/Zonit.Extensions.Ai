@@ -21,4 +21,8 @@ public class Grok3Mini : XReasoningBase
     public override ToolsType Tools => ToolsType.WebSearch;
 
     public override EndpointsType Endpoints => EndpointsType.Chat;
+    public override FeaturesType Features =>
+        FeaturesType.Streaming |
+        FeaturesType.FunctionCalling |
+        FeaturesType.StructuredOutputs;
 }

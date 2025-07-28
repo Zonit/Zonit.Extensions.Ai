@@ -14,13 +14,17 @@ public class Grok4 : XChatBase
 
     public override int MaxOutputTokens => 8_192;
 
-    public override ChannelType Input => ChannelType.Text;
+    public override ChannelType Input => ChannelType.Text | ChannelType.Image;
 
     public override ChannelType Output => ChannelType.Text;
 
     public override ToolsType Tools => ToolsType.WebSearch;
 
     public override EndpointsType Endpoints => EndpointsType.Chat;
+    public override FeaturesType Features => 
+        FeaturesType.Streaming | 
+        FeaturesType.FunctionCalling | 
+        FeaturesType.StructuredOutputs;
 
     /// <summary>
     /// Grok4 ma podwójn¹ cenê dla kontekstów powy¿ej 128k tokenów

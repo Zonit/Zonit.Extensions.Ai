@@ -82,7 +82,7 @@ internal class XRepository(IOptions<AiOptions> options, HttpClient httpClient) :
                 var optionsJson = new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true,
-                    Converters = { new NullableEnumJsonConverter() }
+                    Converters = { new EnumJsonConverter() }
                 };
 
                 var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)

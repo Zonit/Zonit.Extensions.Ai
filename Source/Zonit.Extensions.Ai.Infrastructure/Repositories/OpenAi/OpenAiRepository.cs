@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text;
@@ -117,7 +117,7 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
                 {
                     PropertyNameCaseInsensitive = true,
                     Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                    Converters = { new NullableEnumJsonConverter() }
+                    Converters = { new EnumJsonConverter() }
                 };
 
                 var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)
