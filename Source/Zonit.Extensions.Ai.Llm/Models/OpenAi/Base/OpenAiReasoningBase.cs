@@ -9,6 +9,7 @@ public abstract class OpenAiReasoningBase : OpenAiBase, ITextLlmBase
 
     public enum ReasonType
     {
+        Minimal,
         Low,
         Medium,
         High
