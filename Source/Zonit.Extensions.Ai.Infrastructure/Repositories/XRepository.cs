@@ -67,39 +67,62 @@ internal class XRepository(IOptions<AiOptions> options, HttpClient httpClient) :
 
             if (string.IsNullOrEmpty(responseJson))
             {
-                throw new InvalidOperationException("X API response content is null or empty.");
+                throw new InvalidOperationException($"X API response content is null or empty. Full response: {responseContent}");
             }
 
             try
             {
-                var parsedResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
-
-                // Get "result" if exists, otherwise use the whole JSON
-                var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
-                    ? resultElement.GetRawText()
-                    : responseJson;
-
-                var optionsJson = new JsonSerializerOptions
+                // For now, we'll return the raw text content as a dynamic response
+                // This is a temporary fix to test if the API is working
+                
+                if (typeof(TResponse) == typeof(string))
                 {
-                    PropertyNameCaseInsensitive = true,
-                    Converters = { new EnumJsonConverter() }
-                };
+                    // If expecting a string, return directly
+                    var result = (TResponse)(object)responseJson;
+                    
+                    // Create Usage object based on response data
+                    var usage = new Usage
+                    {
+                        Input = xResponse.Usage?.PromptTokens ?? 0,
+                        Output = xResponse.Usage?.CompletionTokens ?? 0
+                    };
 
-                var result = JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, optionsJson)
-                    ?? throw new JsonException("Deserialization returned null.");
-
-                // Create Usage object based on response data
-                var usage = new Usage
+                    return new Result<TResponse>()
+                    {
+                        Value = result,
+                        MetaData = new(llm, usage, stopwatch.Elapsed)
+                    };
+                }
+                else
                 {
-                    Input = xResponse.Usage?.PromptTokens ?? 0,
-                    Output = xResponse.Usage?.CompletionTokens ?? 0
-                };
+                    // Try to use reflection to create a response object
+                    var responseType = typeof(TResponse);
+                    var instance = Activator.CreateInstance<TResponse>();
+                    
+                    // Look for a string property to set the response content
+                    var stringProps = responseType.GetProperties()
+                        .Where(p => p.PropertyType == typeof(string) && p.CanWrite)
+                        .ToArray();
+                        
+                    if (stringProps.Length > 0)
+                    {
+                        // Use the first string property found
+                        stringProps[0].SetValue(instance, responseJson);
+                    }
+                    
+                    // Create Usage object based on response data
+                    var usage = new Usage
+                    {
+                        Input = xResponse.Usage?.PromptTokens ?? 0,
+                        Output = xResponse.Usage?.CompletionTokens ?? 0
+                    };
 
-                return new Result<TResponse>()
-                {
-                    Value = result,
-                    MetaData = new(llm, usage, stopwatch.Elapsed)
-                };
+                    return new Result<TResponse>()
+                    {
+                        Value = instance,
+                        MetaData = new(llm, usage, stopwatch.Elapsed)
+                    };
+                }
             }
             catch (Exception ex) when (ex is JsonException || ex is InvalidOperationException)
             {
@@ -127,18 +150,19 @@ internal class XRepository(IOptions<AiOptions> options, HttpClient httpClient) :
         var requestBody = new Dictionary<string, object>
         {
             ["messages"] = messages,
-            ["model"] = llm.Name,
-            ["response_format"] = new
-            {
-                type = "json_schema",
-                json_schema = new
-                {
-                    name = "response",
-                    schema = JsonSerializer.Deserialize<object>(JsonSchemaGenerator.GenerateJsonSchema<TResponse>()),
-                    description = JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
-                    strict = true
-                }
-            }
+            ["model"] = llm.Name
+            // Temporarily remove response_format to test if the issue is with structured output
+            // ["response_format"] = new
+            // {
+            //     type = "json_schema",
+            //     json_schema = new
+            //     {
+            //         name = "response",
+            //         schema = JsonSerializer.Deserialize<object>(JsonSchemaGenerator.GenerateJsonSchema<TResponse>()),
+            //         description = JsonSchemaGenerator.GetSchemaDescription<TResponse>(),
+            //         strict = false // Change from true to false to be less restrictive
+            //     }
+            // }
         };
 
         // Configure X chat-specific parameters
