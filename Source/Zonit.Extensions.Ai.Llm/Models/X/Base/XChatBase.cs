@@ -1,6 +1,4 @@
-﻿using Zonit.Extensions.Ai.Llm.X;
-
-namespace Zonit.Extensions.Ai.Llm;
+﻿namespace Zonit.Extensions.Ai.Llm.X;
 
 public abstract class XChatBase : XBase, ITextLlmBase
 {

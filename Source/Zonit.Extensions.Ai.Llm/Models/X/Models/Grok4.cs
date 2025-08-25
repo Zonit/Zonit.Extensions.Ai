@@ -18,10 +18,10 @@ public class Grok4 : XChatBase
 
     public override ChannelType Output => ChannelType.Text;
 
-    public override ToolsType Tools => ToolsType.WebSearch;
+    public override ToolsType SupportedTools => ToolsType.WebSearch;
 
-    public override EndpointsType Endpoints => EndpointsType.Chat;
-    public override FeaturesType Features => 
+    public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
+    public override FeaturesType SupportedFeatures => 
         FeaturesType.Streaming | 
         FeaturesType.FunctionCalling | 
         FeaturesType.StructuredOutputs;

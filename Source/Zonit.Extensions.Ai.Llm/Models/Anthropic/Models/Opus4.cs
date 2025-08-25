@@ -16,6 +16,6 @@ public class Opus4 : AnthropicBase
     public override ChannelType Output { get; } = ChannelType.Text;
 
 
-    public override ToolsType Tools => ToolsType.WebSearch | ToolsType.MCP;
-    public override EndpointsType Endpoints => EndpointsType.Chat | EndpointsType.Response; 
+    public override ToolsType SupportedTools => ToolsType.WebSearch | ToolsType.MCP;
+    public override EndpointsType SupportedEndpoints => EndpointsType.Chat | EndpointsType.Response; 
 }

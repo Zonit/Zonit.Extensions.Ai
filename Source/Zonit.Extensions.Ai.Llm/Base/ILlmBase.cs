@@ -18,8 +18,8 @@ public interface ILlmBase
     ChannelType Input { get; }
     ChannelType Output { get; }
 
-    ToolsType Tools { get; }
-    EndpointsType Endpoints { get; }
+    ToolsType SupportedTools { get; }
+    EndpointsType SupportedEndpoints { get; }
 
     /// <summary>
     /// Oblicza cenę za tokeny input na podstawie liczby tokenów (może być różna w zależności od wielkości kontekstu)

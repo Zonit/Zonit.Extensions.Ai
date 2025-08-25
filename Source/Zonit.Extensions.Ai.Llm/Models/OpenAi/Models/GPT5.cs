@@ -17,14 +17,14 @@ public class GPT5 : OpenAiReasoningBase
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
     public override ChannelType Output => ChannelType.Text;
 
-    public override ToolsType Tools =>
+    public override ToolsType SupportedTools =>
         ToolsType.WebSearch |
         ToolsType.FileSearch |
         ToolsType.ImageGeneration |
         ToolsType.CodeInterpreter |
         ToolsType.MCP;
 
-    public override FeaturesType Features =>
+    public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |
         FeaturesType.FunctionCalling |
         FeaturesType.StructuredOutputs |
@@ -32,7 +32,7 @@ public class GPT5 : OpenAiReasoningBase
         FeaturesType.Distillation |
         FeaturesType.PredictedOutputs;
 
-    public override EndpointsType Endpoints =>
+    public override EndpointsType SupportedEndpoints =>
         EndpointsType.Chat |
         EndpointsType.Response |
         EndpointsType.Assistant |

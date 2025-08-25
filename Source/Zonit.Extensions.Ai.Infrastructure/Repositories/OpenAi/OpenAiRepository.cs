@@ -35,10 +35,10 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {
         // Validate that the model supports the Responses API endpoint
-        if (!llm.Endpoints.HasFlag(EndpointsType.Response))
+        if (!llm.SupportedEndpoints.HasFlag(EndpointsType.Response))
         {
             throw new ArgumentException($"Model '{llm.Name}' does not support the Responses API endpoint. " +
-                                      $"Supported endpoints: {llm.Endpoints}. " +
+                                      $"Supported endpoints: {llm.SupportedEndpoints}. " +
                                       $"Please use a model that supports EndpointsType.Response.");
         }
 

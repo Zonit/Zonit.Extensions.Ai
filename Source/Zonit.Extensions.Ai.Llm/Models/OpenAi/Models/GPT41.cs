@@ -16,14 +16,14 @@ public class GPT41 : OpenAiChatBase
     public override ChannelType Input { get; } = ChannelType.Text | ChannelType.Image;
     public override ChannelType Output { get; } = ChannelType.Text;
 
-    public override ToolsType Tools => 
+    public override ToolsType SupportedTools => 
         ToolsType.WebSearch | 
         ToolsType.FileSearch | 
         ToolsType.ImageGeneration | 
         ToolsType.CodeInterpreter | 
         ToolsType.MCP;
 
-    public override FeaturesType Features => 
+    public override FeaturesType SupportedFeatures => 
         FeaturesType.Streaming | 
         FeaturesType.FunctionCalling | 
         FeaturesType.StructuredOutputs | 
@@ -31,7 +31,7 @@ public class GPT41 : OpenAiChatBase
         FeaturesType.Distillation | 
         FeaturesType.PredictedOutputs;
 
-    public override EndpointsType Endpoints => 
+    public override EndpointsType SupportedEndpoints => 
         EndpointsType.Chat | 
         EndpointsType.Response | 
         EndpointsType.Assistant | 

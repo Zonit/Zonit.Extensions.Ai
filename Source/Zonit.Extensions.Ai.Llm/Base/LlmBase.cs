@@ -30,10 +30,12 @@ public abstract class LlmBase : ILlmBase
     public abstract ChannelType Input { get; }
     public abstract ChannelType Output { get; } 
 
-    public virtual ToolsType Tools { get; } = ToolsType.None;
-    public virtual FeaturesType Features { get; } = FeaturesType.None;
-    public virtual EndpointsType Endpoints { get; } = EndpointsType.None;
+    public virtual ToolsType SupportedTools { get; } = ToolsType.None;
+    public virtual FeaturesType SupportedFeatures { get; } = FeaturesType.None;
+    public virtual EndpointsType SupportedEndpoints { get; } = EndpointsType.None;
 
     public virtual decimal GetInputPrice(long tokenCount) => PriceInput;
     public virtual decimal GetOutputPrice(long tokenCount) => PriceOutput;
+
+    public virtual IToolBase[]? Tools { get; init; } = null;
 }

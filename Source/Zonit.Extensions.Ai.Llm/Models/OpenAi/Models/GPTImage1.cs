@@ -15,9 +15,9 @@ public class GPTImage1 : OpenAiImageBase<GPTImage1.QualityType, GPTImage1.SizeTy
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
     public override ChannelType Output => ChannelType.Image;
 
-    public override ToolsType Tools => ToolsType.None;
-    public override FeaturesType Features => FeaturesType.Inpainting;
-    public override EndpointsType Endpoints =>
+    public override ToolsType SupportedTools => ToolsType.None;
+    public override FeaturesType SupportedFeatures => FeaturesType.Inpainting;
+    public override EndpointsType SupportedEndpoints =>
         EndpointsType.Image |
         EndpointsType.ImageEdit;
 
