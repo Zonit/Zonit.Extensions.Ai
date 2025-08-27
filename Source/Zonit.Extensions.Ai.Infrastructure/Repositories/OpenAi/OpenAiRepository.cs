@@ -284,19 +284,60 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         }
 
         // Handle tools - simplified format for Responses API
-        if (prompt.Tools is not null && prompt.Tools.Any())
+        if (llm.Tools is not null && llm.Tools.Any())
         {
             var tools = new List<object>();
             
-            foreach (var tool in prompt.Tools)
+            foreach (var tool in llm.Tools)
             {
-                if (tool is WebSearchTool webSearch)
+                if (tool is FileSearchTool fileSearch)
                 {
-                    // Use simplified format for Responses API
-                    tools.Add(new
+                    // Handle file search tool with vector store support
+                    var fileSearchTool = new Dictionary<string, object>
                     {
-                        type = "web_search"
-                    });
+                        ["type"] = "file_search"
+                    };
+
+                    // Add vector store IDs directly on the tool object (required)
+                    if (!string.IsNullOrEmpty(fileSearch.VectorId))
+                    {
+                        fileSearchTool["vector_store_ids"] = new[] { fileSearch.VectorId };
+                    }
+
+                    // Add max_num_results if provided
+                    if (fileSearch.MaxNumResults.HasValue)
+                    {
+                        fileSearchTool["max_num_results"] = fileSearch.MaxNumResults.Value;
+                    }
+
+                    // Add ranking options if provided
+                    if (fileSearch.RankingOptions != null)
+                    {
+                        var rankingOptions = new Dictionary<string, object>();
+                        
+                        if (!string.IsNullOrEmpty(fileSearch.RankingOptions.Ranker))
+                        {
+                            rankingOptions["ranker"] = fileSearch.RankingOptions.Ranker;
+                        }
+
+                        if (fileSearch.RankingOptions.ScoreThreshold.HasValue)
+                        {
+                            rankingOptions["score_threshold"] = fileSearch.RankingOptions.ScoreThreshold.Value;
+                        }
+
+                        if (rankingOptions.Any())
+                        {
+                            fileSearchTool["ranking_options"] = rankingOptions;
+                        }
+                    }
+
+                    // Add filters if provided
+                    if (fileSearch.Filters != null)
+                    {
+                        fileSearchTool["filters"] = fileSearch.Filters;
+                    }
+
+                    tools.Add(fileSearchTool);
                 }
             }
 
@@ -304,14 +345,52 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             {
                 requestPayload["tools"] = tools;
 
+                // Handle tool choice based on supported tools
+                if (llm.SupportedTools.HasFlag(ToolsType.FileSearch))
+                {
+                    requestPayload["tool_choice"] = "auto";
+                }
+            }
+        }
+
+        // Handle legacy prompt-based tools for backward compatibility
+        if (prompt.Tools is not null && prompt.Tools.Any())
+        {
+            var legacyTools = new List<object>();
+            
+            foreach (var tool in prompt.Tools)
+            {
+                if (tool is WebSearchTool webSearch)
+                {
+                    // Use simplified format for Responses API
+                    legacyTools.Add(new
+                    {
+                        type = "web_search"
+                    });
+                }
+            }
+
+            if (legacyTools.Any())
+            {
+                // Merge with existing tools or create new array
+                if (requestPayload.ContainsKey("tools"))
+                {
+                    var existingTools = (List<object>)requestPayload["tools"];
+                    existingTools.AddRange(legacyTools);
+                }
+                else
+                {
+                    requestPayload["tools"] = legacyTools;
+                }
+
                 // Handle tool choice
                 if (prompt.ToolChoice is not null)
                 {
                     requestPayload["tool_choice"] = prompt.ToolChoice.Value switch
                     {
                         ToolsType.None => "none",
-                        ToolsType.WebSearch => "auto", // Changed from specific object to auto
-                        ToolsType.FileSearch => "auto", // Changed from specific object to auto
+                        ToolsType.WebSearch => "auto",
+                        ToolsType.FileSearch => "auto",
                         _ => "auto"
                     };
                 }

@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Llm;
+using Zonit.Extensions.Ai.Llm.X;
 
 namespace Zonit.Extensions.Ai.Application.Services;
 

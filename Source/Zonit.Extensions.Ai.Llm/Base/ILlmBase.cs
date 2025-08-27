@@ -19,6 +19,7 @@ public interface ILlmBase
     ChannelType Output { get; }
 
     ToolsType SupportedTools { get; }
+    FeaturesType SupportedFeatures { get; } 
     EndpointsType SupportedEndpoints { get; }
 
     /// <summary>
@@ -34,4 +35,6 @@ public interface ILlmBase
     /// <param name="tokenCount">Liczba tokenów output</param>
     /// <returns>Cena za 1M tokenów</returns>
     decimal GetOutputPrice(long tokenCount);
+
+    IToolBase[]? Tools { get; init; }
 }
