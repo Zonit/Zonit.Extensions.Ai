@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.13.35931.197
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11206.111 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{02EA681E-C7D8-13C7-8484-4AC65E1B71E8}"
 	ProjectSection(SolutionItems) = preProject
@@ -13,6 +13,7 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Elementy rozwiązania", "Elementy rozwiązania", "{8FB176BD-0036-D269-15EA-F86E90622887}"
 	ProjectSection(SolutionItems) = preProject
 		Readme.md = Readme.md
+		Update.ps1 = Update.ps1
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zonit.Extensions.Ai.Abstractions", "Source\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj", "{D94ACDF5-2215-4A41-9944-6082C424CEB0}"

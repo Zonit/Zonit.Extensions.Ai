@@ -1,8 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-	<PropertyGroup>
-		<TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
-	</PropertyGroup>
-	<ItemGroup>
-	  <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
-	</ItemGroup>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+  </ItemGroup>
 </Project>
