@@ -1,21 +1,105 @@
 {
-  "Timestamp": "2025-11-16 05:04:59",
+  "Summary": {
+    "DirectoryPackagesPropsUpdated": true,
+    "PackagesConfigured": 8,
+    "ProjectsUpdated": 8,
+    "PackagesChanged": 14,
+    "FrameworkSpecificGroups": 3,
+    "FrameworksSet": "net8.0;net9.0;net10.0"
+  },
   "PackagesFound": 8,
   "ProjectsFound": 8,
-  "ChangeSummaryText": "No package version changes - this might be a new setup or no updates available",
+  "Timestamp": "2025-11-16 16:47:29",
+  "ChangeSummaryText": "Microsoft.Extensions.Configuration.Abstractions [net8.0]: 8.0.0 -> 10.0.0\nMicrosoft.Extensions.Configuration.Abstractions [net9.0]: 9.0.11 -> 10.0.0\nMicrosoft.Extensions.DependencyInjection.Abstractions [net8.0]: 8.0.2 -> 10.0.0\nMicrosoft.Extensions.DependencyInjection.Abstractions [net9.0]: 9.0.11 -> 10.0.0\nMicrosoft.Extensions.Hosting [net8.0]: 8.0.1 -> 10.0.0\nMicrosoft.Extensions.Hosting [net9.0]: 9.0.11 -> 10.0.0\nMicrosoft.Extensions.Hosting.Abstractions [net8.0]: 8.0.1 -> 10.0.0\nMicrosoft.Extensions.Hosting.Abstractions [net9.0]: 9.0.11 -> 10.0.0\nMicrosoft.Extensions.Http [net8.0]: 8.0.1 -> 10.0.0\nMicrosoft.Extensions.Http [net9.0]: 9.0.11 -> 10.0.0\nMicrosoft.Extensions.Http.Resilience [net8.0]: 8.10.0 -> 10.0.0\nMicrosoft.Extensions.Http.Resilience [net9.0]: 9.10.0 -> 10.0.0\nMicrosoft.Extensions.Options.ConfigurationExtensions [net8.0]: 8.0.0 -> 10.0.0\nMicrosoft.Extensions.Options.ConfigurationExtensions [net9.0]: 9.0.11 -> 10.0.0",
+  "PackageChanges": [
+    {
+      "Package": "Microsoft.Extensions.Configuration.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.0",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.2",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.1",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.1",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.1",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http.Resilience",
+      "Framework": "net8.0",
+      "OldVersion": "8.10.0",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "Framework": "net8.0",
+      "OldVersion": "8.0.0",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Configuration.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http.Resilience",
+      "Framework": "net9.0",
+      "OldVersion": "9.10.0",
+      "NewVersion": "10.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "Framework": "net9.0",
+      "OldVersion": "9.0.11",
+      "NewVersion": "10.0.0"
+    }
+  ],
   "TargetFrameworks": [
     "net8.0",
     "net9.0",
     "net10.0"
-  ],
-  "PackageChanges": [],
-  "Summary": {
-    "CommonPackages": 1,
-    "FrameworkSpecificPackages": 7,
-    "PackagesConfigured": 8,
-    "ProjectsUpdated": 8,
-    "FrameworksSet": "net8.0;net9.0;net10.0",
-    "PackagesChanged": 0,
-    "DirectoryPackagesPropsUpdated": true
-  }
+  ]
 }
