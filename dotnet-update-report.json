@@ -1,0 +1,112 @@
+{
+  "PackageChanges": [
+    {
+      "Package": "Scriban",
+      "Framework": "all",
+      "OldVersion": "6.5.0",
+      "NewVersion": "6"
+    },
+    {
+      "Package": "Microsoft.Extensions.Configuration.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.2"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.1"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting.Abstractions",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.1"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.1"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http.Resilience",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.10.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "Framework": "net8.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "8.0.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Configuration.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    },
+    {
+      "Package": "Microsoft.Extensions.DependencyInjection.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    },
+    {
+      "Package": "Microsoft.Extensions.Hosting.Abstractions",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    },
+    {
+      "Package": "Microsoft.Extensions.Http.Resilience",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.10.0"
+    },
+    {
+      "Package": "Microsoft.Extensions.Options.ConfigurationExtensions",
+      "Framework": "net9.0",
+      "OldVersion": "10.0.0",
+      "NewVersion": "9.0.11"
+    }
+  ],
+  "PackagesFound": 8,
+  "Summary": {
+    "FrameworkSpecificPackages": 7,
+    "PackagesConfigured": 8,
+    "FrameworksSet": "net8.0;net9.0;net10.0",
+    "DirectoryPackagesPropsUpdated": true,
+    "ProjectsUpdated": 8,
+    "PackagesChanged": 15,
+    "CommonPackages": 1
+  },
+  "ProjectsFound": 8,
+  "Timestamp": "2025-11-16 03:56:44",
+  "ChangeSummaryText": "Microsoft.Extensions.Configuration.Abstractions [net8.0]: 10.0.0 → 8.0.0\nMicrosoft.Extensions.Configuration.Abstractions [net9.0]: 10.0.0 → 9.0.11\nMicrosoft.Extensions.DependencyInjection.Abstractions [net8.0]: 10.0.0 → 8.0.2\nMicrosoft.Extensions.DependencyInjection.Abstractions [net9.0]: 10.0.0 → 9.0.11\nMicrosoft.Extensions.Hosting [net8.0]: 10.0.0 → 8.0.1\nMicrosoft.Extensions.Hosting [net9.0]: 10.0.0 → 9.0.11\nMicrosoft.Extensions.Hosting.Abstractions [net8.0]: 10.0.0 → 8.0.1\nMicrosoft.Extensions.Hosting.Abstractions [net9.0]: 10.0.0 → 9.0.11\nMicrosoft.Extensions.Http [net8.0]: 10.0.0 → 8.0.1\nMicrosoft.Extensions.Http [net9.0]: 10.0.0 → 9.0.11\nMicrosoft.Extensions.Http.Resilience [net8.0]: 10.0.0 → 8.10.0\nMicrosoft.Extensions.Http.Resilience [net9.0]: 10.0.0 → 9.10.0\nMicrosoft.Extensions.Options.ConfigurationExtensions [net8.0]: 10.0.0 → 8.0.0\nMicrosoft.Extensions.Options.ConfigurationExtensions [net9.0]: 10.0.0 → 9.0.11\nScriban : 6.5.0 → 6",
+  "TargetFrameworks": [
+    "net8.0",
+    "net9.0",
+    "net10.0"
+  ]
+}
