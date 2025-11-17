@@ -4,11 +4,17 @@ Updates .NET target frameworks and manages NuGet packages with Central Package M
 
 .DESCRIPTION
 This script:
-- Updates TargetFrameworks in all .csproj files
-- Removes Version attributes from PackageReference (enables central management)
-- Updates Directory.Packages.props with conditional ItemGroups per framework
-- Finds best compatible package versions for each framework
-- Automatically detects if framework requires prerelease packages
+1. Scans all .csproj files and collects used packages
+2. Adds TargetFrameworks to .csproj files
+3. Removes TargetFramework/TargetFrameworks from Directory.Packages.props (should only be in .csproj)
+4. Creates package list in Directory.Packages.props
+5. Creates target framework groups based on parameters (e.g., net8.0, net9.0, net10.0)
+6. Places all found packages in framework-specific groups
+7. Fetches package versions from NuGet:
+   - For Microsoft packages: looks for minor version matching target framework (e.g., 8.x.x for net8.0)
+   - For other packages: gets latest compatible version
+8. Checks for duplicates: if package version is identical across all frameworks, moves it to common ItemGroup
+9. Preserves additional attributes (PrivateAssets, etc.) and child elements
 
 .PARAMETER TargetFrameworks
 List of target frameworks to support (e.g., "net8.0", "net9.0", "net10.0")
@@ -21,7 +27,6 @@ List of target frameworks to support (e.g., "net8.0", "net9.0", "net10.0")
 
 .NOTES
 Created for Zonit organization-wide .NET updates
-The script automatically detects preview .NET versions and uses prerelease packages only when necessary.
 #>
 
 param(
@@ -43,7 +48,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 
 # ============================================================================
 # FUNCTION: Detect if framework requires prerelease packages
-# ============================================================================
+# =============================================================================
 function Test-RequiresPrerelease {
     param(
         [string]$TargetFramework,
@@ -83,7 +88,7 @@ function Test-RequiresPrerelease {
         $needsPrerelease = @($stableVersionsExist).Count -eq 0
         
         if ($needsPrerelease) {
-            Write-Host "  ℹ️  $TargetFramework appears to be prerelease - will allow preview packages" -ForegroundColor Yellow
+            Write-Host "  [INFO] $TargetFramework appears to be prerelease - will allow preview packages" -ForegroundColor Yellow
         }
         
         return $needsPrerelease
@@ -113,13 +118,15 @@ function Get-BestPackageVersion {
             return $null
         }
         
-        if ($TargetFramework -match 'net(\d+)\.?') {
+        # Extract target major version from framework
+        if ($TargetFramework -match 'net(\d+)\.') {
             $targetMajor = [int]$matches[1]
         } else {
             Write-Warning "Cannot extract major version from $TargetFramework"
             return $null
         }
         
+        # Parse all versions
         $allVersions = $versions | ForEach-Object {
             try {
                 $v = [version]($_ -replace '-.*', '')
@@ -139,26 +146,50 @@ function Get-BestPackageVersion {
             return $null
         }
         
-        # Strategy (priority order):
-        # 1. Latest stable with exact major version (semantic version, not major-only)
-        # 2. Latest stable with lower major version
-        # 3. Latest prerelease with exact major (if AllowPrerelease)
-        # Never use major-only versions like "6" or "9" - always use semantic versions
+        # Strategy for Microsoft packages vs third-party:
+        # 1. For Microsoft.* packages that follow .NET versioning - try to match major version (e.g., 8.x.x for net8.0)
+        # 2. For packages that don't follow .NET versioning - get latest compatible
         
-        $best = $allVersions | Where-Object { 
-            -not $_.IsPrerelease -and $_.Version.Major -eq $targetMajor 
-        } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+        $best = $null
         
-        if (-not $best) {
-            $best = $allVersions | Where-Object { 
-                -not $_.IsPrerelease -and $_.Version.Major -lt $targetMajor 
-            } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+        # Check if this is a Microsoft package that typically follows .NET versioning
+        $followsDotNetVersioning = $PackageId -match '^Microsoft\.(Extensions|AspNetCore|EntityFrameworkCore|JSInterop)\.'
+        
+        if ($followsDotNetVersioning) {
+            # Strategy: Try to find version with Major == targetMajor (e.g., 8.x.x for net8.0)
+            # First try: exact major version match (preferred)
+            if ($AllowPrerelease) {
+                $best = $allVersions | Where-Object { 
+                    $_.Version.Major -eq $targetMajor 
+                } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            } else {
+                $best = $allVersions | Where-Object { 
+                    $_.Version.Major -eq $targetMajor -and -not $_.IsPrerelease 
+                } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            }
+            
+            # Second try: if no exact match, find highest version where Major <= targetMajor
+            if (-not $best) {
+                if ($AllowPrerelease) {
+                    $best = $allVersions | Where-Object { 
+                        $_.Version.Major -le $targetMajor 
+                    } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+                } else {
+                    $best = $allVersions | Where-Object { 
+                        $_.Version.Major -le $targetMajor -and -not $_.IsPrerelease 
+                    } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+                }
+            }
         }
         
-        if (-not $best -and $AllowPrerelease) {
-            $best = $allVersions | Where-Object { 
-                $_.Version.Major -eq $targetMajor 
-            } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+        # If not a .NET-versioned package OR no version found with above strategy
+        # Fall back to getting the latest compatible version
+        if (-not $best) {
+            if ($AllowPrerelease) {
+                $best = $allVersions | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            } else {
+                $best = $allVersions | Where-Object { -not $_.IsPrerelease } | Sort-Object -Property @{Expression={$_.Version}; Descending=$true} | Select-Object -First 1
+            }
         }
         
         if (-not $best) {
@@ -183,7 +214,7 @@ function Get-BestPackageVersion {
 # ============================================================================
 # STEP 1: Update TargetFrameworks in .csproj
 # ============================================================================
-Write-Host "`n[1/4] Updating TargetFrameworks in .csproj files..." -ForegroundColor Yellow
+Write-Host "`n[1/5] Updating TargetFrameworks in .csproj files..." -ForegroundColor Yellow
 
 # Use singular or plural based on count
 $targetFrameworksString = $TargetFrameworks -join ';'
@@ -191,6 +222,11 @@ $elementName = if ($TargetFrameworks.Count -eq 1) { "TargetFramework" } else { "
 
 $csprojs = Get-ChildItem -Recurse -Filter "*.csproj" | Where-Object { 
     $_.FullName -notmatch '\\obj\\' -and $_.FullName -notmatch '\\bin\\' 
+}
+
+if ($csprojs.Count -eq 0) {
+    Write-Error "No .csproj files found in the current directory or subdirectories"
+    exit 1
 }
 
 foreach ($proj in $csprojs) {
@@ -205,9 +241,14 @@ foreach ($proj in $csprojs) {
         
         $pg = $propertyGroups[0]
         
+        # Check if TargetFramework or TargetFrameworks exists
+        $tfNodes = @($pg.SelectNodes("TargetFramework"))
+        $tfsNodes = @($pg.SelectNodes("TargetFrameworks"))
+        $hasTargetFramework = ($tfNodes.Count -gt 0) -or ($tfsNodes.Count -gt 0)
+        
         # Remove both singular and plural variants
-        @($pg.SelectNodes("TargetFramework")) | ForEach-Object { $pg.RemoveChild($_) | Out-Null }
-        @($pg.SelectNodes("TargetFrameworks")) | ForEach-Object { $pg.RemoveChild($_) | Out-Null }
+        foreach ($node in $tfNodes) { $pg.RemoveChild($node) | Out-Null }
+        foreach ($node in $tfsNodes) { $pg.RemoveChild($node) | Out-Null }
         
         # Add correct element name
         $tfNode = $xml.CreateElement($elementName)
@@ -215,34 +256,25 @@ foreach ($proj in $csprojs) {
         $pg.AppendChild($tfNode) | Out-Null
         
         $xml.Save($proj.FullName)
-        Write-Host "  ✓ $($proj.Name): Set to $targetFrameworksString" -ForegroundColor Green
+        
+        if ($hasTargetFramework) {
+            Write-Host "  [OK] $($proj.Name): Updated to $targetFrameworksString" -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] $($proj.Name): Added $targetFrameworksString" -ForegroundColor Cyan
+        }
     } catch {
-        Write-Warning "  ✗ Failed to update $($proj.Name): $_"
+        Write-Warning "  [FAIL] Failed to update $($proj.Name): $_"
     }
 }
 
 # ============================================================================
-# STEP 2: Remove Version from PackageReference
+# STEP 2: Collect all packages with their metadata
 # ============================================================================
-Write-Host "`n[2/4] Removing Version attributes from PackageReference..." -ForegroundColor Yellow
+Write-Host "`n[2/5] Collecting package references from all .csproj files..." -ForegroundColor Yellow
 
-foreach ($proj in $csprojs) {
-    try {
-        $content = Get-Content $proj.FullName -Raw
-        $content = $content -replace '(<PackageReference\s+Include="[^"]+")(\s+Version="[^"]+")', '$1'
-        $content | Set-Content $proj.FullName -NoNewline
-        Write-Host "  ✓ $($proj.Name)" -ForegroundColor Gray
-    } catch {
-        Write-Warning "  ✗ Failed to process $($proj.Name): $_"
-    }
-}
+# Structure: packageId -> @{ Attributes, ChildElements }
+$allPackagesMetadata = @{}
 
-# ============================================================================
-# STEP 3: Collect all packages
-# ============================================================================
-Write-Host "`n[3/4] Collecting package references..." -ForegroundColor Yellow
-
-$allPackages = @{}
 foreach ($proj in $csprojs) {
     try {
         [xml]$xml = Get-Content $proj.FullName
@@ -252,26 +284,124 @@ foreach ($proj in $csprojs) {
             if ($ig) {
                 $packageRefs = @($ig.PackageReference)
                 foreach ($pkg in $packageRefs) {
-                    if ($pkg -and $pkg.Include) { 
-                        $allPackages[$pkg.Include] = $true 
+                    if ($pkg -and $pkg.Include) {
+                        $packageId = $pkg.Include
+                        
+                        if (-not $allPackagesMetadata.ContainsKey($packageId)) {
+                            # Store attributes (except Include and Version)
+                            $attrs = @{}
+                            foreach ($attr in $pkg.Attributes) {
+                                if ($attr.Name -notin @('Include', 'Version')) {
+                                    $attrs[$attr.Name] = $attr.Value
+                                }
+                            }
+                            
+                            # Store child elements (like PrivateAssets, IncludeAssets, etc.)
+                            $childElements = @()
+                            foreach ($child in $pkg.ChildNodes) {
+                                if ($child.NodeType -eq 'Element') {
+                                    $childElements += [PSCustomObject]@{
+                                        Name = $child.LocalName
+                                        Value = $child.InnerText
+                                    }
+                                }
+                            }
+                            
+                            $allPackagesMetadata[$packageId] = @{
+                                Attributes = $attrs
+                                ChildElements = $childElements
+                            }
+                        }
                     }
                 }
             }
         }
     } catch {
-        Write-Warning "  ✗ Failed to read packages from $($proj.Name): $_"
+        Write-Warning "  [FAIL] Failed to read packages from $($proj.Name): $_"
     }
 }
 
-$packageList = $allPackages.Keys | Sort-Object
-Write-Host "  Found $($packageList.Count) unique packages" -ForegroundColor Cyan
+$packageList = $allPackagesMetadata.Keys | Sort-Object
+Write-Host "  Found $($packageList.Count) unique packages across all projects" -ForegroundColor Cyan
+
+foreach ($pkg in $packageList) {
+    $metadata = $allPackagesMetadata[$pkg]
+    $attrInfo = if ($metadata.Attributes.Count -gt 0) { " [attrs: $($metadata.Attributes.Keys -join ', ')]" } else { "" }
+    $childInfo = if ($metadata.ChildElements.Count -gt 0) { " [children: $($metadata.ChildElements.Name -join ', ')]" } else { "" }
+    Write-Host "    - $pkg$attrInfo$childInfo" -ForegroundColor DarkGray
+}
 
 # ============================================================================
-# STEP 4: Update Directory.Packages.props
+# STEP 3: Remove Version from PackageReference in .csproj
 # ============================================================================
-Write-Host "`n[4/4] Updating Directory.Packages.props..." -ForegroundColor Yellow
+Write-Host "`n[3/5] Removing Version attributes from PackageReference in .csproj files..." -ForegroundColor Yellow
 
-$propsFile = Get-ChildItem -Filter "Directory.Packages.props" -Recurse | Select-Object -First 1
+foreach ($proj in $csprojs) {
+    try {
+        $content = Get-Content $proj.FullName -Raw
+        $content = $content -replace '(<PackageReference\s+Include="[^"]+")(\s+Version="[^"]+")', '$1'
+        $content | Set-Content $proj.FullName -NoNewline
+        Write-Host "  [OK] $($proj.Name)" -ForegroundColor Gray
+    } catch {
+        Write-Warning "  [FAIL] Failed to process $($proj.Name): $_"
+    }
+}
+
+# ============================================================================
+# STEP 4: Resolve package versions for each framework
+# ============================================================================
+Write-Host "`n[4/5] Resolving package versions for each framework..." -ForegroundColor Yellow
+
+# Structure: framework -> packageId -> version
+$packageVersionsByFramework = @{}
+$unresolvedPackages = @{}
+
+foreach ($tf in $TargetFrameworks) {
+    # Auto-detect if framework requires prerelease packages
+    $allowPrereleaseForFramework = Test-RequiresPrerelease -TargetFramework $tf
+    
+    $packageVersionsByFramework[$tf] = @{}
+    
+    Write-Host "  Resolving versions for $tf..." -ForegroundColor Cyan
+    
+    foreach ($packageId in $packageList) {
+        # Fetch best compatible version from NuGet based on framework requirements
+        $version = Get-BestPackageVersion -PackageId $packageId -TargetFramework $tf -AllowPrerelease $allowPrereleaseForFramework
+        
+        if ($version) {
+            $packageVersionsByFramework[$tf][$packageId] = $version
+            $prereleaseLabel = if ($version -match '-') { " (prerelease)" } else { "" }
+            Write-Host "    [$tf] $packageId -> $version$prereleaseLabel" -ForegroundColor DarkGray
+        } else {
+            # Track unresolved packages
+            if (-not $unresolvedPackages.ContainsKey($packageId)) {
+                $unresolvedPackages[$packageId] = @()
+            }
+            $unresolvedPackages[$packageId] += $tf
+            Write-Warning "    [$tf] $packageId -> UNRESOLVED"
+        }
+        
+        Start-Sleep -Milliseconds 100
+    }
+}
+
+# Warn about unresolved packages
+if ($unresolvedPackages.Count -gt 0) {
+    Write-Host "`n  [WARN] Warning: Some packages could not be resolved from NuGet:" -ForegroundColor Yellow
+    foreach ($pkg in $unresolvedPackages.Keys) {
+        $frameworks = $unresolvedPackages[$pkg] -join ', '
+        Write-Host "    - $pkg (for: $frameworks)" -ForegroundColor Yellow
+    }
+}
+
+# ============================================================================
+# STEP 5: Create/Update Directory.Packages.props
+# ============================================================================
+Write-Host "`n[5/5] Creating/Updating Directory.Packages.props..." -ForegroundColor Yellow
+
+$propsFile = Get-ChildItem -Filter "Directory.Packages.props" | Select-Object -First 1
+$oldVersions = @{}
+
 if (-not $propsFile) {
     $propsPath = "Directory.Packages.props"
     @"
@@ -284,172 +414,144 @@ if (-not $propsFile) {
 "@ | Set-Content $propsPath
     $propsFile = Get-Item $propsPath
     Write-Host "  Created new Directory.Packages.props" -ForegroundColor Green
+} else {
+    # Collect old versions for change tracking
+    try {
+        [xml]$existingXml = Get-Content $propsFile.FullName
+        $existingItemGroups = @($existingXml.Project.ItemGroup)
+        
+        foreach ($ig in $existingItemGroups) {
+            foreach ($pv in $ig.PackageVersion) {
+                if ($pv.Include -and $pv.Version) {
+                    if ($ig.Condition -and $ig.Condition -match "'\`$\(TargetFramework\)' == '(net\d+\.\d+)'") {
+                        $framework = $matches[1]
+                        $key = "$($pv.Include)|$framework"
+                    } else {
+                        $key = "$($pv.Include)|common"
+                    }
+                    $oldVersions[$key] = $pv.Version
+                }
+            }
+        }
+    } catch {
+        Write-Verbose "Could not read existing packages from Directory.Packages.props"
+    }
 }
-
-# Track package version changes for report
-$packageChanges = @()
-
-# Initialize variables before try block to ensure they're always available for report
-$commonPackages = @{}
-$frameworkSpecificPackages = @{}
 
 try {
     [xml]$xml = Get-Content $propsFile.FullName
     
-    # Collect OLD versions and attributes before removing
-    $oldVersions = @{}
-    $packageAttributes = @{}
-    
-    # Get all ItemGroups (both conditional and unconditional)
-    $existingItemGroups = @($xml.Project.ItemGroup)
-    
-    foreach ($ig in $existingItemGroups) {
-        # Collect versions and attributes from all ItemGroups
-        foreach ($pv in $ig.PackageVersion) {
-            if ($pv.Include -and $pv.Version) {
-                if ($ig.Condition -and $ig.Condition -match "'\`$\(TargetFramework\)' == '(net\d+\.\d+)'") {
-                    $framework = $matches[1]
-                    $key = "$($pv.Include)|$framework"
-                } else {
-                    $key = "$($pv.Include)|common"
-                }
-                $oldVersions[$key] = $pv.Version
-                
-                # Store all attributes except Include and Version
-                $attrs = @{}
-                foreach ($attr in $pv.Attributes) {
-                    if ($attr.Name -notin @('Include', 'Version')) {
-                        $attrs[$attr.Name] = $attr.Value
-                    }
-                }
-                if ($attrs.Count -gt 0) {
-                    $packageAttributes[$key] = $attrs
-                }
+    # Remove TargetFramework/TargetFrameworks from PropertyGroup (should only be in .csproj)
+    Write-Host "  Removing TargetFramework/TargetFrameworks from Directory.Packages.props..." -ForegroundColor Cyan
+    $propertyGroups = @($xml.Project.PropertyGroup)
+    foreach ($pg in $propertyGroups) {
+        if ($pg) {
+            @($pg.SelectNodes("TargetFramework")) | ForEach-Object { 
+                $pg.RemoveChild($_) | Out-Null
+                Write-Host "    [OK] Removed TargetFramework" -ForegroundColor Gray
+            }
+            @($pg.SelectNodes("TargetFrameworks")) | ForEach-Object { 
+                $pg.RemoveChild($_) | Out-Null
+                Write-Host "    [OK] Removed TargetFrameworks" -ForegroundColor Gray
             }
         }
-        
-        # Remove ItemGroups that contain PackageVersion elements
-        # This removes both conditional and unconditional ItemGroups with package definitions
+    }
+    
+    # Remove all existing ItemGroups with PackageVersion
+    Write-Host "  Clearing existing package definitions..." -ForegroundColor Cyan
+    $existingItemGroups = @($xml.Project.ItemGroup)
+    foreach ($ig in $existingItemGroups) {
         if ($ig.PackageVersion) {
             $xml.Project.RemoveChild($ig) | Out-Null
         }
     }
     
-    # Collect package versions for each framework
-    $packageVersionsByFramework = @{}
-    foreach ($tf in $TargetFrameworks) {
-        # Auto-detect if framework requires prerelease packages
-        $allowPrereleaseForFramework = Test-RequiresPrerelease -TargetFramework $tf
-        
-        $packageVersionsByFramework[$tf] = @{}
-        
-        Write-Host "  Resolving versions for $tf..." -ForegroundColor Cyan
-        
-        foreach ($packageId in $packageList) {
-            # Fetch best compatible version from NuGet based on framework requirements
-            $version = Get-BestPackageVersion -PackageId $packageId -TargetFramework $tf -AllowPrerelease $allowPrereleaseForFramework
-            if ($version) {
-                $packageVersionsByFramework[$tf][$packageId] = $version
-            }
-            Start-Sleep -Milliseconds 100
-        }
-    }
+    # ====================================================================================
+    # KLUCZOWA LOGIKA: Sprawdzanie duplikatów
+    # ====================================================================================
+    Write-Host "  Analyzing package versions across frameworks..." -ForegroundColor Cyan
     
-    # Determine which packages can use a common version
-    $commonPackages = @{}
-    $frameworkSpecificPackages = @{}
+    $commonPackages = @{}           # Packages with same version across ALL frameworks
+    $frameworkSpecificPackages = @{} # Packages with different versions per framework
     
     foreach ($packageId in $packageList) {
         $versions = @()
+        $allResolved = $true
+        
+        # Collect versions for this package across all frameworks
         foreach ($tf in $TargetFrameworks) {
             if ($packageVersionsByFramework[$tf].ContainsKey($packageId)) {
                 $versions += $packageVersionsByFramework[$tf][$packageId]
+            } else {
+                $allResolved = $false
             }
         }
         
+        # Check if all frameworks have the same version
         $uniqueVersions = $versions | Select-Object -Unique
         
-        if ($uniqueVersions.Count -eq 1 -and $uniqueVersions[0]) {
-            # All frameworks use the same version
+        if ($allResolved -and $uniqueVersions.Count -eq 1 -and $uniqueVersions[0]) {
+            # ALL frameworks use the SAME version -> move to common ItemGroup
             $commonPackages[$packageId] = $uniqueVersions[0]
-        } elseif ($uniqueVersions.Count -gt 0 -and $uniqueVersions[0]) {
-            # Different versions per framework
+            Write-Host "    [COMMON] $packageId -> $($uniqueVersions[0]) (same across all frameworks)" -ForegroundColor Green
+        } elseif ($uniqueVersions.Count -gt 1) {
+            # Different versions per framework -> keep in framework-specific groups
             $frameworkSpecificPackages[$packageId] = $true
+            Write-Host "    [SPECIFIC] $packageId (different versions per framework)" -ForegroundColor Yellow
+        } elseif (-not $allResolved) {
+            # Not resolved for all frameworks -> skip
+            Write-Warning "    [SKIP] $packageId - not resolved for all frameworks"
         }
     }
     
-    # Create unconditional ItemGroup for common packages
+    Write-Host "`n  Package distribution:" -ForegroundColor Cyan
+    Write-Host "    Common packages: $($commonPackages.Count)" -ForegroundColor Green
+    Write-Host "    Framework-specific packages: $($frameworkSpecificPackages.Count)" -ForegroundColor Yellow
+    
+    # ====================================================================================
+    # Create COMMON ItemGroup (for packages with same version across all frameworks)
+    # ====================================================================================
     if ($commonPackages.Count -gt 0) {
-        Write-Host "  Creating common package versions..." -ForegroundColor Cyan
-        $itemGroup = $xml.CreateElement("ItemGroup")
+        Write-Host "`n  Creating common ItemGroup..." -ForegroundColor Cyan
+        $commonItemGroup = $xml.CreateElement("ItemGroup")
         
         foreach ($packageId in ($commonPackages.Keys | Sort-Object)) {
             $version = $commonPackages[$packageId]
-            
-            # Skip if version is invalid (null, "0", or major-only like "8")
-            if (-not $version -or $version -eq "0" -or $version -match '^\d+$') {
-                Write-Warning "    Skipping $packageId - invalid version: $version"
-                continue
-            }
             
             $pkgVersion = $xml.CreateElement("PackageVersion")
             $pkgVersion.SetAttribute("Include", $packageId)
             $pkgVersion.SetAttribute("Version", $version)
             
-            # Restore additional attributes if they existed
-            $attrKey = "$packageId|common"
-            if ($packageAttributes.ContainsKey($attrKey)) {
-                foreach ($attrName in $packageAttributes[$attrKey].Keys) {
-                    $pkgVersion.SetAttribute($attrName, $packageAttributes[$attrKey][$attrName])
-                }
+            # Restore metadata (attributes and child elements)
+            $metadata = $allPackagesMetadata[$packageId]
+            
+            # Restore attributes
+            foreach ($attrName in $metadata.Attributes.Keys) {
+                $pkgVersion.SetAttribute($attrName, $metadata.Attributes[$attrName])
             }
             
-            $itemGroup.AppendChild($pkgVersion) | Out-Null
-            
-            # Track changes - check both common key and all framework-specific keys
-            $oldVersion = $null
-            $oldKey = "$packageId|common"
-            
-            # First try to find old version in common configuration
-            if ($oldVersions.ContainsKey($oldKey)) {
-                $oldVersion = $oldVersions[$oldKey]
+            # Restore child elements
+            foreach ($childElement in $metadata.ChildElements) {
+                $child = $xml.CreateElement($childElement.Name)
+                $child.InnerText = $childElement.Value
+                $pkgVersion.AppendChild($child) | Out-Null
             }
             
-            # If not found in common, check all framework-specific configurations
-            if (-not $oldVersion) {
-                foreach ($tf in $TargetFrameworks) {
-                    $fwKey = "$packageId|$tf"
-                    if ($oldVersions.ContainsKey($fwKey)) {
-                        $oldVersion = $oldVersions[$fwKey]
-                        break  # Use first found version
-                    }
-                }
-            }
+            $commonItemGroup.AppendChild($pkgVersion) | Out-Null
             
-            # Track changes: both version updates AND new additions
-            if (-not $oldVersion -or $oldVersion -ne $version) {
-                $packageChanges += [PSCustomObject]@{
-                    Package = $packageId
-                    Framework = "all"
-                    OldVersion = if ($oldVersion) { $oldVersion } else { "(new)" }
-                    NewVersion = $version
-                }
-            }
-            
-            $prereleaseLabel = if ($version -match '-') { " (prerelease)" } else { "" }
-            $changeLabel = if ($oldVersion -and $oldVersion -ne $version) { " (was $oldVersion)" } else { "" }
-            $attrLabel = if ($packageAttributes.ContainsKey($attrKey)) { " [+attrs]" } else { "" }
-            Write-Host "    - $packageId → $version$prereleaseLabel$changeLabel$attrLabel" -ForegroundColor Gray
+            $attrLabel = if ($metadata.Attributes.Count -gt 0) { " [+attrs]" } else { "" }
+            $childLabel = if ($metadata.ChildElements.Count -gt 0) { " [+children]" } else { "" }
+            Write-Host "    $packageId -> $version$attrLabel$childLabel" -ForegroundColor Gray
         }
         
-        if ($itemGroup.HasChildNodes) {
-            $xml.Project.AppendChild($itemGroup) | Out-Null
-        }
+        $xml.Project.AppendChild($commonItemGroup) | Out-Null
     }
     
-    # Create conditional ItemGroups for framework-specific packages
+    # ====================================================================================
+    # Create FRAMEWORK-SPECIFIC ItemGroups (for packages with different versions)
+    # ====================================================================================
     if ($frameworkSpecificPackages.Count -gt 0) {
-        Write-Host "  Creating framework-specific package versions..." -ForegroundColor Yellow
+        Write-Host "`n  Creating framework-specific ItemGroups..." -ForegroundColor Cyan
         
         foreach ($tf in $TargetFrameworks) {
             $itemGroup = $xml.CreateElement("ItemGroup")
@@ -460,63 +562,31 @@ try {
                 if ($packageVersionsByFramework[$tf].ContainsKey($packageId)) {
                     $version = $packageVersionsByFramework[$tf][$packageId]
                     
-                    # Skip if version is invalid (null, "0", or major-only like "8")
-                    if (-not $version -or $version -eq "0" -or $version -match '^\d+$') {
-                        Write-Warning "    [$tf] Skipping $packageId - invalid version: $version"
-                        continue
-                    }
-                    
                     $pkgVersion = $xml.CreateElement("PackageVersion")
                     $pkgVersion.SetAttribute("Include", $packageId)
                     $pkgVersion.SetAttribute("Version", $version)
                     
-                    # Restore additional attributes if they existed (check both framework-specific and common)
-                    $attrKey = "$packageId|$tf"
-                    $attrCommonKey = "$packageId|common"
-                    if ($packageAttributes.ContainsKey($attrKey)) {
-                        foreach ($attrName in $packageAttributes[$attrKey].Keys) {
-                            $pkgVersion.SetAttribute($attrName, $packageAttributes[$attrKey][$attrName])
-                        }
-                    } elseif ($packageAttributes.ContainsKey($attrCommonKey)) {
-                        foreach ($attrName in $packageAttributes[$attrCommonKey].Keys) {
-                            $pkgVersion.SetAttribute($attrName, $packageAttributes[$attrCommonKey][$attrName])
-                        }
+                    # Restore metadata (attributes and child elements)
+                    $metadata = $allPackagesMetadata[$packageId]
+                    
+                    # Restore attributes
+                    foreach ($attrName in $metadata.Attributes.Keys) {
+                        $pkgVersion.SetAttribute($attrName, $metadata.Attributes[$attrName])
+                    }
+                    
+                    # Restore child elements
+                    foreach ($childElement in $metadata.ChildElements) {
+                        $child = $xml.CreateElement($childElement.Name)
+                        $child.InnerText = $childElement.Value
+                        $pkgVersion.AppendChild($child) | Out-Null
                     }
                     
                     $itemGroup.AppendChild($pkgVersion) | Out-Null
                     $hasPackages = $true
                     
-                    # Track changes - check both framework-specific key and common key
-                    $oldVersion = $null
-                    $oldKey = "$packageId|$tf"
-                    
-                    # First try to find old version in framework-specific configuration
-                    if ($oldVersions.ContainsKey($oldKey)) {
-                        $oldVersion = $oldVersions[$oldKey]
-                    }
-                    
-                    # If not found, check common configuration
-                    if (-not $oldVersion) {
-                        $commonKey = "$packageId|common"
-                        if ($oldVersions.ContainsKey($commonKey)) {
-                            $oldVersion = $oldVersions[$commonKey]
-                        }
-                    }
-                    
-                    # Track changes: both version updates AND new additions
-                    if (-not $oldVersion -or $oldVersion -ne $version) {
-                        $packageChanges += [PSCustomObject]@{
-                            Package = $packageId
-                            Framework = $tf
-                            OldVersion = if ($oldVersion) { $oldVersion } else { "(new)" }
-                            NewVersion = $version
-                        }
-                    }
-                    
-                    $prereleaseLabel = if ($version -match '-') { " (prerelease)" } else { "" }
-                    $changeLabel = if ($oldVersion -and $oldVersion -ne $version) { " (was $oldVersion)" } else { "" }
-                    $attrLabel = if ($packageAttributes.ContainsKey($attrKey) -or $packageAttributes.ContainsKey($attrCommonKey)) { " [+attrs]" } else { "" }
-                    Write-Host "    [$tf] $packageId → $version$prereleaseLabel$changeLabel$attrLabel" -ForegroundColor DarkGray
+                    $attrLabel = if ($metadata.Attributes.Count -gt 0) { " [+attrs]" } else { "" }
+                    $childLabel = if ($metadata.ChildElements.Count -gt 0) { " [+children]" } else { "" }
+                    Write-Host "    [$tf] $packageId -> $version$attrLabel$childLabel" -ForegroundColor DarkGray
                 }
             }
             
@@ -527,9 +597,7 @@ try {
     }
     
     $xml.Save($propsFile.FullName)
-    Write-Host "  ✓ Saved Directory.Packages.props" -ForegroundColor Green
-    Write-Host "    Common packages: $($commonPackages.Count)" -ForegroundColor Gray
-    Write-Host "    Framework-specific packages: $($frameworkSpecificPackages.Count)" -ForegroundColor Gray
+    Write-Host "`n  [OK] Saved Directory.Packages.props" -ForegroundColor Green
     
 } catch {
     Write-Error "Failed to update Directory.Packages.props: $_"
@@ -537,11 +605,50 @@ try {
 }
 
 # ============================================================================
-# SUMMARY
+# SUMMARY & CHANGE TRACKING
 # ============================================================================
 Write-Host "`n========================================" -ForegroundColor Green
-Write-Host "✓ Update Complete!" -ForegroundColor Green
+Write-Host "[OK] Update Complete!" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
+
+# Track changes
+$packageChanges = @()
+
+foreach ($packageId in $packageList) {
+    # Check if in common or framework-specific
+    if ($commonPackages.ContainsKey($packageId)) {
+        $newVersion = $commonPackages[$packageId]
+        $oldKey = "$packageId|common"
+        $oldVersion = $oldVersions[$oldKey]
+        
+        if (-not $oldVersion -or $oldVersion -ne $newVersion) {
+            $packageChanges += [PSCustomObject]@{
+                Package = $packageId
+                Framework = "common"
+                OldVersion = if ($oldVersion) { $oldVersion } else { "(new)" }
+                NewVersion = $newVersion
+            }
+        }
+    } elseif ($frameworkSpecificPackages.ContainsKey($packageId)) {
+        foreach ($tf in $TargetFrameworks) {
+            if ($packageVersionsByFramework[$tf].ContainsKey($packageId)) {
+                $newVersion = $packageVersionsByFramework[$tf][$packageId]
+                $oldKey = "$packageId|$tf"
+                $oldCommonKey = "$packageId|common"
+                $oldVersion = if ($oldVersions.ContainsKey($oldKey)) { $oldVersions[$oldKey] } else { $oldVersions[$oldCommonKey] }
+                
+                if (-not $oldVersion -or $oldVersion -ne $newVersion) {
+                    $packageChanges += [PSCustomObject]@{
+                        Package = $packageId
+                        Framework = $tf
+                        OldVersion = if ($oldVersion) { $oldVersion } else { "(new)" }
+                        NewVersion = $newVersion
+                    }
+                }
+            }
+        }
+    }
+}
 
 # Generate detailed change summary
 $changeSummary = @()
@@ -559,20 +666,20 @@ if ($packageChanges.Count -gt 0) {
             ($changes | Select-Object -ExpandProperty NewVersion -Unique).Count -eq 1) {
             $old = $changes[0].OldVersion
             $new = $changes[0].NewVersion
-            Write-Host "  $pkg : $old → $new" -ForegroundColor White
-            $changeSummary += "$pkg : $old → $new"
+            Write-Host "  $pkg : $old -> $new" -ForegroundColor White
+            $changeSummary += "$pkg : $old -> $new"
         } else {
             # Different versions per framework
             Write-Host "  $pkg :" -ForegroundColor White
             foreach ($change in $changes) {
-                Write-Host "    [$($change.Framework)] $($change.OldVersion) → $($change.NewVersion)" -ForegroundColor Gray
-                $changeSummary += "$pkg [$($change.Framework)]: $($change.OldVersion) → $($change.NewVersion)"
+                Write-Host "    [$($change.Framework)] $($change.OldVersion) -> $($change.NewVersion)" -ForegroundColor Gray
+                $changeSummary += "$pkg [$($change.Framework)]: $($change.OldVersion) -> $($change.NewVersion)"
             }
         }
     }
 } else {
     Write-Host "`nNo package version changes detected" -ForegroundColor Yellow
-    $changeSummary += "No package version changes - this might be a new setup or no updates available"
+    $changeSummary += "No package version changes - packages may already be up to date"
 }
 
 # Join the summary into a single string for bash compatibility
@@ -604,7 +711,9 @@ Write-Host "`nReport saved to: $reportPath" -ForegroundColor Gray
 Write-Host "`nSummary:" -ForegroundColor Cyan
 Write-Host "  Projects updated: $($csprojs.Count)" -ForegroundColor White
 Write-Host "  Target frameworks: $targetFrameworksString" -ForegroundColor White
-Write-Host "  Packages configured: $($packageList.Count)" -ForegroundColor White
+Write-Host "  Total packages: $($packageList.Count)" -ForegroundColor White
+Write-Host "    - Common packages: $($commonPackages.Count)" -ForegroundColor Green
+Write-Host "    - Framework-specific packages: $($frameworkSpecificPackages.Count)" -ForegroundColor Yellow
 Write-Host "  Package versions changed: $($packageChanges.Count)" -ForegroundColor White
 
 Write-Host "`nNext steps:" -ForegroundColor Cyan
