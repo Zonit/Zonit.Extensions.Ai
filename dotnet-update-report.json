@@ -1,21 +1,28 @@
 {
-  "Timestamp": "2025-11-16 05:04:59",
-  "PackagesFound": 8,
   "ProjectsFound": 8,
-  "ChangeSummaryText": "No package version changes - this might be a new setup or no updates available",
+  "PackagesFound": 8,
+  "Timestamp": "2025-11-17 05:24:50",
+  "Summary": {
+    "PackagesConfigured": 8,
+    "PackagesChanged": 1,
+    "FrameworkSpecificPackages": 7,
+    "DirectoryPackagesPropsUpdated": true,
+    "FrameworksSet": "net8.0;net9.0;net10.0",
+    "CommonPackages": 1,
+    "ProjectsUpdated": 8
+  },
+  "ChangeSummaryText": "Scriban : 6.5.0 -> 6",
+  "PackageChanges": [
+    {
+      "Package": "Scriban",
+      "Framework": "common",
+      "OldVersion": "6.5.0",
+      "NewVersion": "6"
+    }
+  ],
   "TargetFrameworks": [
     "net8.0",
     "net9.0",
     "net10.0"
-  ],
-  "PackageChanges": [],
-  "Summary": {
-    "CommonPackages": 1,
-    "FrameworkSpecificPackages": 7,
-    "PackagesConfigured": 8,
-    "ProjectsUpdated": 8,
-    "FrameworksSet": "net8.0;net9.0;net10.0",
-    "PackagesChanged": 0,
-    "DirectoryPackagesPropsUpdated": true
-  }
+  ]
 }
