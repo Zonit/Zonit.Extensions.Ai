@@ -55,7 +55,4 @@
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
   </ItemGroup>
-  <ItemGroup>
-    <PackageVersion Include="Scriban" Version="6.5.0" />
-  </ItemGroup>
 </Project>
