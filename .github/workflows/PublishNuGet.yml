@@ -5,7 +5,7 @@ on:
 
 jobs:
   publish:
-    uses: Zonit/.github/.github/workflows/reusable-publish-nuget.yml@main
+    uses: Zonit/.github/.github/workflows/reusable-publish-nuget.yml@master
     with:
       source_directory: 'Source'
     secrets:
