@@ -6,6 +6,8 @@ using Microsoft.Extensions.Options;
 using Zonit.Extensions.Ai.Application.Options;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Repositories;
+using Zonit.Extensions.Ai.Infrastructure.Repositories.Anthropic;
+using Zonit.Extensions.Ai.Infrastructure.Repositories.Google;
 using Zonit.Extensions.Ai.Infrastructure.Repositories.OpenAi;
 using Zonit.Extensions.Ai.Infrastructure.Repositories.X;
 
@@ -20,6 +22,12 @@ public static class ServiceCollectionExtensions
         
         // Configure X repository
         services.AddXRepository();
+
+        // Configure Anthropic repository
+        services.AddAnthropicRepository();
+
+        // Configure Google repository
+        services.AddGoogleRepository();
 
         return services;
     }
@@ -89,6 +97,58 @@ public static class ServiceCollectionExtensions
 
         services.AddKeyedTransient<ITextRepository>("X", (serviceProvider, _) =>
             serviceProvider.GetRequiredService<XRepository>());
+
+        return services;
+    }
+
+    private static IServiceCollection AddAnthropicRepository(this IServiceCollection services)
+    {
+        services
+            .AddHttpClient<AnthropicRepository>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
+                client.BaseAddress = new Uri("https://api.anthropic.com/");
+                client.Timeout = options.Value.Resilience.HttpClientTimeout;
+                
+                client.DefaultRequestHeaders.AcceptCharset.Clear();
+                client.DefaultRequestHeaders.AcceptCharset.Add(new StringWithQualityHeaderValue("utf-8"));
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json") 
+                { 
+                    CharSet = "utf-8" 
+                });
+            })
+            .AddStandardResilienceHandler()
+            .Configure(ConfigureResilienceFromOptions);
+
+        services.AddKeyedTransient<ITextRepository>("Anthropic", (serviceProvider, _) =>
+            serviceProvider.GetRequiredService<AnthropicRepository>());
+
+        return services;
+    }
+
+    private static IServiceCollection AddGoogleRepository(this IServiceCollection services)
+    {
+        services
+            .AddHttpClient<GoogleRepository>((serviceProvider, client) =>
+            {
+                var options = serviceProvider.GetRequiredService<IOptions<AiOptions>>();
+                client.BaseAddress = new Uri("https://generativelanguage.googleapis.com/");
+                client.Timeout = options.Value.Resilience.HttpClientTimeout;
+                
+                client.DefaultRequestHeaders.AcceptCharset.Clear();
+                client.DefaultRequestHeaders.AcceptCharset.Add(new StringWithQualityHeaderValue("utf-8"));
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json") 
+                { 
+                    CharSet = "utf-8" 
+                });
+            })
+            .AddStandardResilienceHandler()
+            .Configure(ConfigureResilienceFromOptions);
+
+        services.AddKeyedTransient<ITextRepository>("Google", (serviceProvider, _) =>
+            serviceProvider.GetRequiredService<GoogleRepository>());
 
         return services;
     }

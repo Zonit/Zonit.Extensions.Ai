@@ -1,5 +1,11 @@
 namespace Zonit.Extensions.Ai.Llm.OpenAi;
 
+/// <summary>
+/// GPT-5.1 model with extended reasoning capabilities.
+/// Note: Unlike other reasoning models, GPT-5.1 defaults to ReasonType.None (no reasoning).
+/// To enable reasoning, explicitly set the Reason property to Minimal, Low, Medium, or High.
+/// GPT-5 models do NOT support temperature, top_p, or logprobs parameters.
+/// </summary>
 public class GPT51 : OpenAiReasoningBase
 {
     public override string Name => "gpt-5.1-2025-11-13";
@@ -33,4 +39,9 @@ public class GPT51 : OpenAiReasoningBase
     public override EndpointsType SupportedEndpoints =>
         EndpointsType.Chat |
         EndpointsType.Response;
+
+    // Hide ReasonSummary as it's not user-configurable for GPT-5 models
+    // This is an internal API parameter managed by the repository
+    [Obsolete("ReasonSummary is not user-configurable for GPT-5 models. This is managed internally by the API.", true)]
+    public new ReasonSummaryType? ReasonSummary { get => null; internal set { } }
 }

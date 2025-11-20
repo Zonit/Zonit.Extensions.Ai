@@ -263,21 +263,46 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
         // Handle reasoning models - use reasoning parameter
         if (llm is OpenAiReasoningBase reasoningModel)
         {
-            requestPayload["reasoning"] = new
+            // Add reasoning effort parameter
+            // Note: GPT-5.1 defaults to "none", other reasoning models default to "medium"
+            requestPayload["reasoning"] = new Dictionary<string, object>
             {
-                effort = reasoningModel.Reason switch
+                ["effort"] = reasoningModel.Reason switch
                 {
+                    OpenAiReasoningBase.ReasonType.None => "none",
+                    //OpenAiReasoningBase.ReasonType.Minimal => "minimal",
                     OpenAiReasoningBase.ReasonType.Low => "low",
                     OpenAiReasoningBase.ReasonType.Medium => "medium",
                     OpenAiReasoningBase.ReasonType.High => "high",
-                    null => "medium",
+                    null => "medium", // Default for most reasoning models (except GPT-5.1 which defaults to "none")
                     _ => "medium"
                 }
             };
-        }
 
-        // Handle chat models (GPT)
-        if (llm is OpenAiChatBase chatModel)
+            // Add verbosity parameter for GPT-5 models (output verbosity control)
+            if (reasoningModel.Verbosity.HasValue)
+            {
+                if (!requestPayload.ContainsKey("text"))
+                {
+                    requestPayload["text"] = new Dictionary<string, object>();
+                }
+
+                var textConfig = (Dictionary<string, object>)requestPayload["text"];
+                textConfig["verbosity"] = reasoningModel.Verbosity.Value switch
+                {
+                    OpenAiReasoningBase.VerbosityType.Low => "low",
+                    OpenAiReasoningBase.VerbosityType.Medium => "medium",
+                    OpenAiReasoningBase.VerbosityType.High => "high",
+                    _ => "medium"
+                };
+            }
+
+            // IMPORTANT: GPT-5 models do NOT support temperature, top_p, or logprobs
+            // These parameters would cause API errors if sent with reasoning models
+            // Temperature and top_p are intentionally NOT added here
+        }
+        // Handle chat models (GPT-4, GPT-3.5, etc.) - NOT for reasoning models
+        else if (llm is OpenAiChatBase chatModel)
         {
             requestPayload["temperature"] = chatModel.Temperature;
             requestPayload["top_p"] = chatModel.TopP;
