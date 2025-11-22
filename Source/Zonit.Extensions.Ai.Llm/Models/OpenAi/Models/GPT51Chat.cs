@@ -8,7 +8,7 @@ namespace Zonit.Extensions.Ai.Llm.OpenAi;
 /// </summary>
 public class GPT51Chat : OpenAiReasoningBase
 {
-    public override string Name => "gpt-5.1-chat";
+    public override string Name => "gpt-5.1-chat-latest";
 
     // Pricing per 1M tokens from OpenAI documentation
     public override decimal PriceInput => 1.25m;
