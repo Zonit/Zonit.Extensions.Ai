@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
+using System.Text.Json.Serialization.Metadata;
 using Zonit.Extensions.Ai.Application.Options;
 using Zonit.Extensions.Ai.Domain.Repositories;
 using Zonit.Extensions.Ai.Infrastructure.Serialization;
@@ -17,20 +18,49 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
     private readonly string _apiKey = options.Value.OpenAiKey ?? throw new ArgumentException("OpenAI API key is required");
     private const string OpenAiApiUrl = "/v1/responses";
 
-    // JSON serializer options with proper UTF-8 support
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-    };
+    // JSON serializer options with proper UTF-8 support and AOT compatibility
+    private static readonly JsonSerializerOptions JsonOptions = CreateJsonOptions();
+    private static readonly JsonSerializerOptions DeserializationOptions = CreateDeserializationOptions();
 
-    private static readonly JsonSerializerOptions DeserializationOptions = new()
+    private static JsonSerializerOptions CreateJsonOptions()
     {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        PropertyNameCaseInsensitive = true,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-    };
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            WriteIndented = false,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
+#if NET8_0_OR_GREATER
+        // Use source-generated JSON serializer for AOT compatibility
+        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonSerializerContext.Default,
+            new DefaultJsonTypeInfoResolver()
+        );
+#endif
+
+        return options;
+    }
+
+    private static JsonSerializerOptions CreateDeserializationOptions()
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+            PropertyNameCaseInsensitive = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        };
+
+#if NET8_0_OR_GREATER
+        // Use source-generated JSON serializer for AOT compatibility
+        options.TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonSerializerContext.Default,
+            new DefaultJsonTypeInfoResolver()
+        );
+#endif
+
+        return options;
+    }
 
     public async Task<Result<TResponse>> ResponseAsync<TResponse>(ITextLlmBase llm, IPromptBase<TResponse> prompt, CancellationToken cancellationToken = default)
     {

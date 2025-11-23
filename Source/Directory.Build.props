@@ -1,0 +1,7 @@
+<Project>
+  <PropertyGroup>
+    <!-- Mark all projects in Zonit.Extensions.Ai as AOT-compatible -->
+    <!-- Note: Zonit.Extensions.Ai.Application uses Scriban which may have limited AOT support due to reflection -->
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+</Project>
