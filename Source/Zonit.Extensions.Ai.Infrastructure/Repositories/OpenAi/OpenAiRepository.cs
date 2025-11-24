@@ -107,10 +107,44 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             // Check for API errors
             if (openAiResponse.Status != "completed")
             {
-                var errorMessage = openAiResponse.Error != null 
-                    ? JsonSerializer.Serialize(openAiResponse.Error, JsonOptions)
-                    : $"Response status: {openAiResponse.Status}";
-                throw new InvalidOperationException($"OpenAI Responses API returned non-completed status: {errorMessage}");
+                var errorDetails = new System.Text.StringBuilder();
+                errorDetails.AppendLine($"OpenAI Responses API returned non-completed status: {openAiResponse.Status}");
+                
+                // Add error details if available
+                if (openAiResponse.Error != null)
+                {
+                    var errorJson = JsonSerializer.Serialize(openAiResponse.Error, JsonOptions);
+                    errorDetails.AppendLine($"Error details: {errorJson}");
+                }
+                
+                // Add incomplete details if available
+                if (openAiResponse.IncompleteDetails != null)
+                {
+                    var incompleteJson = JsonSerializer.Serialize(openAiResponse.IncompleteDetails, JsonOptions);
+                    errorDetails.AppendLine($"Incomplete details: {incompleteJson}");
+                }
+                
+                // Add response ID for debugging
+                if (!string.IsNullOrEmpty(openAiResponse.Id))
+                {
+                    errorDetails.AppendLine($"Response ID: {openAiResponse.Id}");
+                }
+                
+                // Add model information
+                if (!string.IsNullOrEmpty(openAiResponse.Model))
+                {
+                    errorDetails.AppendLine($"Model: {openAiResponse.Model}");
+                }
+                
+                // Add usage information if available
+                if (openAiResponse.Usage != null)
+                {
+                    errorDetails.AppendLine($"Input tokens: {openAiResponse.Usage.InputTokens}");
+                    errorDetails.AppendLine($"Output tokens: {openAiResponse.Usage.OutputTokens}");
+                    errorDetails.AppendLine($"Total tokens: {openAiResponse.Usage.TotalTokens}");
+                }
+                
+                throw new InvalidOperationException(errorDetails.ToString());
             }
 
             if (openAiResponse.Output == null || !openAiResponse.Output.Any())
@@ -248,13 +282,14 @@ internal partial class OpenAiRepository(IOptions<AiOptions> options, HttpClient 
             }
         }
 
-        // Create message format input
+        // Create message format input with "developer" role
+        // Developer role is used for system-level instructions in Responses API
         requestPayload["input"] = new[]
         {
             new
             {
                 type = "message",
-                role = "user",
+                role = "developer",  // Changed from "user" to "developer" for instruction-following
                 content = content
             }
         };
