@@ -80,6 +80,9 @@ internal class AnthropicRepository(IOptions<AiOptions> options, HttpClient httpC
 
             try
             {
+                // Clean up markdown code blocks if present (Anthropic sometimes wraps JSON in ```json...```)
+                responseJson = CleanJsonResponse(responseJson);
+
                 if (typeof(TResponse) == typeof(string))
                 {
                     var result = (TResponse)(object)responseJson;
@@ -104,6 +107,7 @@ internal class AnthropicRepository(IOptions<AiOptions> options, HttpClient httpC
                 {
                     var parsedResponse = JsonSerializer.Deserialize<JsonElement>(responseJson, DeserializationOptions);
 
+                    // Get "result" if it exists, otherwise use the entire JSON (same logic as OpenAI)
                     var jsonToDeserialize = parsedResponse.TryGetProperty("result", out var resultElement)
                         ? resultElement.GetRawText()
                         : responseJson;
@@ -218,15 +222,37 @@ internal class AnthropicRepository(IOptions<AiOptions> options, HttpClient httpC
             ["messages"] = messages
         };
 
+        // Add JSON schema for structured output (similar to OpenAI implementation)
+        // Anthropic doesn't have native structured output support, so we use prompt engineering
         var jsonSchema = JsonSchemaGenerator.GenerateJsonSchema<TResponse>();
-        var schemaObject = JsonSerializer.Deserialize<JsonElement>(jsonSchema);
+        var schemaDescription = JsonSchemaGenerator.GetSchemaDescription<TResponse>();
         
         requestBody["system"] = new[]
         {
             new
             {
                 type = "text",
-                text = $"You must respond with valid JSON matching this schema: {jsonSchema}. Do not include any text before or after the JSON."
+                text = $@"You are a precise JSON response generator. You MUST respond with valid JSON that strictly adheres to the provided schema.
+
+JSON Schema:
+{jsonSchema}
+
+Schema Description: {schemaDescription}
+
+CRITICAL RULES:
+1. Output ONLY valid JSON - no explanations, no markdown code blocks, no extra text
+2. The JSON must match the schema exactly
+3. All required fields must be present
+4. Use correct data types for each field
+5. Return the JSON wrapped in a 'result' key: {{""result"": {{your_response}}}}
+6. Do NOT wrap the response in ```json code blocks
+
+Example structure:
+{{
+  ""result"": {{
+    // Your response matching the schema
+  }}
+}}"
             }
         };
 
@@ -287,6 +313,38 @@ internal class AnthropicRepository(IOptions<AiOptions> options, HttpClient httpC
     {
         var property = obj.GetType().GetProperty(propertyName);
         return property != null ? (T)property.GetValue(obj)! : default(T)!;
+    }
+
+    /// <summary>
+    /// Cleans JSON response by removing markdown code blocks that Anthropic sometimes adds
+    /// </summary>
+    private static string CleanJsonResponse(string response)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+            return response;
+
+        var trimmed = response.Trim();
+        
+        // Remove markdown code blocks: ```json...``` or ```...```
+        if (trimmed.StartsWith("```"))
+        {
+            // Find the first newline after opening ```
+            var firstNewline = trimmed.IndexOf('\n');
+            if (firstNewline > 0)
+            {
+                trimmed = trimmed.Substring(firstNewline + 1);
+            }
+            
+            // Remove closing ```
+            if (trimmed.EndsWith("```"))
+            {
+                trimmed = trimmed.Substring(0, trimmed.Length - 3);
+            }
+            
+            trimmed = trimmed.Trim();
+        }
+
+        return trimmed;
     }
 
     private class AnthropicApiResponse
