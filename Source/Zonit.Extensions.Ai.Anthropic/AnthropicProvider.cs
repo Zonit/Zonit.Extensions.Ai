@@ -198,10 +198,20 @@ public sealed class AnthropicProvider : IModelProvider
         IPrompt<TResponse> prompt,
         Type responseType)
     {
+        var maxTokens = llm.MaxTokens;
+
+        // When extended thinking is enabled, ensure max_tokens > thinking.budget_tokens
+        if (llm is AnthropicBase thinkingLlm && thinkingLlm.ThinkingBudget.HasValue)
+        {
+            var requiredMinTokens = thinkingLlm.ThinkingBudget.Value + 1024; // Add buffer for actual response
+            if (maxTokens < requiredMinTokens)
+                maxTokens = requiredMinTokens;
+        }
+
         var request = new Dictionary<string, object>
         {
             ["model"] = llm.Name,
-            ["max_tokens"] = llm.MaxTokens
+            ["max_tokens"] = maxTokens
         };
 
         if (!string.IsNullOrEmpty(prompt.System))
@@ -213,13 +223,15 @@ public sealed class AnthropicProvider : IModelProvider
         {
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
+                // Use GetActualMimeType() to detect real MIME type from binary data
+                // This prevents mismatches between declared MIME type and actual image format
                 content.Insert(0, new
                 {
                     type = "image",
                     source = new
                     {
                         type = "base64",
-                        media_type = file.MimeType,
+                        media_type = file.GetActualMimeType(),
                         data = file.ToBase64()
                     }
                 });
@@ -258,16 +270,16 @@ public sealed class AnthropicProvider : IModelProvider
                 request["temperature"] = anthropicLlm.Temperature;
             }
             // If both are default (1.0), don't send either - Anthropic uses its own defaults
-        }
 
-        // Extended thinking
-        if (llm is AnthropicBase thinkingLlm && thinkingLlm.ThinkingBudget.HasValue)
-        {
-            request["thinking"] = new
+            // Extended thinking (for models that support it)
+            if (anthropicLlm.ThinkingBudget.HasValue)
             {
-                type = "enabled",
-                budget_tokens = thinkingLlm.ThinkingBudget.Value
-            };
+                request["thinking"] = new
+                {
+                    type = "enabled",
+                    budget_tokens = anthropicLlm.ThinkingBudget.Value
+                };
+            }
         }
 
         // Tools from LLM
@@ -291,22 +303,7 @@ public sealed class AnthropicProvider : IModelProvider
         if (typeof(TResponse) == typeof(string))
             return (TResponse)(object)json;
 
-        // Try to extract JSON from markdown code blocks
-        var jsonContent = json;
-        if (json.Contains("```json"))
-        {
-            var start = json.IndexOf("```json", StringComparison.Ordinal) + 7;
-            var end = json.IndexOf("```", start, StringComparison.Ordinal);
-            if (end > start)
-                jsonContent = json[start..end].Trim();
-        }
-        else if (json.Contains("```"))
-        {
-            var start = json.IndexOf("```", StringComparison.Ordinal) + 3;
-            var end = json.IndexOf("```", start, StringComparison.Ordinal);
-            if (end > start)
-                jsonContent = json[start..end].Trim();
-        }
+        var jsonContent = ExtractJson(json);
 
         return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
         {
@@ -314,6 +311,58 @@ public sealed class AnthropicProvider : IModelProvider
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
             Converters = { new JsonStringEnumConverter() }
         }) ?? throw new JsonException("Deserialization returned null");
+    }
+
+    /// <summary>
+    /// Extracts JSON content from a response that may contain markdown or other text.
+    /// </summary>
+    private static string ExtractJson(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        var content = text.Trim();
+
+        // If it already starts with { or [, it's likely valid JSON
+        if (content.StartsWith('{') || content.StartsWith('['))
+            return content;
+
+        // Try to extract from ```json ... ``` blocks
+        if (content.Contains("```json"))
+        {
+            var start = content.IndexOf("```json", StringComparison.Ordinal) + 7;
+            var end = content.IndexOf("```", start, StringComparison.Ordinal);
+            if (end > start)
+                return content[start..end].Trim();
+        }
+
+        // Try to extract from ``` ... ``` blocks
+        if (content.Contains("```"))
+        {
+            var start = content.IndexOf("```", StringComparison.Ordinal) + 3;
+            // Skip any language identifier on the same line
+            var newlinePos = content.IndexOf('\n', start);
+            if (newlinePos > start)
+                start = newlinePos + 1;
+            var end = content.IndexOf("```", start, StringComparison.Ordinal);
+            if (end > start)
+                return content[start..end].Trim();
+        }
+
+        // Try to find JSON object by locating first { and last }
+        var firstBrace = content.IndexOf('{');
+        var lastBrace = content.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+            return content[firstBrace..(lastBrace + 1)];
+
+        // Try to find JSON array by locating first [ and last ]
+        var firstBracket = content.IndexOf('[');
+        var lastBracket = content.LastIndexOf(']');
+        if (firstBracket >= 0 && lastBracket > firstBracket)
+            return content[firstBracket..(lastBracket + 1)];
+
+        // Return original if no JSON structure found
+        return content;
     }
 }
 

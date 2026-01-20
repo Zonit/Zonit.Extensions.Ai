@@ -279,22 +279,7 @@ public sealed class MistralProvider : IModelProvider
         if (typeof(TResponse) == typeof(string))
             return (TResponse)(object)json;
 
-        // Try to extract JSON from markdown code blocks
-        var jsonContent = json;
-        if (json.Contains("```json"))
-        {
-            var start = json.IndexOf("```json", StringComparison.Ordinal) + 7;
-            var end = json.IndexOf("```", start, StringComparison.Ordinal);
-            if (end > start)
-                jsonContent = json[start..end].Trim();
-        }
-        else if (json.Contains("```"))
-        {
-            var start = json.IndexOf("```", StringComparison.Ordinal) + 3;
-            var end = json.IndexOf("```", start, StringComparison.Ordinal);
-            if (end > start)
-                jsonContent = json[start..end].Trim();
-        }
+        var jsonContent = ExtractJson(json);
 
         return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
         {
@@ -302,6 +287,56 @@ public sealed class MistralProvider : IModelProvider
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
             Converters = { new JsonStringEnumConverter() }
         }) ?? throw new JsonException("Deserialization returned null");
+    }
+
+    /// <summary>
+    /// Extracts JSON content from a response that may contain markdown or other text.
+    /// </summary>
+    private static string ExtractJson(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return text;
+
+        var content = text.Trim();
+
+        // If it already starts with { or [, it's likely valid JSON
+        if (content.StartsWith('{') || content.StartsWith('['))
+            return content;
+
+        // Try to extract from ```json ... ``` blocks
+        if (content.Contains("```json"))
+        {
+            var start = content.IndexOf("```json", StringComparison.Ordinal) + 7;
+            var end = content.IndexOf("```", start, StringComparison.Ordinal);
+            if (end > start)
+                return content[start..end].Trim();
+        }
+
+        // Try to extract from ``` ... ``` blocks
+        if (content.Contains("```"))
+        {
+            var start = content.IndexOf("```", StringComparison.Ordinal) + 3;
+            var newlinePos = content.IndexOf('\n', start);
+            if (newlinePos > start)
+                start = newlinePos + 1;
+            var end = content.IndexOf("```", start, StringComparison.Ordinal);
+            if (end > start)
+                return content[start..end].Trim();
+        }
+
+        // Try to find JSON object by locating first { and last }
+        var firstBrace = content.IndexOf('{');
+        var lastBrace = content.LastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace)
+            return content[firstBrace..(lastBrace + 1)];
+
+        // Try to find JSON array by locating first [ and last ]
+        var firstBracket = content.IndexOf('[');
+        var lastBracket = content.LastIndexOf(']');
+        if (firstBracket >= 0 && lastBracket > firstBracket)
+            return content[firstBracket..(lastBracket + 1)];
+
+        return content;
     }
 }
 

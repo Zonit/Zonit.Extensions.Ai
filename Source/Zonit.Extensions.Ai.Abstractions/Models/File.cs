@@ -114,8 +114,18 @@ public sealed class File : IFile
 
     /// <summary>
     /// Gets data URL (data:mime;base64,xxx).
+    /// Uses detected MIME type from binary data for images to ensure accuracy.
     /// </summary>
-    public string ToDataUrl() => $"data:{MimeType};base64,{ToBase64()}";
+    public string ToDataUrl()
+    {
+        var mimeType = IsImage ? DetectImageMimeType(Data) ?? MimeType : MimeType;
+        return $"data:{mimeType};base64,{ToBase64()}";
+    }
+
+    /// <summary>
+    /// Gets the actual MIME type, detecting from binary data for images.
+    /// </summary>
+    public string GetActualMimeType() => IsImage ? DetectImageMimeType(Data) ?? MimeType : MimeType;
 
     /// <summary>
     /// Creates File from file path.
@@ -174,6 +184,60 @@ public sealed class File : IFile
         ".mp4" => "video/mp4",
         _ => "application/octet-stream"
     };
+
+    /// <summary>
+    /// Detects image MIME type from binary data using magic bytes.
+    /// Returns null if format is not recognized.
+    /// </summary>
+    private static string? DetectImageMimeType(byte[] data)
+    {
+        if (data == null || data.Length < 12)
+            return null;
+
+        // JPEG: FF D8 FF
+        if (data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF)
+            return "image/jpeg";
+
+        // PNG: 89 50 4E 47 0D 0A 1A 0A
+        if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 &&
+            data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A)
+            return "image/png";
+
+        // GIF: 47 49 46 38 (GIF8)
+        if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38)
+            return "image/gif";
+
+        // WebP: 52 49 46 46 ... 57 45 42 50 (RIFF....WEBP)
+        if (data.Length >= 12 &&
+            data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+            data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50)
+            return "image/webp";
+
+        // BMP: 42 4D (BM)
+        if (data[0] == 0x42 && data[1] == 0x4D)
+            return "image/bmp";
+
+        // TIFF: 49 49 2A 00 (little endian) or 4D 4D 00 2A (big endian)
+        if ((data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A && data[3] == 0x00) ||
+            (data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00 && data[3] == 0x2A))
+            return "image/tiff";
+
+        // ICO: 00 00 01 00
+        if (data[0] == 0x00 && data[1] == 0x00 && data[2] == 0x01 && data[3] == 0x00)
+            return "image/x-icon";
+
+        // AVIF: check for ftyp box with avif brand
+        if (data.Length >= 12 && data[4] == 0x66 && data[5] == 0x74 && data[6] == 0x79 && data[7] == 0x70)
+        {
+            // Check for avif, avis, or mif1 brands
+            if ((data[8] == 0x61 && data[9] == 0x76 && data[10] == 0x69 && data[11] == 0x66) ||
+                (data[8] == 0x61 && data[9] == 0x76 && data[10] == 0x69 && data[11] == 0x73) ||
+                (data[8] == 0x6D && data[9] == 0x69 && data[10] == 0x66 && data[11] == 0x31))
+                return "image/avif";
+        }
+
+        return null;
+    }
 }
 
 /// <summary>

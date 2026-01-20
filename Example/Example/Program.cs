@@ -38,10 +38,15 @@ internal class Program
 
         builder.Configuration.AddConfiguration(CreateConfiguration(args));
 
-        // Register OpenAI provider - configuration loaded from appsettings.json "Ai:OpenAi"
-        builder.Services.AddAiOpenAi();
+        // Register all AI providers - configuration loaded from appsettings.json "Ai:*"
+        builder.Services.AddAiOpenAi();      // OpenAI (GPT-4, o1, DALL-E, etc.)
+        builder.Services.AddAiAnthropic();   // Anthropic (Claude)
+        builder.Services.AddAiGoogle();      // Google (Gemini)
+        builder.Services.AddAiMistral();     // Mistral
+        builder.Services.AddAiDeepSeek();    // DeepSeek
+        builder.Services.AddAiX();           // X/Grok
 
-        builder.Services.AddHostedService<TextBackground>();
+        builder.Services.AddHostedService<ComprehensiveTestBackground>();
 
         var app = builder.Build();
         app.Run();

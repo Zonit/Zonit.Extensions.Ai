@@ -10,8 +10,13 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Reference OpenAI provider (includes core) -->
+    <!-- Reference all AI providers -->
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Google\Zonit.Extensions.Ai.Google.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Mistral\Zonit.Extensions.Ai.Mistral.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.DeepSeek\Zonit.Extensions.Ai.DeepSeek.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.X\Zonit.Extensions.Ai.X.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.json">
