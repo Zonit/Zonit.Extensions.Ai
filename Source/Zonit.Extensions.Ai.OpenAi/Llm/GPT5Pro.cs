@@ -1,28 +1,21 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-5.2-pro - Version of GPT-5.2 that produces smarter and more precise responses.
-/// Uses more compute for higher quality outputs.
+/// GPT-5 Pro - Version of GPT-5 that produces smarter and more precise responses.
 /// </summary>
-public class GPT52Pro : OpenAiReasoningBase
+public class GPT5Pro : OpenAiReasoningBase
 {
     /// <inheritdoc />
-    public override string Name => "gpt-5.2-pro";
+    public override string Name => "gpt-5-pro";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 21.00m;
+    public override decimal PriceInput => 15.00m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 168.00m;
+    public override decimal PriceOutput => 120.00m;
 
     /// <inheritdoc />
     public override decimal? PriceCachedInput => null;
-
-    /// <inheritdoc />
-    public override decimal? BatchPriceInput => null;
-
-    /// <inheritdoc />
-    public override decimal? BatchPriceOutput => null;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 400_000;
@@ -48,10 +41,7 @@ public class GPT52Pro : OpenAiReasoningBase
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |
         FeaturesType.FunctionCalling |
-        FeaturesType.StructuredOutputs |
-        FeaturesType.FineTuning |
-        FeaturesType.Distillation |
-        FeaturesType.PredictedOutputs;
+        FeaturesType.StructuredOutputs;
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints =>

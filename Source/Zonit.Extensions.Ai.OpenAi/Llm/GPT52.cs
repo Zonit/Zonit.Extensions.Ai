@@ -10,19 +10,19 @@ public class GPT52 : OpenAiReasoningBase
     public override string Name => "gpt-5.2";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.00m;
+    public override decimal PriceInput => 1.75m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 10.00m;
+    public override decimal PriceOutput => 14.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.50m;
+    public override decimal? PriceCachedInput => 0.175m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 1.00m;
+    public override decimal? BatchPriceInput => 0.875m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceOutput => 5.00m;
+    public override decimal? BatchPriceOutput => 7.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 400_000;

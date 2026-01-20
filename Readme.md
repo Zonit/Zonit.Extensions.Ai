@@ -1,6 +1,6 @@
 # Zonit.Extensions.Ai
 
-A .NET library for integrating with multiple AI providers (OpenAI, Anthropic Claude, X Grok, Google Gemini) with Scriban templating, type-safe prompts, and built-in resilience.
+A .NET library for integrating with multiple AI providers (OpenAI, Anthropic Claude, Google Gemini, X Grok, DeepSeek, Mistral) with Scriban templating, type-safe prompts, and built-in resilience.
 
 ---
 
@@ -10,10 +10,12 @@ A .NET library for integrating with multiple AI providers (OpenAI, Anthropic Cla
 |---------|---------|-----------|-------------|
 | **Zonit.Extensions.Ai** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.svg) | Core library with prompts and DI |
 | **Zonit.Extensions.Ai.Abstractions** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Abstractions.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Abstractions.svg) | Interfaces and contracts |
-| **Zonit.Extensions.Ai.OpenAi** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.OpenAi.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.OpenAi.svg) | OpenAI provider (GPT-5, O3, DALL-E) |
-| **Zonit.Extensions.Ai.Anthropic** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Anthropic.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Anthropic.svg) | Anthropic provider (Claude 4) |
-| **Zonit.Extensions.Ai.Google** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Google.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Google.svg) | Google provider (Gemini) |
-| **Zonit.Extensions.Ai.X** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.X.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.X.svg) | X provider (Grok) |
+| **Zonit.Extensions.Ai.OpenAi** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.OpenAi.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.OpenAi.svg) | OpenAI provider (GPT-5, O3/O4, DALL-E) |
+| **Zonit.Extensions.Ai.Anthropic** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Anthropic.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Anthropic.svg) | Anthropic provider (Claude 4.5) |
+| **Zonit.Extensions.Ai.Google** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Google.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Google.svg) | Google provider (Gemini 2.5/3) |
+| **Zonit.Extensions.Ai.X** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.X.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.X.svg) | X provider (Grok 4) |
+| **Zonit.Extensions.Ai.DeepSeek** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.DeepSeek.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.DeepSeek.svg) | DeepSeek provider (V3, R1) |
+| **Zonit.Extensions.Ai.Mistral** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Mistral.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Mistral.svg) | Mistral provider (Large, Codestral) |
 | **Zonit.Extensions.Ai.Prompts** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Prompts.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Prompts.svg) | Ready-to-use example prompts |
 
 ```powershell
@@ -25,6 +27,8 @@ dotnet add package Zonit.Extensions.Ai.OpenAi
 dotnet add package Zonit.Extensions.Ai.Anthropic
 dotnet add package Zonit.Extensions.Ai.Google
 dotnet add package Zonit.Extensions.Ai.X
+dotnet add package Zonit.Extensions.Ai.DeepSeek
+dotnet add package Zonit.Extensions.Ai.Mistral
 
 # Or via NuGet Package Manager
 Install-Package Zonit.Extensions.Ai
@@ -35,7 +39,7 @@ Install-Package Zonit.Extensions.Ai.OpenAi
 
 ## Features
 
-- **Multi-provider** - OpenAI, Anthropic, Google, X with unified API
+- **Multi-provider** - OpenAI, Anthropic, Google, X, DeepSeek, Mistral with unified API
 - **Type-safe prompts** - Strongly typed responses with JSON Schema
 - **Scriban templating** - Dynamic prompts with variables and conditions
 - **Cost calculation** - Estimate costs before calling API
@@ -68,8 +72,7 @@ Register providers using `appsettings.json` configuration:
       "HttpClientTimeout": "00:05:00"
     },
     "OpenAi": {
-      "ApiKey": "sk-...",
-      "OrganizationId": "org-..."
+      "ApiKey": "sk-..."
     },
     "Anthropic": {
       "ApiKey": "sk-ant-..."
@@ -79,6 +82,12 @@ Register providers using `appsettings.json` configuration:
     },
     "X": {
       "ApiKey": "xai-..."
+    },
+    "DeepSeek": {
+      "ApiKey": "sk-..."
+    },
+    "Mistral": {
+      "ApiKey": "..."
     }
   }
 }
@@ -90,6 +99,8 @@ services.AddAiOpenAi();      // Loads from "Ai:OpenAi"
 services.AddAiAnthropic();   // Loads from "Ai:Anthropic"
 services.AddAiGoogle();      // Loads from "Ai:Google"
 services.AddAiX();           // Loads from "Ai:X"
+services.AddAiDeepSeek();    // Loads from "Ai:DeepSeek"
+services.AddAiMistral();     // Loads from "Ai:Mistral"
 ```
 
 ### 2. Code-based Configuration
@@ -338,38 +349,87 @@ The model interface determines the operation:
 
 ### OpenAI
 
-| Model | Class | Features |
-|-------|-------|----------|
-| GPT-5, GPT-5.1, GPT-5.2 | `GPT5`, `GPT51`, `GPT52`, `GPT52Chat` | Text, Vision, Image output |
-| GPT-5 Mini/Nano | `GPT5Mini`, `GPT5Nano` | Cost-effective |
-| GPT-4.1 | `GPT41`, `GPT41Mini`, `GPT41Nano` | Latest GPT-4 |
-| O3, O3-Pro, O4-mini | `O3`, `O3Pro`, `O4Mini` | Reasoning models |
-| GPT-4o Search | `GPT4oSearch` | Web search |
-| DALL·E | `GPTImage1`, `GPTImage1Mini` | Image generation |
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| GPT-5.2 | `GPT52` | $1.75 / $14.00 | Latest flagship, vision, tools |
+| GPT-5.2 Pro | `GPT52Pro` | $21.00 / $168.00 | Maximum quality |
+| GPT-5.2 Codex | `GPT52Codex` | $1.75 / $14.00 | Optimized for coding |
+| GPT-5.1 | `GPT51` | $1.25 / $10.00 | Previous flagship |
+| GPT-5.1 Pro | `GPT51Pro` | $15.00 / $120.00 | Premium GPT-5.1 |
+| GPT-5.1 Codex | `GPT51Codex` | $1.25 / $10.00 | Coding agent |
+| GPT-5 | `GPT5` | $1.25 / $10.00 | Base GPT-5 |
+| GPT-5 Pro | `GPT5Pro` | $15.00 / $120.00 | Premium GPT-5 |
+| GPT-5 Mini | `GPT5Mini` | $0.25 / $2.00 | Cost-effective |
+| GPT-5 Nano | `GPT5Nano` | $0.05 / $0.40 | Ultra-cheap |
+| GPT-4.1 | `GPT41` | $2.00 / $8.00 | Latest GPT-4 |
+| GPT-4.1 Mini | `GPT41Mini` | $0.40 / $1.60 | Fast, affordable |
+| GPT-4.1 Nano | `GPT41Nano` | $0.10 / $0.40 | Cheapest GPT-4 |
+| GPT-4o | `GPT4o` | $2.50 / $10.00 | Multimodal |
+| GPT-4o Mini | `GPT4oMini` | $0.15 / $0.60 | Fast multimodal |
+| O3 | `O3` | $2.00 / $8.00 | Reasoning model |
+| O3 Pro | `O3Pro` | $20.00 / $80.00 | Premium reasoning |
+| O3 Mini | `O3Mini` | $1.10 / $4.40 | Cost-effective reasoning |
+| O4 Mini | `O4Mini` | $1.10 / $4.40 | Latest mini reasoning |
+| O1 | `O1` | $15.00 / $60.00 | Previous O-series |
+| O3 Deep Research | `O3DeepResearch` | $10.00 / $40.00 | Advanced research |
+| GPT Image 1.5 | `GPTImage15` | Per image | Image generation |
+| GPT Image 1 | `GPTImage1` | Per image | Image generation |
+| GPT Image 1 Mini | `GPTImage1Mini` | Per image | Cost-effective images |
+| Text Embedding 3 Large | `TextEmbedding3Large` | $0.13 / - | 3072 dimensions |
+| Text Embedding 3 Small | `TextEmbedding3Small` | $0.02 / - | 1536 dimensions |
+| Whisper | `Whisper1` | $0.006/min | Audio transcription |
+| GPT-4o Transcribe | `GPT4oTranscribe` | $0.006/min | Audio transcription |
 
 ### Anthropic (Claude)
 
-| Model | Class | Features |
-|-------|-------|----------|
-| Sonnet 4.5 | `Sonnet45` | Balanced, prompt caching |
-| Opus 4, 4.1 | `Opus4`, `Opus41` | Most capable |
-| Haiku 4.5 | `Haiku45` | Fast, cost-effective |
-
-### X (Grok)
-
-| Model | Class | Features |
-|-------|-------|----------|
-| Grok-4 | `Grok4` | Web search native |
-| Grok-4.1 Fast | `Grok41Fast` | Advanced reasoning |
-| Grok-3 | `Grok3`, `Grok3Fast`, `Grok3Mini` | Previous gen |
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Claude Sonnet 4.5 | `Sonnet45` | $3.00 / $15.00 | Best balance, agents, coding |
+| Claude Opus 4.5 | `Opus45` | $5.00 / $25.00 | Maximum intelligence |
+| Claude Haiku 4.5 | `Haiku45` | $1.00 / $5.00 | Fastest, cost-effective |
+| Claude Sonnet 4 | `Sonnet4` | $3.00 / $15.00 | Previous Sonnet |
+| Claude Opus 4 | `Opus4` | $5.00 / $25.00 | Previous Opus |
+| Claude Sonnet 3.5 | `Sonnet35` | $3.00 / $15.00 | Legacy Sonnet |
+| Claude Haiku 3.5 | `Haiku35` | $0.80 / $4.00 | Legacy Haiku |
 
 ### Google (Gemini)
 
 | Model | Class | Features |
 |-------|-------|----------|
-| Gemini 2.5 Pro | `Gemini25Pro` | Most capable |
-| Gemini 2.5 Flash | `Gemini25Flash` | Balanced |
-| Gemini 2.0 Flash | `Gemini20Flash`, `Gemini20FlashLite` | Cost-effective |
+| Gemini 2.5 Pro | `Gemini25Pro` | Most capable thinking model |
+| Gemini 2.5 Flash | `Gemini25Flash` | Best price-to-performance |
+| Gemini 2.5 Flash Lite | `Gemini25FlashLite` | Ultra fast, low cost |
+| Gemini 2.0 Flash | `Gemini20Flash` | Second-gen flash |
+| Gemini 2.0 Flash Lite | `Gemini20FlashLite` | Cost-effective |
+| Text Embedding 004 | `TextEmbedding004` | Embeddings |
+
+### X (Grok)
+
+| Model | Class | Features |
+|-------|-------|----------|
+| Grok-4 | `Grok4` | Latest Grok, web search |
+| Grok-4.1 Fast | `Grok41Fast` | Advanced reasoning |
+| Grok-3 | `Grok3` | Previous generation |
+| Grok-3 Fast | `Grok3Fast` | Fast Grok-3 |
+| Grok-3 Mini | `Grok3Mini` | Cost-effective |
+
+### DeepSeek
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| DeepSeek V3 | `DeepSeekV3` | $0.28 / $0.42 | General-purpose, 128K context |
+| DeepSeek R1 | `DeepSeekR1` | $0.28 / $0.42 | Reasoning with thinking mode |
+| DeepSeek Coder V3 | `DeepSeekCoderV3` | $0.28 / $0.42 | Optimized for coding |
+
+### Mistral
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Mistral Large | `MistralLarge` | $2.00 / $6.00 | Most capable, multimodal |
+| Mistral Medium | `MistralMedium` | $0.40 / $2.00 | Balanced |
+| Mistral Small | `MistralSmall` | $0.10 / $0.30 | Fast, cost-effective |
+| Codestral | `Codestral` | $0.30 / $0.90 | Optimized for code |
+| Mistral Embed | `MistralEmbed` | $0.10 / - | Embeddings |
 
 ---
 
@@ -538,14 +598,12 @@ Zonit.Extensions.Ai/
 │   │   ├── IPrompt.cs, ILlm.cs           # Contracts
 │   │   └── IAiProvider.cs                 # Provider interface
 │   │
-│   ├── Zonit.Extensions.Ai.OpenAi/        # OpenAI provider (self-contained)
-│   │   ├── OpenAiOptions.cs               # "Ai:OpenAi" section
-│   │   ├── OpenAiServiceCollectionExtensions.cs  # AddAiOpenAi()
-│   │   └── OpenAiProvider.cs              # Implementation
-│   │
+│   ├── Zonit.Extensions.Ai.OpenAi/        # OpenAI provider
 │   ├── Zonit.Extensions.Ai.Anthropic/     # Anthropic provider
 │   ├── Zonit.Extensions.Ai.Google/        # Google provider
 │   ├── Zonit.Extensions.Ai.X/             # X provider
+│   ├── Zonit.Extensions.Ai.DeepSeek/      # DeepSeek provider
+│   ├── Zonit.Extensions.Ai.Mistral/       # Mistral provider
 │   │
 │   └── Zonit.Extensions.Ai.Prompts/       # Ready-to-use prompts
 ```
@@ -591,7 +649,9 @@ Zonit.Extensions.Ai/
     "OpenAi": { ... },              // OpenAiOptions (provider-specific)
     "Anthropic": { ... },           // AnthropicOptions
     "Google": { ... },              // GoogleOptions
-    "X": { ... }                    // XOptions
+    "X": { ... },                   // XOptions
+    "DeepSeek": { ... },            // DeepSeekOptions
+    "Mistral": { ... }              // MistralOptions
   }
 }
 ```
