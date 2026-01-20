@@ -296,7 +296,8 @@ public sealed class MistralProvider : IModelProvider
         return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            Converters = { new JsonStringEnumConverter() }
         }) ?? throw new JsonException("Deserialization returned null");
     }
 }

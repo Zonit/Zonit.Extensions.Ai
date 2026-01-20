@@ -288,7 +288,8 @@ public sealed class GoogleProvider : IModelProvider
         return JsonSerializer.Deserialize<TResponse>(json, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            Converters = { new JsonStringEnumConverter() }
         }) ?? throw new JsonException("Deserialization returned null");
     }
 }

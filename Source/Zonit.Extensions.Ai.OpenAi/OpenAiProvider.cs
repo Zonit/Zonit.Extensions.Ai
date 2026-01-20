@@ -410,13 +410,13 @@ public sealed class OpenAiProvider : IModelProvider
         {
             // Responses API uses reasoning.effort instead of reasoning_effort
             var reasoning = new Dictionary<string, object>();
-            
+
             if (reasoningLlm.Reason.HasValue)
                 reasoning["effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
-            
+
             if (reasoningLlm.ReasonSummary.HasValue)
                 reasoning["summary"] = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
-            
+
             if (reasoning.Count > 0)
                 request["reasoning"] = reasoning;
 
@@ -530,7 +530,8 @@ public sealed class OpenAiProvider : IModelProvider
         return JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            Converters = { new JsonStringEnumConverter() }
         }) ?? throw new JsonException("Deserialization returned null");
     }
 }
