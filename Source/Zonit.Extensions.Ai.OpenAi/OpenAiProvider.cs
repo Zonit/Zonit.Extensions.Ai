@@ -357,17 +357,17 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         messages.Add(new { role = "user", content });
-        request["messages"] = messages;
+        request["input"] = messages;
 
-        // Structured output schema
+        // Structured output schema - Responses API uses text.format instead of response_format
         if (responseType != typeof(string))
         {
             var schema = JsonSchemaGenerator.Generate(responseType);
-            request["response_format"] = new Dictionary<string, object>
+            request["text"] = new Dictionary<string, object>
             {
-                ["type"] = "json_schema",
-                ["json_schema"] = new Dictionary<string, object>
+                ["format"] = new Dictionary<string, object>
                 {
+                    ["type"] = "json_schema",
                     ["name"] = "response",
                     ["description"] = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
                     ["schema"] = schema,
