@@ -337,12 +337,13 @@ public sealed class OpenAiProvider : IModelProvider
             ["max_output_tokens"] = llm.MaxTokens
         };
 
-        var messages = new List<object>();
-
+        // Responses API uses 'instructions' for system message, not in input
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            request["instructions"] = prompt.System;
 
-        var content = new List<object> { new { type = "text", text = prompt.Text } };
+        // Build input - Responses API format
+        var input = new List<object>();
+        var content = new List<object> { new { type = "input_text", text = prompt.Text } };
 
         if (prompt.Files != null)
         {
@@ -350,16 +351,16 @@ public sealed class OpenAiProvider : IModelProvider
             {
                 content.Add(new
                 {
-                    type = "image_url",
-                    image_url = new { url = file.ToDataUrl() }
+                    type = "input_image",
+                    image_url = file.ToDataUrl()
                 });
             }
         }
 
-        messages.Add(new { role = "user", content });
-        request["input"] = messages;
+        input.Add(new { role = "user", content });
+        request["input"] = input;
 
-        // Structured output schema - Responses API uses text.format instead of response_format
+        // Structured output schema - Responses API uses text.format
         if (responseType != typeof(string))
         {
             var schema = JsonSchemaGenerator.Generate(responseType);
@@ -379,18 +380,28 @@ public sealed class OpenAiProvider : IModelProvider
         if (streaming)
             request["stream"] = true;
 
-        // Model-specific settings
+        // Model-specific settings - Responses API format
         if (llm is OpenAiChatBase textLlm)
         {
             request["temperature"] = textLlm.Temperature;
             request["top_p"] = textLlm.TopP;
         }
-        else if (llm is OpenAiReasoningBase { Reason: not null } reasoningLlm)
+        else if (llm is OpenAiReasoningBase reasoningLlm)
         {
-            request["reasoning_effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            // Responses API uses reasoning.effort instead of reasoning_effort
+            var reasoning = new Dictionary<string, object>();
+            
+            if (reasoningLlm.Reason.HasValue)
+                reasoning["effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            
+            if (reasoningLlm.ReasonSummary.HasValue)
+                reasoning["summary"] = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
+            
+            if (reasoning.Count > 0)
+                request["reasoning"] = reasoning;
         }
 
-        // Tools from LLM
+        // Tools - Responses API format (different from Chat Completions)
         if (llm.Tools != null && llm.Tools.Length > 0)
         {
             request["tools"] = llm.Tools.Select(BuildToolRequest).ToList();
@@ -401,30 +412,26 @@ public sealed class OpenAiProvider : IModelProvider
 
     private static object BuildToolRequest(IToolBase tool) => tool switch
     {
+        // Responses API: function tools have different structure
         FunctionTool f => new
         {
             type = "function",
-            function = new
-            {
-                name = f.Name,
-                description = f.Description,
-                parameters = f.Parameters,
-                strict = f.Strict
-            }
+            name = f.Name,
+            description = f.Description,
+            parameters = f.Parameters,
+            strict = f.Strict
         },
+        // Responses API: web_search (not web_search_preview)
         WebSearchTool w => new
         {
-            type = "web_search_preview",
-            web_search_preview = new
-            {
-                search_context_size = w.ContextSize.ToString().ToLowerInvariant()
-            }
+            type = "web_search",
+            search_context_size = w.ContextSize.ToString().ToLowerInvariant()
         },
         CodeInterpreterTool => new { type = "code_interpreter" },
         FileSearchTool fs => new
         {
             type = "file_search",
-            file_search = new { max_num_results = fs.MaxNumResults ?? 20 }
+            max_num_results = fs.MaxNumResults ?? 20
         },
         _ => new { type = "unknown" }
     };
