@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
@@ -22,6 +24,28 @@ public sealed class Result<T>
 /// </summary>
 public sealed class MetaData
 {
+    /// <summary>
+    /// Default constructor for object initializer syntax.
+    /// </summary>
+    public MetaData()
+    {
+    }
+
+    /// <summary>
+    /// Legacy constructor for backward compatibility.
+    /// </summary>
+    /// <param name="model">The model used for the operation.</param>
+    /// <param name="usage">Token usage information.</param>
+    [Obsolete("Use object initializer syntax instead: new MetaData { Model = model, Usage = tokenUsage, Provider = \"...\", PromptName = \"...\" }")]
+    [SetsRequiredMembers]
+    public MetaData(ILlm model, Usage usage)
+    {
+        Model = model;
+        Usage = usage.ToTokenUsage();
+        Provider = string.Empty;
+        PromptName = string.Empty;
+    }
+
     /// <summary>
     /// The model that was used for the operation.
     /// </summary>

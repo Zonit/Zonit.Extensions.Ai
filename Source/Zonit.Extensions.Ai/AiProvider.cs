@@ -52,7 +52,7 @@ internal sealed class AiProvider : IAiProvider
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await provider.GenerateImageAsync(llm, new ImagePrompt(description), cancellationToken);
+        return await provider.GenerateImageAsync(llm, new SimpleImagePrompt(description), cancellationToken);
     }
 
     #endregion

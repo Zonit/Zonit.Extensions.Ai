@@ -254,9 +254,9 @@ public class Result<T>
 // MetaData contains all operation details
 public class MetaData
 {
-    public required string Model { get; init; }
-    public required string Provider { get; init; }
-    public required string PromptName { get; init; }
+    public required ILlm Model { get; init; }       // The model instance used
+    public required string Provider { get; init; }   // "OpenAI", "Anthropic", etc.
+    public required string PromptName { get; init; } // Auto-generated from prompt class
     public required TokenUsage Usage { get; init; }
     public TimeSpan Duration { get; init; }
     public string? RequestId { get; init; }
@@ -409,6 +409,8 @@ The model interface determines the operation:
 |-------|-------|----------|
 | Grok-4 | `Grok4` | Latest Grok, web search |
 | Grok-4.1 Fast | `Grok41Fast` | Advanced reasoning |
+| Grok-4.1 Fast Reasoning | `Grok41FastReasoning` | Full reasoning enabled |
+| Grok-4.1 Fast Non-Reasoning | `Grok41FastNonReasoning` | High-speed, no reasoning overhead |
 | Grok-3 | `Grok3` | Previous generation |
 | Grok-3 Fast | `Grok3Fast` | Fast Grok-3 |
 | Grok-3 Mini | `Grok3Mini` | Cost-effective |
@@ -480,17 +482,167 @@ var result = await aiClient.GenerateAsync(
 
 ## Image Generation
 
+### Using ImagePromptBase
+
+`ImagePromptBase` is the recommended base class for image generation prompts:
+
 ```csharp
+// Simple usage with ImagePromptBase
+var result = await aiClient.GenerateAsync(
+    new GPTImage1 { Quality = ImageQuality.High, Size = ImageSize.Landscape },
+    new ImagePromptBase("A sunset over mountains with dramatic clouds")
+);
+await result.Value.SaveAsync("sunset.png");
+
+// Custom image prompt with additional context
+public class ProductImagePrompt : ImagePromptBase
+{
+    public ProductImagePrompt(string productName, string style) 
+        : base($"Professional product photo of {productName} in {style} style, white background, studio lighting")
+    {
+    }
+}
+
+var productImage = await aiClient.GenerateAsync(
+    new GPTImage1 { Quality = ImageQuality.High },
+    new ProductImagePrompt("wireless headphones", "minimalist")
+);
+```
+
+### Image Quality and Size Options
+
+```csharp
+// Using global enums (recommended)
 var result = await aiClient.GenerateAsync(
     new GPTImage1
     {
-        Quality = GPTImage1.QualityType.High,
-        Size = GPTImage1.SizeType.Landscape,
-        Style = GPTImage1.StyleType.Natural
+        Quality = ImageQuality.High,      // Standard, High, Ultra
+        Size = ImageSize.Landscape        // Square, Portrait, Landscape, Small, Large
     },
-    "A sunset over mountains"
+    "A beautiful landscape"
 );
-await result.Value.SaveAsync("sunset.png");
+
+// Legacy nested types (deprecated but supported for backward compatibility)
+var result = await aiClient.GenerateAsync(
+    new GPTImage1
+    {
+        Quality = (ImageQuality)GPTImage1.QualityType.High,
+        Size = (ImageSize)GPTImage1.SizeType.Landscape
+    },
+    "A beautiful landscape"
+);
+```
+
+### Different Image Models
+
+```csharp
+// GPT Image 1 - Full featured
+var image1 = await aiClient.GenerateAsync(
+    new GPTImage1 { Quality = ImageQuality.Ultra, Size = ImageSize.Large },
+    "A detailed architectural rendering"
+);
+
+// GPT Image 1 Mini - Cost-effective
+var imageMini = await aiClient.GenerateAsync(
+    new GPTImage1Mini { Size = ImageSize.Square },
+    "A simple icon design"
+);
+
+// GPT Image 1.5 - Latest model
+var image15 = await aiClient.GenerateAsync(
+    new GPTImage15 { Quality = ImageQuality.High },
+    "A photorealistic portrait"
+);
+```
+
+---
+
+## Reasoning Models
+
+GPT-5 series and O-series models support reasoning with configurable effort:
+
+```csharp
+// Configure reasoning effort
+var result = await aiClient.GenerateAsync(
+    new GPT52
+    {
+        Reason = ReasoningEffort.High,           // None, Low, Medium, High
+        ReasonSummary = ReasoningSummary.Auto,   // None, Auto, Detailed
+        OutputVerbosity = Verbosity.Medium       // Low, Medium, High
+    },
+    new ComplexAnalysisPrompt { Data = complexData }
+);
+
+// O-series models (always reasoning)
+var o3Result = await aiClient.GenerateAsync(
+    new O3 { Reason = ReasoningEffort.High },
+    "Solve this complex mathematical proof..."
+);
+
+// Legacy nested types (deprecated but supported)
+var legacyResult = await aiClient.GenerateAsync(
+    new GPT51
+    {
+        Reason = (ReasoningEffort)OpenAiReasoningBase.ReasonType.High,
+        OutputVerbosity = (Verbosity)OpenAiReasoningBase.VerbosityType.Medium
+    },
+    prompt
+);
+```
+
+---
+
+## Backward Compatibility
+
+### MetaData Constructor
+
+For legacy code using the old constructor syntax:
+
+```csharp
+// Old syntax (deprecated but still works)
+#pragma warning disable CS0618
+var metadata = new MetaData(new GPT51(), new Usage { Input = 500, Output = 30 });
+#pragma warning restore CS0618
+
+// New recommended syntax
+var metadata = new MetaData
+{
+    Model = new GPT51(),
+    Usage = new TokenUsage { InputTokens = 500, OutputTokens = 30 },
+    Provider = "OpenAI",
+    PromptName = "MyPrompt"
+};
+```
+
+### Usage to TokenUsage
+
+```csharp
+// Old Usage class (deprecated)
+#pragma warning disable CS0618
+var usage = new Usage { Input = 1000, Output = 500 };
+TokenUsage tokenUsage = usage;  // Implicit conversion
+#pragma warning restore CS0618
+
+// New TokenUsage class (recommended)
+var tokenUsage = new TokenUsage
+{
+    InputTokens = 1000,
+    OutputTokens = 500,
+    CachedTokens = 200,
+    ReasoningTokens = 100
+};
+```
+
+### ImagePrompt to ImagePromptBase
+
+```csharp
+// Old ImagePrompt (deprecated)
+#pragma warning disable CS0618
+var oldPrompt = new ImagePrompt("A sunset");
+#pragma warning restore CS0618
+
+// New ImagePromptBase (recommended)
+var newPrompt = new ImagePromptBase("A sunset");
 ```
 
 ---

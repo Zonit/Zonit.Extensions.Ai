@@ -112,14 +112,39 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
 }
 
 /// <summary>
-/// Image generation prompt (returns File).
+/// Base class for image generation prompts with Scriban templating.
+/// Inherit from this class to create typed image prompts with parameters.
 /// </summary>
-public sealed class ImagePrompt : IPrompt<File>
+/// <remarks>
+/// This class uses reflection to discover properties for template rendering.
+/// It is not compatible with AOT compilation without additional configuration.
+/// </remarks>
+/// <example>
+/// <code>
+/// public class ProductImagePrompt : ImagePromptBase
+/// {
+///     public required string ProductName { get; init; }
+///     public required string Style { get; init; }
+///     
+///     public override string Prompt => 
+///         "Professional product photo of {{ product_name }} in {{ style }} style";
+/// }
+/// </code>
+/// </example>
+[RequiresUnreferencedCode("Uses reflection to get properties for template rendering.")]
+public abstract class ImagePromptBase : PromptBase<File>
+{
+}
+
+/// <summary>
+/// Simple image prompt for quick one-off usage without creating a class.
+/// </summary>
+public sealed class SimpleImagePrompt : IPrompt<File>
 {
     /// <summary>
-    /// Creates an image generation prompt.
+    /// Creates a simple image prompt with description.
     /// </summary>
-    public ImagePrompt(string description)
+    public SimpleImagePrompt(string description)
     {
         Text = description ?? throw new ArgumentNullException(nameof(description));
     }

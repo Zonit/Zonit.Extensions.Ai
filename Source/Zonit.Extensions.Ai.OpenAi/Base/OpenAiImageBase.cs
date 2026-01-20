@@ -34,4 +34,42 @@ public abstract class OpenAiImageBase : OpenAiBase, IImageLlm
         ImageQuality.Ultra => "hd",
         _ => "standard"
     };
+
+    #region Legacy nested types for backward compatibility
+
+    /// <summary>
+    /// Legacy quality type for backward compatibility.
+    /// Use <see cref="ImageQuality"/> instead.
+    /// </summary>
+    [Obsolete("Use ImageQuality enum instead.")]
+    public enum QualityType
+    {
+        /// <summary>Auto quality.</summary>
+        Auto = 0,
+        /// <summary>Low quality.</summary>
+        Low = 1,
+        /// <summary>Medium quality (same as Standard).</summary>
+        Medium = 2,
+        /// <summary>High quality.</summary>
+        High = 3,
+    }
+
+    /// <summary>
+    /// Legacy size type for backward compatibility.
+    /// Use <see cref="ImageSize"/> instead.
+    /// </summary>
+    [Obsolete("Use ImageSize enum instead.")]
+    public enum SizeType
+    {
+        /// <summary>Auto size.</summary>
+        Auto = 0,
+        /// <summary>Square format (1024x1024).</summary>
+        Square = 1,
+        /// <summary>Landscape format (1792x1024).</summary>
+        Landscape = 2,
+        /// <summary>Portrait format (1024x1792).</summary>
+        Portrait = 3,
+    }
+
+    #endregion
 }

@@ -48,3 +48,40 @@ public sealed class TokenUsage
     /// </summary>
     public Price TotalCost => InputCost + OutputCost;
 }
+
+/// <summary>
+/// Legacy Usage class for backward compatibility.
+/// Use <see cref="TokenUsage"/> instead.
+/// </summary>
+[Obsolete("Use TokenUsage instead. This class will be removed in a future version.")]
+public sealed class Usage
+{
+    /// <summary>
+    /// Input tokens count.
+    /// </summary>
+    public int Input { get; init; }
+
+    /// <summary>
+    /// Output tokens count.
+    /// </summary>
+    public int Output { get; init; }
+
+    /// <summary>
+    /// Total tokens count.
+    /// </summary>
+    public int Total => Input + Output;
+
+    /// <summary>
+    /// Converts to TokenUsage.
+    /// </summary>
+    public TokenUsage ToTokenUsage() => new()
+    {
+        InputTokens = Input,
+        OutputTokens = Output
+    };
+
+    /// <summary>
+    /// Implicit conversion to TokenUsage.
+    /// </summary>
+    public static implicit operator TokenUsage(Usage usage) => usage.ToTokenUsage();
+}

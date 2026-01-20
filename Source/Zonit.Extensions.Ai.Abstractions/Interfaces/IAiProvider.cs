@@ -14,7 +14,7 @@ public interface IAiProvider
     Task<Result<TResponse>> GenerateAsync<TResponse>(
         IPrompt<TResponse> prompt,
         ILlm llm,
-        CancellationToken cancellationToken = default) 
+        CancellationToken cancellationToken = default)
             => GenerateAsync(llm, prompt, cancellationToken);
 
     /// <summary>
