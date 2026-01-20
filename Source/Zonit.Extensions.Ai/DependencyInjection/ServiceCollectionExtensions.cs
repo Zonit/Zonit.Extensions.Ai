@@ -8,7 +8,7 @@ using Zonit.Extensions.Ai.Providers.Google;
 using Zonit.Extensions.Ai.Providers.OpenAi;
 using Zonit.Extensions.Ai.Providers.X;
 
-namespace Microsoft.Extensions.DependencyInjection;
+namespace Zonit.Extensions;
 
 /// <summary>
 /// Extension methods for setting up AI services in an <see cref="IServiceCollection"/>.

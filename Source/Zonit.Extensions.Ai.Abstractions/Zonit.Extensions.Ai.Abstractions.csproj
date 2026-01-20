@@ -8,8 +8,9 @@
     <Description>Core abstractions and interfaces for Zonit.Extensions.Ai. Use this package when you only need the interfaces without implementation, perfect for defining prompts in domain layers.</Description>
     <PackageTags>ai;abstractions;interfaces;openai;anthropic;google;llm;gpt;claude;gemini</PackageTags>
   </PropertyGroup>
-  
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\..\Extensions\Zonit.Extensions\Source\Zonit.Extensions\Zonit.Extensions.csproj" />
-  </ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Zonit.Extensions" />
+	</ItemGroup>
+
 </Project>
