@@ -88,31 +88,23 @@ public static class JsonSchemaGenerator
             var propName = JsonNamingPolicy.CamelCase.ConvertName(prop.Name);
             properties[propName] = propSchema;
 
-            // Non-nullable properties are required
-            if (!IsNullable(prop.PropertyType))
-                required.Add(propName);
+            // OpenAI Structured Outputs with strict:true requires ALL fields to be in 'required'
+            // For nullable types, use anyOf with null type instead of omitting from required
+            required.Add(propName);
         }
 
         var result = new Dictionary<string, object>
         {
             ["type"] = "object",
             ["properties"] = properties,
-            ["additionalProperties"] = false
+            ["additionalProperties"] = false,
+            ["required"] = required  // Always include required with ALL property names for strict mode
         };
-
-        if (required.Count > 0)
-            result["required"] = required;
 
         var typeDescription = GetDescription(type);
         if (typeDescription != null)
             result["description"] = typeDescription;
 
         return result;
-    }
-
-    private static bool IsNullable(Type type)
-    {
-        if (!type.IsValueType) return true;
-        return Nullable.GetUnderlyingType(type) != null;
     }
 }

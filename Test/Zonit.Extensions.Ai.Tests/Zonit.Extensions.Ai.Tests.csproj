@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="FluentAssertions" Version="8.3.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.X\Zonit.Extensions.Ai.X.csproj" />
+  </ItemGroup>
+
+</Project>

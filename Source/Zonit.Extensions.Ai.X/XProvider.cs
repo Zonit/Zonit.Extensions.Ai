@@ -232,6 +232,12 @@ public sealed class XProvider : IModelProvider
         {
             request["temperature"] = xLlm.Temperature;
             request["top_p"] = xLlm.TopP;
+
+            // WebSearch support
+            if (xLlm.WebSearch.Mode != ModeType.Never)
+            {
+                request["search_parameters"] = BuildSearchParameters(xLlm.WebSearch);
+            }
         }
 
         // Reasoning
@@ -270,6 +276,96 @@ public sealed class XProvider : IModelProvider
             PropertyNameCaseInsensitive = true,
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
         }) ?? throw new JsonException("Deserialization returned null");
+    }
+
+    private static Dictionary<string, object> BuildSearchParameters(Search webSearch)
+    {
+        var searchParams = new Dictionary<string, object>
+        {
+            ["mode"] = webSearch.Mode switch
+            {
+                ModeType.Always => "on",
+                ModeType.Auto => "auto",
+                ModeType.Never => "off",
+                _ => "auto"
+            },
+            ["return_citations"] = webSearch.Citations
+        };
+
+        if (webSearch.FromDate.HasValue)
+            searchParams["from_date"] = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
+
+        if (webSearch.ToDate.HasValue)
+            searchParams["to_date"] = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
+
+        if (webSearch.MaxResults != 20)
+            searchParams["max_search_results"] = webSearch.MaxResults;
+
+        if (webSearch.Sources?.Length > 0)
+        {
+            var sources = webSearch.Sources.Select(BuildSourceConfiguration).ToList();
+            searchParams["sources"] = sources;
+        }
+
+        return searchParams;
+    }
+
+    private static Dictionary<string, object> BuildSourceConfiguration(ISearchSource searchSource)
+    {
+        var source = new Dictionary<string, object>
+        {
+            ["type"] = GetSourceTypeDescription(searchSource.Type)
+        };
+
+        switch (searchSource)
+        {
+            case WebSearchSource webSource:
+                if (!string.IsNullOrEmpty(webSource.Country))
+                    source["country"] = webSource.Country;
+                if (webSource.ExcludedWebsites?.Length > 0)
+                    source["excluded_websites"] = webSource.ExcludedWebsites.Take(5).ToArray();
+                if (webSource.AllowedWebsites?.Length > 0)
+                    source["allowed_websites"] = webSource.AllowedWebsites.Take(5).ToArray();
+                if (!webSource.SafeSearch)
+                    source["safe_search"] = false;
+                break;
+
+            case XSearchSource xSource:
+                if (xSource.IncludedXHandles?.Length > 0)
+                    source["included_x_handles"] = xSource.IncludedXHandles.Take(10).ToArray();
+                if (xSource.ExcludedXHandles?.Length > 0)
+                    source["excluded_x_handles"] = xSource.ExcludedXHandles.Take(10).ToArray();
+                if (xSource.PostFavoriteCount.HasValue)
+                    source["post_favorite_count"] = xSource.PostFavoriteCount.Value;
+                if (xSource.PostViewCount.HasValue)
+                    source["post_view_count"] = xSource.PostViewCount.Value;
+                break;
+
+            case NewsSearchSource newsSource:
+                if (!string.IsNullOrEmpty(newsSource.Country))
+                    source["country"] = newsSource.Country;
+                if (newsSource.ExcludedWebsites?.Length > 0)
+                    source["excluded_websites"] = newsSource.ExcludedWebsites.Take(5).ToArray();
+                if (!newsSource.SafeSearch)
+                    source["safe_search"] = false;
+                break;
+
+            case RssSearchSource rssSource:
+                if (rssSource.Links?.Length > 0)
+                    source["links"] = rssSource.Links.Take(1).ToArray();
+                break;
+        }
+
+        return source;
+    }
+
+    private static string GetSourceTypeDescription(SourceType sourceType)
+    {
+        var field = typeof(SourceType).GetField(sourceType.ToString());
+        var attribute = field?.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
+            .Cast<System.ComponentModel.DescriptionAttribute>()
+            .FirstOrDefault();
+        return attribute?.Description ?? sourceType.ToString().ToLowerInvariant();
     }
 }
 

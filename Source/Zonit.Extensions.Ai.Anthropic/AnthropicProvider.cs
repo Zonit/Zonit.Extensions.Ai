@@ -224,6 +224,21 @@ public sealed class AnthropicProvider : IModelProvider
                     }
                 });
             }
+
+            // PDF document support (Anthropic supports PDFs via document type)
+            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.MimeType == "application/pdf"))
+            {
+                content.Insert(0, new
+                {
+                    type = "document",
+                    source = new
+                    {
+                        type = "base64",
+                        media_type = file.MimeType,
+                        data = file.ToBase64()
+                    }
+                });
+            }
         }
 
         request["messages"] = new[] { new { role = "user", content } };

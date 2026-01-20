@@ -347,13 +347,27 @@ public sealed class OpenAiProvider : IModelProvider
 
         if (prompt.Files != null)
         {
-            foreach (var file in prompt.Files.Where(f => f.IsImage))
+            foreach (var file in prompt.Files)
             {
-                content.Add(new
+                if (file.IsImage)
                 {
-                    type = "input_image",
-                    image_url = file.ToDataUrl()
-                });
+                    // Handle images using input_image type
+                    content.Add(new
+                    {
+                        type = "input_image",
+                        image_url = file.ToDataUrl()
+                    });
+                }
+                else if (file.IsDocument)
+                {
+                    // Handle documents (PDFs, text files) using input_file type
+                    content.Add(new
+                    {
+                        type = "input_file",
+                        file_data = file.ToDataUrl(),
+                        filename = file.Name
+                    });
+                }
             }
         }
 
@@ -380,6 +394,12 @@ public sealed class OpenAiProvider : IModelProvider
         if (streaming)
             request["stream"] = true;
 
+        // Store logs if enabled
+        if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
+        {
+            request["store"] = true;
+        }
+
         // Model-specific settings - Responses API format
         if (llm is OpenAiChatBase textLlm)
         {
@@ -399,6 +419,20 @@ public sealed class OpenAiProvider : IModelProvider
             
             if (reasoning.Count > 0)
                 request["reasoning"] = reasoning;
+
+            // Verbosity for GPT-5 models (output verbosity control)
+            if (reasoningLlm.Verbosity.HasValue)
+            {
+                if (!request.ContainsKey("text"))
+                {
+                    request["text"] = new Dictionary<string, object>();
+                }
+
+                if (request["text"] is Dictionary<string, object> textConfig)
+                {
+                    textConfig["verbosity"] = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
+                }
+            }
         }
 
         // Tools - Responses API format (different from Chat Completions)
@@ -428,13 +462,58 @@ public sealed class OpenAiProvider : IModelProvider
             search_context_size = w.ContextSize.ToString().ToLowerInvariant()
         },
         CodeInterpreterTool => new { type = "code_interpreter" },
-        FileSearchTool fs => new
-        {
-            type = "file_search",
-            max_num_results = fs.MaxNumResults ?? 20
-        },
+        FileSearchTool fs => BuildFileSearchToolRequest(fs),
         _ => new { type = "unknown" }
     };
+
+    private static object BuildFileSearchToolRequest(FileSearchTool fs)
+    {
+        var tool = new Dictionary<string, object>
+        {
+            ["type"] = "file_search"
+        };
+
+        // Add vector store IDs if provided
+        if (!string.IsNullOrEmpty(fs.VectorId))
+        {
+            tool["vector_store_ids"] = new[] { fs.VectorId };
+        }
+
+        // Add max_num_results if provided
+        if (fs.MaxNumResults.HasValue)
+        {
+            tool["max_num_results"] = fs.MaxNumResults.Value;
+        }
+
+        // Add ranking options if provided
+        if (fs.RankingOptions != null)
+        {
+            var rankingOptions = new Dictionary<string, object>();
+
+            if (!string.IsNullOrEmpty(fs.RankingOptions.Ranker))
+            {
+                rankingOptions["ranker"] = fs.RankingOptions.Ranker;
+            }
+
+            if (fs.RankingOptions.ScoreThreshold.HasValue)
+            {
+                rankingOptions["score_threshold"] = fs.RankingOptions.ScoreThreshold.Value;
+            }
+
+            if (rankingOptions.Count > 0)
+            {
+                tool["ranking_options"] = rankingOptions;
+            }
+        }
+
+        // Add filters if provided
+        if (fs.Filters != null)
+        {
+            tool["filters"] = fs.Filters;
+        }
+
+        return tool;
+    }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
