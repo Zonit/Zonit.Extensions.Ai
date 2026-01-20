@@ -17,10 +17,10 @@
     <PackageReference Include="Microsoft.Extensions.Options" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Scriban" />
+    <PackageReference Include="Zonit.Extensions" />
   </ItemGroup>
   
   <ItemGroup>
     <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
-    <ProjectReference Include="..\..\..\Zonit.Extensions\Source\Zonit.Extensions\Zonit.Extensions.csproj" />
   </ItemGroup>
 </Project>
