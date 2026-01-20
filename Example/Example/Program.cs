@@ -46,7 +46,9 @@ internal class Program
         builder.Services.AddAiDeepSeek();    // DeepSeek
         builder.Services.AddAiX();           // X/Grok
 
+        // Use ComprehensiveTestBackground for full provider testing
         builder.Services.AddHostedService<ComprehensiveTestBackground>();
+        // Alternative: builder.Services.AddHostedService<ProductDescriptionTestBackground>();
 
         var app = builder.Build();
         app.Run();

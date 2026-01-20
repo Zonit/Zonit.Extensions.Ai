@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text.Json;
 using Microsoft.Extensions.Hosting;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.OpenAi;
@@ -37,6 +38,15 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("OpenAI - Structured Output", async ct => await TestStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
             ("Anthropic - Structured Output", async ct => await TestStructuredOutput(new Sonnet4(), "Anthropic", ct)),
             ("Google - Structured Output", async ct => await TestStructuredOutput(new Gemini25Flash(), "Google", ct)),
+
+            // Structured output with enums, decimals, guids
+            ("OpenAI - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
+            ("Anthropic - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new Sonnet4(), "Anthropic", ct)),
+
+            // Comprehensive value types test (DateTime, int, string, enum, double, decimal, Guid, bool, nullable, arrays)
+            ("OpenAI - All Value Types", async ct => await TestAllValueTypes(new GPT41Mini(), "OpenAI", ct)),
+            ("Anthropic - All Value Types", async ct => await TestAllValueTypesAnthropic(ct)),
+            ("X Grok - All Value Types", async ct => await TestAllValueTypes(new Grok3(), "X/Grok", ct)),
 
             // Image analysis tests (using URL instead of bytes for reliability)
             ("OpenAI - Image Analysis", async ct => await TestImageAnalysisUrl(new GPT41(), "OpenAI", ct)),
@@ -118,6 +128,30 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
         if (result.Value.Name == null || result.Value.Count == 0)
             throw new Exception($"Invalid structured response: {result.Value.Name}, {result.Value.Count}");
+    }
+
+    private async Task TestEnumStructuredOutput(ILlm model, string providerName, CancellationToken ct)
+    {
+        var prompt = new SimplePrompt<ProductDescription>(
+            "Generate a product description for a laptop. " +
+            "Use tone=Professional, category=Electronics, price=1299.99, " +
+            "generate a random productId GUID, and set inStock=true, rating=4.5");
+
+        var result = await provider.GenerateAsync(model, prompt, ct);
+
+        Console.WriteLine($"\n      [DEBUG] Tone={result.Value.Tone}, Category={result.Value.Category}, Price={result.Value.Price}");
+
+        if (result.Value.Tone == null)
+            throw new Exception($"Enum Tone is null!");
+
+        if (result.Value.Category == null)
+            throw new Exception($"Enum Category is null!");
+
+        if (result.Value.Price <= 0)
+            throw new Exception($"Decimal Price is invalid: {result.Value.Price}");
+
+        if (result.Value.ProductId == Guid.Empty)
+            throw new Exception($"Guid ProductId is empty!");
     }
 
     private async Task TestImageAnalysisUrl(ILlm model, string providerName, CancellationToken ct)
@@ -203,6 +237,164 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
         if (string.IsNullOrEmpty(result.Value))
             throw new Exception("Empty response");
     }
+
+    /// <summary>
+    /// Anthropic-specific test - tests that Anthropic correctly parses JSON with all value types.
+    /// Uses the same test as TestAllValueTypes but with error details.
+    /// </summary>
+    private async Task TestAllValueTypesAnthropic(CancellationToken ct)
+    {
+        try
+        {
+            await TestAllValueTypes(new Sonnet4(), "Anthropic", ct);
+        }
+        catch (JsonException ex)
+        {
+            // Re-throw with more context
+            throw new Exception($"Anthropic JSON parsing failed. JsonException: {ex.Message}. Path: {ex.Path}");
+        }
+    }
+
+    /// <summary>
+    /// Comprehensive test for ALL value types: DateTime, int, string, enum, double, decimal, Guid, bool, nullable, arrays, etc.
+    /// </summary>
+    private async Task TestAllValueTypes(ILlm model, string providerName, CancellationToken ct)
+    {
+        var prompt = new SimplePrompt<AllValueTypesResult>(
+            """
+            Generate a response with ALL the following fields populated correctly:
+            
+            - stringValue: "Hello World"
+            - intValue: 42
+            - longValue: 9876543210
+            - doubleValue: 3.14159
+            - floatValue: 2.718
+            - decimalValue: 1299.99
+            - boolValue: true
+            - boolFalseValue: false
+            - guidValue: generate a random valid UUID/GUID
+            - dateTimeValue: "2025-01-20T14:30:00" (ISO 8601 format)
+            - dateOnlyValue: "2025-01-20" (date only)
+            - timeOnlyValue: "14:30:00" (time only)
+            - enumValue: Active (from StatusType enum)
+            - enumNullable: Pending (from StatusType enum, can be null)
+            - nullableInt: 100
+            - nullableString: "Not null"
+            - nullableDecimal: 99.99
+            - emptyNullableInt: null (leave empty/null)
+            - stringArray: ["apple", "banana", "cherry"]
+            - intArray: [1, 2, 3, 4, 5]
+            - priorityLevel: High (from PriorityLevel enum)
+            - percentage: 75.5 (0-100)
+            - negativeInt: -42
+            - negativeDecimal: -123.45
+            - zeroValue: 0
+            - maxIntTest: 2147483647
+            - minIntTest: -2147483648
+            - unicodeString: "Zażółć gęślą jaźń 日本語 🎉"
+            - emptyString: ""
+            - whitespaceString: "   "
+            """);
+
+        var result = await provider.GenerateAsync(model, prompt, ct);
+        var v = result.Value;
+
+        var errors = new List<string>();
+
+        // String validations
+        if (v.StringValue != "Hello World") 
+            errors.Add($"StringValue: expected 'Hello World', got '{v.StringValue}'");
+        
+        // Integer validations
+        if (v.IntValue != 42) 
+            errors.Add($"IntValue: expected 42, got {v.IntValue}");
+        if (v.LongValue != 9876543210) 
+            errors.Add($"LongValue: expected 9876543210, got {v.LongValue}");
+        if (v.NegativeInt != -42) 
+            errors.Add($"NegativeInt: expected -42, got {v.NegativeInt}");
+        if (v.ZeroValue != 0) 
+            errors.Add($"ZeroValue: expected 0, got {v.ZeroValue}");
+        if (v.MaxIntTest != int.MaxValue) 
+            errors.Add($"MaxIntTest: expected {int.MaxValue}, got {v.MaxIntTest}");
+        if (v.MinIntTest != int.MinValue) 
+            errors.Add($"MinIntTest: expected {int.MinValue}, got {v.MinIntTest}");
+
+        // Floating point validations (with tolerance)
+        if (Math.Abs(v.DoubleValue - 3.14159) > 0.001) 
+            errors.Add($"DoubleValue: expected ~3.14159, got {v.DoubleValue}");
+        if (Math.Abs(v.FloatValue - 2.718f) > 0.01) 
+            errors.Add($"FloatValue: expected ~2.718, got {v.FloatValue}");
+        if (Math.Abs(v.DecimalValue - 1299.99m) > 0.01m) 
+            errors.Add($"DecimalValue: expected 1299.99, got {v.DecimalValue}");
+        if (Math.Abs(v.NegativeDecimal - (-123.45m)) > 0.01m) 
+            errors.Add($"NegativeDecimal: expected -123.45, got {v.NegativeDecimal}");
+        if (Math.Abs(v.Percentage - 75.5) > 0.1) 
+            errors.Add($"Percentage: expected 75.5, got {v.Percentage}");
+
+        // Boolean validations
+        if (!v.BoolValue) 
+            errors.Add($"BoolValue: expected true, got false");
+        if (v.BoolFalseValue) 
+            errors.Add($"BoolFalseValue: expected false, got true");
+
+        // Guid validation
+        if (v.GuidValue == Guid.Empty) 
+            errors.Add("GuidValue: is empty GUID");
+
+        // DateTime validations
+        if (v.DateTimeValue.Year != 2025 || v.DateTimeValue.Month != 1 || v.DateTimeValue.Day != 20)
+            errors.Add($"DateTimeValue: expected 2025-01-20, got {v.DateTimeValue:yyyy-MM-dd}");
+        if (v.DateOnlyValue.Year != 2025 || v.DateOnlyValue.Month != 1 || v.DateOnlyValue.Day != 20)
+            errors.Add($"DateOnlyValue: expected 2025-01-20, got {v.DateOnlyValue}");
+        if (v.TimeOnlyValue.Hour != 14 || v.TimeOnlyValue.Minute != 30)
+            errors.Add($"TimeOnlyValue: expected 14:30:00, got {v.TimeOnlyValue}");
+
+        // Enum validations
+        if (v.EnumValue != StatusType.Active) 
+            errors.Add($"EnumValue: expected Active, got {v.EnumValue}");
+        if (v.EnumNullable != StatusType.Pending) 
+            errors.Add($"EnumNullable: expected Pending, got {v.EnumNullable}");
+        if (v.PriorityLevel != PriorityLevel.High) 
+            errors.Add($"PriorityLevel: expected High, got {v.PriorityLevel}");
+
+        // Nullable validations
+        if (v.NullableInt != 100) 
+            errors.Add($"NullableInt: expected 100, got {v.NullableInt}");
+        if (v.NullableString != "Not null") 
+            errors.Add($"NullableString: expected 'Not null', got '{v.NullableString}'");
+        if (v.NullableDecimal != 99.99m) 
+            errors.Add($"NullableDecimal: expected 99.99, got {v.NullableDecimal}");
+        if (v.EmptyNullableInt != null) 
+            errors.Add($"EmptyNullableInt: expected null, got {v.EmptyNullableInt}");
+
+        // Array validations
+        if (v.StringArray == null || v.StringArray.Length != 3 || 
+            v.StringArray[0] != "apple" || v.StringArray[1] != "banana" || v.StringArray[2] != "cherry")
+            errors.Add($"StringArray: expected [apple, banana, cherry], got [{string.Join(", ", v.StringArray ?? [])}]");
+        if (v.IntArray == null || v.IntArray.Length != 5 || 
+            !v.IntArray.SequenceEqual([1, 2, 3, 4, 5]))
+            errors.Add($"IntArray: expected [1,2,3,4,5], got [{string.Join(", ", v.IntArray ?? [])}]");
+
+        // Unicode validation
+        if (string.IsNullOrEmpty(v.UnicodeString) || !v.UnicodeString.Contains("Zażółć"))
+            errors.Add($"UnicodeString: expected Polish/Japanese/emoji text, got '{v.UnicodeString}'");
+
+        // Empty/whitespace string validations
+        if (v.EmptyString != "") 
+            errors.Add($"EmptyString: expected empty string, got '{v.EmptyString}'");
+
+        if (errors.Count > 0)
+        {
+            Console.WriteLine($"\n      [VALUE TYPE ERRORS] {errors.Count} errors:");
+            foreach (var error in errors.Take(5))
+                Console.WriteLine($"        - {error}");
+            if (errors.Count > 5)
+                Console.WriteLine($"        ... and {errors.Count - 5} more");
+            throw new Exception($"Value type validation failed with {errors.Count} errors");
+        }
+
+        Console.WriteLine($"\n      [OK] All {27} value types validated successfully!");
+    }
 }
 
 /// <summary>
@@ -219,4 +411,216 @@ public class StructuredTestResponse
 
     [Description("Whether active")]
     public bool Active { get; set; }
+}
+
+/// <summary>
+/// Product description with various complex types for testing.
+/// </summary>
+[Description("Product description with complex types")]
+public class ProductDescription
+{
+    [Description("Product name")]
+    public string? Name { get; set; }
+
+    [Description("Product description text")]
+    public string? Description { get; set; }
+
+    [Description("Writing tone: Casual, Professional, or Friendly")]
+    public ToneType? Tone { get; set; }
+
+    [Description("Product category: Electronics, Clothing, Food, or Other")]
+    public CategoryType? Category { get; set; }
+
+    [Description("Product price in USD")]
+    public decimal Price { get; set; }
+
+    [Description("Unique product identifier")]
+    public Guid ProductId { get; set; }
+
+    [Description("Whether the product is in stock")]
+    public bool InStock { get; set; }
+
+    [Description("Product rating from 0 to 5")]
+    public double Rating { get; set; }
+}
+
+/// <summary>
+/// Tone type for product descriptions.
+/// </summary>
+public enum ToneType
+{
+    [Description("Casual and relaxed tone")]
+    Casual,
+
+    [Description("Professional and formal tone")]
+    Professional,
+
+    [Description("Friendly and approachable tone")]
+    Friendly
+}
+
+/// <summary>
+/// Product category type.
+/// </summary>
+public enum CategoryType
+{
+    [Description("Electronic devices and gadgets")]
+    Electronics,
+
+    [Description("Clothing and apparel")]
+    Clothing,
+
+    [Description("Food and beverages")]
+    Food,
+
+    [Description("Other category")]
+    Other
+}
+
+/// <summary>
+/// Status type for testing enum serialization.
+/// </summary>
+public enum StatusType
+{
+    [Description("Pending status - awaiting processing")]
+    Pending,
+
+    [Description("Active status - currently in progress")]
+    Active,
+
+    [Description("Completed status - finished")]
+    Completed,
+
+    [Description("Cancelled status - cancelled by user")]
+    Cancelled
+}
+
+/// <summary>
+/// Priority level for testing enum serialization.
+/// </summary>
+public enum PriorityLevel
+{
+    [Description("Low priority")]
+    Low,
+
+    [Description("Medium priority")]
+    Medium,
+
+    [Description("High priority")]
+    High,
+
+    [Description("Critical priority - requires immediate attention")]
+    Critical
+}
+
+/// <summary>
+/// Comprehensive result class for testing ALL value types.
+/// This tests: string, int, long, double, float, decimal, bool, Guid, DateTime, DateOnly, TimeOnly,
+/// enums, nullable types, arrays, unicode strings, empty strings, negative numbers, min/max values.
+/// </summary>
+[Description("Comprehensive test result with all possible value types for validating JSON schema generation and deserialization")]
+public class AllValueTypesResult
+{
+    // Basic string
+    [Description("A simple string value. Expected: 'Hello World'")]
+    public string StringValue { get; set; } = "";
+
+    // Integer types
+    [Description("A 32-bit integer value. Expected: 42")]
+    public int IntValue { get; set; }
+
+    [Description("A 64-bit long integer value. Expected: 9876543210")]
+    public long LongValue { get; set; }
+
+    // Floating point types
+    [Description("A double-precision floating point value. Expected: 3.14159")]
+    public double DoubleValue { get; set; }
+
+    [Description("A single-precision floating point value. Expected: 2.718")]
+    public float FloatValue { get; set; }
+
+    [Description("A decimal value for precise monetary calculations. Expected: 1299.99")]
+    public decimal DecimalValue { get; set; }
+
+    // Boolean types
+    [Description("A boolean value that should be true")]
+    public bool BoolValue { get; set; }
+
+    [Description("A boolean value that should be false")]
+    public bool BoolFalseValue { get; set; }
+
+    // Guid
+    [Description("A globally unique identifier (UUID). Generate a random valid GUID.")]
+    public Guid GuidValue { get; set; }
+
+    // Date/Time types
+    [Description("A full date and time value in ISO 8601 format. Expected: 2025-01-20T14:30:00")]
+    public DateTime DateTimeValue { get; set; }
+
+    [Description("A date-only value without time component. Expected: 2025-01-20")]
+    public DateOnly DateOnlyValue { get; set; }
+
+    [Description("A time-only value without date component. Expected: 14:30:00")]
+    public TimeOnly TimeOnlyValue { get; set; }
+
+    // Enum types
+    [Description("Status enum value. Expected: Active")]
+    public StatusType EnumValue { get; set; }
+
+    [Description("Nullable status enum value. Expected: Pending")]
+    public StatusType? EnumNullable { get; set; }
+
+    [Description("Priority level enum. Expected: High")]
+    public PriorityLevel PriorityLevel { get; set; }
+
+    // Nullable types
+    [Description("A nullable integer with a value. Expected: 100")]
+    public int? NullableInt { get; set; }
+
+    [Description("A nullable string with a value. Expected: 'Not null'")]
+    public string? NullableString { get; set; }
+
+    [Description("A nullable decimal with a value. Expected: 99.99")]
+    public decimal? NullableDecimal { get; set; }
+
+    [Description("A nullable integer that should be null/empty")]
+    public int? EmptyNullableInt { get; set; }
+
+    // Array types
+    [Description("An array of strings. Expected: ['apple', 'banana', 'cherry']")]
+    public string[] StringArray { get; set; } = [];
+
+    [Description("An array of integers. Expected: [1, 2, 3, 4, 5]")]
+    public int[] IntArray { get; set; } = [];
+
+    // Percentage/range values
+    [Description("A percentage value between 0 and 100. Expected: 75.5")]
+    public double Percentage { get; set; }
+
+    // Negative values
+    [Description("A negative integer. Expected: -42")]
+    public int NegativeInt { get; set; }
+
+    [Description("A negative decimal. Expected: -123.45")]
+    public decimal NegativeDecimal { get; set; }
+
+    // Edge cases
+    [Description("A zero value. Expected: 0")]
+    public int ZeroValue { get; set; }
+
+    [Description("Maximum 32-bit integer value. Expected: 2147483647")]
+    public int MaxIntTest { get; set; }
+
+    [Description("Minimum 32-bit integer value. Expected: -2147483648")]
+    public int MinIntTest { get; set; }
+
+    // Unicode and special strings
+    [Description("A string with Unicode characters including Polish, Japanese, and emoji. Expected: 'Zażółć gęślą jaźń 日本語 🎉'")]
+    public string UnicodeString { get; set; } = "";
+
+    [Description("An empty string. Expected: '' (empty)")]
+    public string EmptyString { get; set; } = "";
+
+    [Description("A string containing only whitespace. Expected: '   ' (three spaces)")]
+    public string WhitespaceString { get; set; } = "";
 }

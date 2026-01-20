@@ -40,37 +40,160 @@ public static class JsonSchemaGenerator
     public static string? GetDescription(Type type)
         => type.GetCustomAttribute<DescriptionAttribute>()?.Description;
 
-    private static Dictionary<string, object> GenerateSchema([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type)
+    private static Dictionary<string, object> GenerateSchema([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type, bool isNullable = false)
     {
-        if (type == typeof(string))
-            return new Dictionary<string, object> { ["type"] = "string" };
+        // Handle Nullable<T> - extract underlying type
+        var underlyingType = Nullable.GetUnderlyingType(type);
+        if (underlyingType != null)
+        {
+            return GenerateSchema(underlyingType, isNullable: true);
+        }
 
-        if (type == typeof(int) || type == typeof(long) || type == typeof(short))
+        // Handle Guid as string (UUID format)
+        if (type == typeof(Guid))
+        {
+            var schema = new Dictionary<string, object> 
+            { 
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "A globally unique identifier (UUID) in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            };
+            return schema;
+        }
+
+        // Handle DateTime as ISO 8601 string
+        if (type == typeof(DateTime))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "Date and time in ISO 8601 format: YYYY-MM-DDTHH:mm:ss"
+            };
+            return schema;
+        }
+
+        // Handle DateTimeOffset as ISO 8601 string
+        if (type == typeof(DateTimeOffset))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "Date and time with offset in ISO 8601 format: YYYY-MM-DDTHH:mm:ss±HH:mm"
+            };
+            return schema;
+        }
+
+        // Handle DateOnly as ISO 8601 date string
+        if (type == typeof(DateOnly))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "Date in ISO 8601 format: YYYY-MM-DD"
+            };
+            return schema;
+        }
+
+        // Handle TimeOnly as time string
+        if (type == typeof(TimeOnly))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "Time in format: HH:mm:ss"
+            };
+            return schema;
+        }
+
+        // Handle TimeSpan as duration string
+        if (type == typeof(TimeSpan))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "Duration/time span in format: d.hh:mm:ss or hh:mm:ss"
+            };
+            return schema;
+        }
+
+        // Handle Uri as string
+        if (type == typeof(Uri))
+        {
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["description"] = "A valid URI/URL string"
+            };
+            return schema;
+        }
+
+        if (type == typeof(string))
+        {
+            if (isNullable)
+                return new Dictionary<string, object> { ["type"] = new[] { "string", "null" } };
+            return new Dictionary<string, object> { ["type"] = "string" };
+        }
+
+        if (type == typeof(int) || type == typeof(long) || type == typeof(short) || 
+            type == typeof(byte) || type == typeof(sbyte) || 
+            type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort))
+        {
+            if (isNullable)
+                return new Dictionary<string, object> { ["type"] = new[] { "integer", "null" } };
             return new Dictionary<string, object> { ["type"] = "integer" };
+        }
 
         if (type == typeof(float) || type == typeof(double) || type == typeof(decimal))
+        {
+            if (isNullable)
+                return new Dictionary<string, object> { ["type"] = new[] { "number", "null" } };
             return new Dictionary<string, object> { ["type"] = "number" };
+        }
 
         if (type == typeof(bool))
-            return new Dictionary<string, object> { ["type"] = "boolean" };
-
-        if (type.IsArray || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>)))
         {
-            var elementType = type.IsArray ? type.GetElementType()! : type.GetGenericArguments()[0];
-            return new Dictionary<string, object>
+            if (isNullable)
+                return new Dictionary<string, object> { ["type"] = new[] { "boolean", "null" } };
+            return new Dictionary<string, object> { ["type"] = "boolean" };
+        }
+
+        // Handle IEnumerable types (arrays, lists, etc.) but not string
+        if (type.IsArray)
+        {
+            var elementType = type.GetElementType()!;
+            var schema = new Dictionary<string, object>
             {
-                ["type"] = "array",
+                ["type"] = isNullable ? new object[] { "array", "null" } : "array",
                 ["items"] = GenerateSchema(elementType)
             };
+            return schema;
+        }
+
+        if (type.IsGenericType && (type.GetGenericTypeDefinition() == typeof(List<>) ||
+                                    type.GetGenericTypeDefinition() == typeof(IList<>) ||
+                                    type.GetGenericTypeDefinition() == typeof(ICollection<>) ||
+                                    type.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
+        {
+            var elementType = type.GetGenericArguments()[0];
+            var schema = new Dictionary<string, object>
+            {
+                ["type"] = isNullable ? new object[] { "array", "null" } : "array",
+                ["items"] = GenerateSchema(elementType)
+            };
+            return schema;
         }
 
         if (type.IsEnum)
         {
-            return new Dictionary<string, object>
+            // Get enum values as lowercase strings to match API expectations
+            var enumValues = Enum.GetNames(type).Select(n => n.ToLowerInvariant()).ToArray();
+            var schema = new Dictionary<string, object>
             {
-                ["type"] = "string",
-                ["enum"] = Enum.GetNames(type)
+                ["type"] = isNullable ? new object[] { "string", "null" } : "string",
+                ["enum"] = isNullable 
+                    ? enumValues.Cast<object>().Append(null!).ToArray()
+                    : enumValues
             };
+            return schema;
         }
 
         // Object type

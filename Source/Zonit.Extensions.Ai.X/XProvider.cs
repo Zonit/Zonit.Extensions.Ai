@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.X;
 
@@ -280,7 +281,7 @@ public sealed class XProvider : IModelProvider
         {
             PropertyNameCaseInsensitive = true,
             Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            Converters = { new JsonStringEnumConverter() }
+            Converters = { new CaseInsensitiveEnumConverterFactory(), new DateTimeConverterFactory() }
         }) ?? throw new JsonException("Deserialization returned null");
     }
 

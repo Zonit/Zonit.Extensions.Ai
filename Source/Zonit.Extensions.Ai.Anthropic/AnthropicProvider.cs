@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.Anthropic;
 
@@ -214,10 +215,43 @@ public sealed class AnthropicProvider : IModelProvider
             ["max_tokens"] = maxTokens
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            request["system"] = prompt.System;
+        // Build system prompt - add JSON schema instruction for structured output
+        var systemPrompt = prompt.System ?? "";
+        string? userJsonReminder = null;
+        if (responseType != typeof(string))
+        {
+            var schema = JsonSchemaGenerator.Generate(responseType);
+            var schemaJson = schema.ToString();
+            
+            // Strong instruction at system level
+            var jsonInstruction = $@"
 
-        var content = new List<object> { new { type = "text", text = prompt.Text } };
+CRITICAL JSON OUTPUT REQUIREMENTS:
+1. You MUST respond with a SINGLE JSON OBJECT (starting with a curly brace)
+2. Do NOT respond with a JSON array []
+3. Do NOT wrap response in markdown code blocks
+4. Do NOT add any explanation or text before/after the JSON
+5. The JSON object MUST match this exact schema:
+
+{schemaJson}
+
+Remember: Your response must start with the opening curly brace and be a valid JSON object matching the schema above.
+";
+            systemPrompt = string.IsNullOrEmpty(systemPrompt) ? jsonInstruction.Trim() : systemPrompt + jsonInstruction;
+            
+            // Reminder to add at the end of user message
+            userJsonReminder = "\n\nRespond with a JSON object matching the schema. Start your response with {";
+        }
+
+        if (!string.IsNullOrEmpty(systemPrompt))
+            request["system"] = systemPrompt;
+
+        // Build user message content with optional JSON reminder
+        var userText = prompt.Text;
+        if (!string.IsNullOrEmpty(userJsonReminder))
+            userText += userJsonReminder;
+
+        var content = new List<object> { new { type = "text", text = userText } };
 
         if (prompt.Files != null)
         {
@@ -253,7 +287,13 @@ public sealed class AnthropicProvider : IModelProvider
             }
         }
 
-        request["messages"] = new[] { new { role = "user", content } };
+        // Use prefill technique for structured output - start assistant response with "{"
+        var messages = new List<object> { new { role = "user", content } };
+        if (responseType != typeof(string))
+        {
+            messages.Add(new { role = "assistant", content = "{" });
+        }
+        request["messages"] = messages;
 
         // Model-specific settings
         // Anthropic API does not allow both temperature and top_p to be set simultaneously
@@ -305,16 +345,47 @@ public sealed class AnthropicProvider : IModelProvider
 
         var jsonContent = ExtractJson(json);
 
-        return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
+        // Trim whitespace first
+        jsonContent = jsonContent.Trim();
+
+        // When using prefill technique, the response doesn't start with "{" 
+        // because it was included in the assistant prefill message
+        // Check for JSON property start (starts with ") or newline+property
+        if (!jsonContent.StartsWith('{') && !jsonContent.StartsWith('['))
         {
-            PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            Converters = { new JsonStringEnumConverter() }
-        }) ?? throw new JsonException("Deserialization returned null");
+            // If it starts with a quote (property name) or newline, add the opening brace
+            jsonContent = "{" + jsonContent;
+        }
+
+        // Ensure the JSON ends properly
+        jsonContent = jsonContent.Trim();
+        if (!jsonContent.EndsWith('}') && !jsonContent.EndsWith(']'))
+        {
+            // If somehow missing closing brace
+            if (jsonContent.StartsWith('{'))
+                jsonContent += "}";
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true,
+                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+                Converters = { new CaseInsensitiveEnumConverterFactory(), new DateTimeConverterFactory() }
+            }) ?? throw new JsonException("Deserialization returned null");
+        }
+        catch (JsonException ex)
+        {
+            // Add debug info to exception
+            var preview = jsonContent.Length > 200 ? jsonContent[..200] + "..." : jsonContent;
+            throw new JsonException($"Failed to parse JSON. First 200 chars: [{preview}]. Original error: {ex.Message}", ex.Path, ex.LineNumber, ex.BytePositionInLine, ex);
+        }
     }
 
     /// <summary>
     /// Extracts JSON content from a response that may contain markdown or other text.
+    /// Handles prefill technique where response doesn't start with "{".
     /// </summary>
     private static string ExtractJson(string text)
     {
@@ -323,8 +394,29 @@ public sealed class AnthropicProvider : IModelProvider
 
         var content = text.Trim();
 
-        // If it already starts with { or [, it's likely valid JSON
-        if (content.StartsWith('{') || content.StartsWith('['))
+        // If it already starts with { it's likely valid JSON object
+        if (content.StartsWith('{'))
+            return content;
+
+        // PREFILL HANDLING: If content starts with " it's likely a JSON property name
+        // This happens when using prefill technique where assistant starts with "{"
+        // and Claude continues with the rest of the JSON object
+        if (content.StartsWith('"'))
+        {
+            // This is continuation of JSON object - return as-is, caller will add {
+            return content;
+        }
+
+        // If content starts with newline then ", it's also prefill continuation
+        if (content.StartsWith("\n") || content.StartsWith("\r"))
+        {
+            var trimmed = content.TrimStart('\n', '\r', ' ', '\t');
+            if (trimmed.StartsWith('"'))
+                return trimmed;
+        }
+
+        // If it starts with [ it's a JSON array (but only at root level)
+        if (content.StartsWith('['))
             return content;
 
         // Try to extract from ```json ... ``` blocks
@@ -349,7 +441,8 @@ public sealed class AnthropicProvider : IModelProvider
                 return content[start..end].Trim();
         }
 
-        // Try to find JSON object by locating first { and last }
+        // Try to find JSON object first (prefer { } over [ ])
+        // This is important because the response may contain arrays as property values
         var firstBrace = content.IndexOf('{');
         var lastBrace = content.LastIndexOf('}');
         if (firstBrace >= 0 && lastBrace > firstBrace)
