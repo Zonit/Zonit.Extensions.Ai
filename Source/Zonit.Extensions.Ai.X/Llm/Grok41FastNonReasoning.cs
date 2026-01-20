@@ -7,7 +7,7 @@ namespace Zonit.Extensions.Ai.X;
 public class Grok41FastNonReasoning : XChatBase
 {
     /// <inheritdoc />
-    public override string Name => "grok-4.1-fast-non-reasoning";
+    public override string Name => "grok-4-1-fast-non-reasoning";
 
     /// <inheritdoc />
     public override decimal PriceInput => 0.20m;

@@ -8,7 +8,7 @@ namespace Zonit.Extensions.Ai.X;
 public class Grok41Fast : XReasoningBase
 {
     /// <inheritdoc />
-    public override string Name => "grok-4.1-fast";
+    public override string Name => "grok-4-1-fast";
 
     /// <inheritdoc />
     /// <remarks>Base price per 1M input tokens.</remarks>
