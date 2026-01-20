@@ -1,11 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    
+    <!-- Package-specific metadata -->
+    <PackageId>Zonit.Extensions.Ai</PackageId>
+    <Title>Zonit.Extensions.Ai</Title>
+    <Description>Core AI integration library for .NET. Features Scriban templating, structured outputs, and auto-discovery of providers. Install provider packages (OpenAi, Anthropic, Google, X) separately.</Description>
+    <PackageTags>ai;llm;text-generation;structured-output;scriban;templating</PackageTags>
   </PropertyGroup>
+  
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Scriban" />
   </ItemGroup>
+  
   <ItemGroup>
-    <ProjectReference Include="..\Zonit.Extensions.Ai.Infrastructure\Zonit.Extensions.Ai.Infrastructure.csproj" />
+    <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <ProjectReference Include="..\..\..\Zonit.Extensions\Source\Zonit.Extensions\Zonit.Extensions.csproj" />
   </ItemGroup>
 </Project>

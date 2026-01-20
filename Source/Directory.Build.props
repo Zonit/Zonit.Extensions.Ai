@@ -1,7 +1,41 @@
 <Project>
+  <!-- Common NuGet Package Metadata for all Zonit.Extensions.Ai packages -->
   <PropertyGroup>
-    <!-- Mark all projects in Zonit.Extensions.Ai as AOT-compatible -->
-    <!-- Note: Zonit.Extensions.Ai.Application uses Scriban which may have limited AOT support due to reflection -->
-    <IsAotCompatible>true</IsAotCompatible>
+    <Authors>Zonit</Authors>
+    <Company>Zonit</Company>
+    <Product>Zonit.Extensions.Ai</Product>
+    <Copyright>Copyright (c) Zonit</Copyright>
+    
+    <!-- Repository and Project URLs -->
+    <PackageProjectUrl>https://github.com/Zonit/Zonit.Extensions.Ai</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Zonit/Zonit.Extensions.Ai</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    
+    <!-- License -->
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    
+    <!-- Package Assets -->
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>See https://github.com/Zonit/Zonit.Extensions.Ai/releases</PackageReleaseNotes>
+    
+    <!-- Build settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- AOT and Trimming support -->
+    <!-- This library uses reflection for JSON serialization and template rendering. -->
+    <!-- AOT compilation is not fully supported. Use source generators for AOT projects. -->
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+  
+  <!-- Language settings -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 </Project>

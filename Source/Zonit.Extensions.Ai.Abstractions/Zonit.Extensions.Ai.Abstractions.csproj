@@ -1,8 +1,15 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    
+    <!-- Package-specific metadata -->
+    <PackageId>Zonit.Extensions.Ai.Abstractions</PackageId>
+    <Title>Zonit.Extensions.Ai.Abstractions</Title>
+    <Description>Core abstractions and interfaces for Zonit.Extensions.Ai. Use this package when you only need the interfaces without implementation, perfect for defining prompts in domain layers.</Description>
+    <PackageTags>ai;abstractions;interfaces;openai;anthropic;google;llm;gpt;claude;gemini</PackageTags>
   </PropertyGroup>
+  
   <ItemGroup>
-    <ProjectReference Include="..\Zonit.Extensions.Ai.Llm\Zonit.Extensions.Ai.Llm.csproj" />
+    <ProjectReference Include="..\..\..\..\Extensions\Zonit.Extensions\Source\Zonit.Extensions\Zonit.Extensions.csproj" />
   </ItemGroup>
 </Project>

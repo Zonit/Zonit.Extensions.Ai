@@ -8,11 +8,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Prompts\Zonit.Extensions.Ai.Prompts.csproj" />
-    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+    <!-- Reference OpenAI provider (includes core) -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Update="appsettings.json">

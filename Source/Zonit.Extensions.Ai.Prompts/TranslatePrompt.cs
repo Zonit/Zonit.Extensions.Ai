@@ -1,26 +1,58 @@
-﻿namespace Zonit.Extensions.Ai.Prompts;
+using System.ComponentModel;
 
-public class TranslatePrompt : PromptBase<string>
+namespace Zonit.Extensions.Ai.Prompts;
+
+/// <summary>
+/// Response for translation prompt.
+/// </summary>
+public class TranslateResponse
 {
-    public required string Content { get; set; }
-    public required string Language { get; set; }
-    public string? Culture { get; set; }
+    /// <summary>
+    /// The translated text.
+    /// </summary>
+    [Description("Translated text in the target language")]
+    public required string TranslatedText { get; set; }
+    
+    /// <summary>
+    /// Detected source language (ISO 639-1 code).
+    /// </summary>
+    [Description("Detected source language ISO 639-1 code (e.g., 'en', 'pl', 'de')")]
+    public string? DetectedLanguage { get; set; }
+    
+    /// <summary>
+    /// Confidence score (0-1).
+    /// </summary>
+    [Description("Translation confidence score from 0.0 to 1.0")]
+    public double? Confidence { get; set; }
+}
 
+/// <summary>
+/// Prompt for translating text to a target language.
+/// </summary>
+/// <example>
+/// var result = await ai.GenerateAsync(
+///     new GPT51(), 
+///     new TranslatePrompt { Content = "Hello world!", Language = "Polish" });
+/// Console.WriteLine(result.Value.TranslatedText); // "Witaj świecie!"
+/// </example>
+public class TranslatePrompt : PromptBase<TranslateResponse>
+{
+    /// <summary>
+    /// Text to translate.
+    /// </summary>
+    public required string Content { get; init; }
+    
+    /// <summary>
+    /// Target language name (e.g., "Polish", "German", "French").
+    /// </summary>
+    public required string Language { get; init; }
+    
+    /// <inheritdoc />
     public override string Prompt => @"
-Your task is to translate the following text into ``{{ language }}``
-{{~ if culture ~}}
-for ``{{ culture }}`` culture
-{{~ end ~}}
-
-Translation guidelines:
-- Preserve the original meaning and tone of the text.
-- Use natural, fluent language appropriate for the target audience.
-- Consider cultural context and adapt idioms, expressions, and references appropriately.
-- Do not add your own comments or explanations.
-- If the text contains technical terms, maintain their accurate meaning.
-- Return only the translated text without additional annotations.
+Translate the following text into {{ language }}.
+Detect the source language and provide a confidence score.
 
 Text to translate:
-``{{ content }}``
+{{ content }}
 ";
 }

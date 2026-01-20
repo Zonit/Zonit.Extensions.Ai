@@ -1,9 +1,10 @@
-﻿using System.Text;
+using System.Text;
 using Example.Backgrounds;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Zonit.Extensions;
+using Zonit.Extensions.Ai;
+using Zonit.Extensions.Ai.OpenAi;
 
 namespace Example;
 
@@ -23,9 +24,9 @@ internal class Program
 
         return configuration;
     }
+
     static void Main(string[] args)
     {
-        // Set console encoding to UTF-8 to properly display Polish characters
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
 
@@ -36,7 +37,15 @@ internal class Program
 
         builder.Configuration.AddConfiguration(CreateConfiguration(args));
 
-        builder.Services.AddAiExtension();
+        // Get API key from configuration
+        var apiKey = builder.Configuration["OpenAi:ApiKey"] ?? "";
+        
+        // Register AI with OpenAI provider - single call!
+        builder.Services.AddOpenAi(options =>
+        {
+            options.OpenAi.ApiKey = apiKey;
+        });
+        
         builder.Services.AddHostedService<TextBackground>();
 
         var app = builder.Build();
