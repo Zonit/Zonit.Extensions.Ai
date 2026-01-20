@@ -48,7 +48,7 @@ public class Grok4 : XReasoningBase
     /// Grok 4 does NOT support reasoning_effort parameter.
     /// Returns null to prevent sending the parameter.
     /// </summary>
-    public override ReasoningEffort? Reason => null;
+    public override ReasonType? Reason => null;
 
     /// <summary>
     /// Grok4 has double price for contexts above 128k tokens.

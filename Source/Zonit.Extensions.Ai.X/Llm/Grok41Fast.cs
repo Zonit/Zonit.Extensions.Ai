@@ -52,7 +52,7 @@ public class Grok41Fast : XReasoningBase
     /// Grok 4.1 Fast supports reasoning_effort parameter (low, high).
     /// Default: null (model decides).
     /// </summary>
-    public override ReasoningEffort? Reason { get; init; }
+    public override ReasonType? Reason { get; init; }
 
     /// <summary>
     /// Extended context pricing:

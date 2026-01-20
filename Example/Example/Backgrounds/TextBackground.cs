@@ -47,7 +47,7 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
         try
         {
             var image = await provider.GenerateAsync(
-                new GPTImage1 { Quality = ImageQuality.Standard, Size = ImageSize.Square },
+                new GPTImage1 { Quality = OpenAiImageBase.QualityType.Standard, Size = OpenAiImageBase.SizeType.Square },
                 "A cute robot reading a book in a cozy library.",
                 stoppingToken);
 
