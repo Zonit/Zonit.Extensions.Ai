@@ -40,7 +40,10 @@ Install-Package Zonit.Extensions.Ai.OpenAi
 - **Scriban templating** - Dynamic prompts with variables and conditions
 - **Cost calculation** - Estimate costs before calling API
 - **Resilience** - Retry, circuit breaker, timeout with Microsoft.Extensions.Http.Resilience
-- **Plugin architecture** - Auto-discovery of providers, safe to call AddAi multiple times
+- **Plugin architecture** - Auto-discovery of providers, idempotent registration with `TryAddEnumerable`
+- **Clean architecture** - SOLID principles, each provider self-contained with own Options and DI
+- **Best practices** - `BindConfiguration` + `PostConfigure` pattern for configuration
+- **Separation of concerns** - Provider-specific options separated from global configuration
 
 ---
 
@@ -52,61 +55,118 @@ Install-Package Zonit.Extensions.Ai.OpenAi
 
 ## Quick Start
 
-### Simple Registration
+### 1. Configuration-based (Recommended)
 
-```csharp
-// In Program.cs
-services.AddAi();  // Reads from appsettings.json automatically
-```
+Register providers using `appsettings.json` configuration:
 
 ```json
 // appsettings.json
 {
   "Ai": {
-    "OpenAi": { "ApiKey": "sk-..." },
-    "Anthropic": { "ApiKey": "sk-ant-..." },
-    "Google": { "ApiKey": "..." },
-    "X": { "ApiKey": "..." }
+    "Resilience": {
+      "MaxRetryAttempts": 3,
+      "HttpClientTimeout": "00:05:00"
+    },
+    "OpenAi": {
+      "ApiKey": "sk-...",
+      "OrganizationId": "org-..."
+    },
+    "Anthropic": {
+      "ApiKey": "sk-ant-..."
+    },
+    "Google": {
+      "ApiKey": "AIza..."
+    },
+    "X": {
+      "ApiKey": "xai-..."
+    }
   }
 }
 ```
 
-### Fluent Configuration
-
 ```csharp
-services.AddAi()
-    .WithOpenAi(o => o.ApiKey = "sk-...")
-    .WithAnthropic(o => o.ApiKey = "sk-ant-...")
-    .WithGoogle(o => o.ApiKey = "...")
-    .WithX(o => o.ApiKey = "...")
-    .WithResilience(r => 
-    {
-        r.MaxRetryAttempts = 5;
-        r.HttpClientTimeout = TimeSpan.FromMinutes(10);
-    });
+// Program.cs - Configuration is automatically loaded via BindConfiguration
+services.AddAiOpenAi();      // Loads from "Ai:OpenAi"
+services.AddAiAnthropic();   // Loads from "Ai:Anthropic"
+services.AddAiGoogle();      // Loads from "Ai:Google"
+services.AddAiX();           // Loads from "Ai:X"
 ```
 
-### Combined Configuration
+### 2. Code-based Configuration
+
+Override or supplement configuration in code:
+
+```csharp
+// With API key only
+services.AddAiOpenAi("sk-...");
+
+// With full configuration (applied after appsettings.json via PostConfigure)
+services.AddAiOpenAi(options =>
+{
+    options.ApiKey = "sk-...";
+    options.OrganizationId = "org-...";
+    options.BaseUrl = "https://custom-endpoint.com";
+});
+
+// Multiple providers
+services.AddAiOpenAi("sk-...");
+services.AddAiAnthropic("sk-ant-...");
+services.AddAiGoogle("AIza...");
+```
+
+### 3. Global Resilience Configuration
+
+Configure retry/timeout behavior for all providers:
 
 ```csharp
 services.AddAi(options =>
 {
-    options.OpenAi.ApiKey = "sk-...";
-    options.Resilience.MaxRetryAttempts = 3;
-})
-.WithAnthropic(o => o.ApiKey = config["Anthropic:ApiKey"]!);
+    options.Resilience.MaxRetryAttempts = 5;
+    options.Resilience.HttpClientTimeout = TimeSpan.FromMinutes(10);
+    options.Resilience.RetryBaseDelay = TimeSpan.FromSeconds(3);
+});
+
+// Then add providers
+services.AddAiOpenAi();
+services.AddAiAnthropic();
 ```
 
-### Plugin Architecture
+### 4. Plugin Architecture
 
-Safe to call multiple times from different plugins:
+Each provider registration is idempotent and can be called from multiple plugins:
 
 ```csharp
 // Plugin A
-services.AddAi().WithOpenAi(o => o.ApiKey = "...");
+services.AddAiOpenAi();  // Registers OpenAI + core services
 
-// Plugin B (does not duplicate, only adds configuration)
-services.AddAi().WithAnthropic(o => o.ApiKey = "...");
+// Plugin B (safe - uses TryAddEnumerable internally)
+services.AddAiAnthropic();  // Only adds Anthropic, doesn't duplicate core
+
+// Plugin C
+services.AddAi(options =>   // Safe - configures existing registration
+{
+    options.Resilience.MaxRetryAttempts = 5;
+});
+```
+
+### Configuration Best Practices
+
+✅ **Recommended:**
+```csharp
+// appsettings.json for sensitive data (use User Secrets in dev)
+services.AddAiOpenAi();
+
+// Or override specific values
+services.AddAiOpenAi(options => 
+{
+    options.BaseUrl = "https://azure-openai.com";  // Override only what's needed
+});
+```
+
+❌ **Avoid:**
+```csharp
+// Hardcoding API keys
+services.AddAiOpenAi("sk-hardcoded-key");
 ```
 
 ---
@@ -344,18 +404,57 @@ await result.Value.SaveAsync("sunset.png");
 
 ## Resilience Configuration
 
+Configure retry, timeout, and circuit breaker behavior globally:
+
 ```json
 {
   "Ai": {
     "Resilience": {
-      "HttpClientTimeout": "00:05:00",
-      "MaxRetryAttempts": 3,
-      "RetryBaseDelay": "00:00:02",
-      "RetryMaxDelay": "00:00:30",
-      "UseJitter": true
+      "HttpClientTimeout": "00:05:00",      // 5 minutes
+      "MaxRetryAttempts": 3,                // Retry up to 3 times
+      "RetryBaseDelay": "00:00:02",         // Start with 2s delay
+      "RetryMaxDelay": "00:00:30",          // Max 30s delay
+      "UseJitter": true                     // Add random jitter to prevent thundering herd
     }
   }
 }
+```
+
+Or configure in code:
+
+```csharp
+services.AddAi(options =>
+{
+    options.Resilience.MaxRetryAttempts = 5;
+    options.Resilience.HttpClientTimeout = TimeSpan.FromMinutes(10);
+    options.Resilience.RetryBaseDelay = TimeSpan.FromSeconds(3);
+    options.Resilience.RetryMaxDelay = TimeSpan.FromMinutes(1);
+    options.Resilience.UseJitter = true;
+});
+```
+
+### Per-Provider Timeout Override
+
+Each provider can override the global timeout:
+
+```json
+{
+  "Ai": {
+    "Resilience": {
+      "HttpClientTimeout": "00:05:00"  // Default for all
+    },
+    "OpenAi": {
+      "Timeout": "00:10:00"            // Override for OpenAI only
+    }
+  }
+}
+```
+
+```csharp
+services.AddAiOpenAi(options =>
+{
+    options.Timeout = TimeSpan.FromMinutes(10);  // OpenAI-specific
+});
 ```
 
 ---
@@ -390,13 +489,125 @@ var result = await ai.GenerateAsync(new GPT51(),
 
 ## Architecture
 
+The library follows **SOLID principles** and **Clean Architecture**:
+
+### Project Structure
+
 ```
-Zonit.Extensions.Ai
-├── Abstractions     - Interfaces (IPrompt, IAiProvider, ILlm)
-├── Core             - PromptBase, AiBuilder, JsonParsers
-├── Providers        - OpenAI, Anthropic, Google, X
-├── Prompts          - Ready-to-use examples
-└── SourceGenerators - AOT support
+Zonit.Extensions.Ai/
+├── Source/
+│   ├── Zonit.Extensions.Ai/              # Core library
+│   │   ├── AiOptions.cs                   # Global options ("Ai" section)
+│   │   ├── AiServiceCollectionExtensions  # AddAi() registration
+│   │   └── AiProvider.cs                  # Main provider orchestrator
+│   │
+│   ├── Zonit.Extensions.Ai.Abstractions/  # Interfaces only
+│   │   ├── IPrompt.cs, ILlm.cs           # Contracts
+│   │   └── IAiProvider.cs                 # Provider interface
+│   │
+│   ├── Zonit.Extensions.Ai.OpenAi/        # OpenAI provider (self-contained)
+│   │   ├── OpenAiOptions.cs               # "Ai:OpenAi" section
+│   │   ├── OpenAiServiceCollectionExtensions.cs  # AddAiOpenAi()
+│   │   └── OpenAiProvider.cs              # Implementation
+│   │
+│   ├── Zonit.Extensions.Ai.Anthropic/     # Anthropic provider
+│   ├── Zonit.Extensions.Ai.Google/        # Google provider
+│   ├── Zonit.Extensions.Ai.X/             # X provider
+│   │
+│   └── Zonit.Extensions.Ai.Prompts/       # Ready-to-use prompts
+```
+
+### Key Design Principles
+
+1. **Separation of Concerns**
+   - Each provider is a separate NuGet package
+   - Provider-specific options are in the provider package
+   - Global options (`AiOptions`) contain only shared configuration
+
+2. **Dependency Inversion**
+   - Providers implement `IModelProvider` from Abstractions
+   - Core library depends only on abstractions
+   - Providers discovered via auto-discovery or explicit registration
+
+3. **Open/Closed Principle**
+   - Add new providers without modifying core library
+   - Extend via `IModelProvider` interface
+
+4. **Configuration Pattern**
+   ```csharp
+   // Best practice: BindConfiguration + PostConfigure
+   services.AddOptions<OpenAiOptions>()
+       .BindConfiguration("Ai:OpenAi");     // Load from appsettings.json
+   
+   if (options is not null)
+       services.PostConfigure(options);      // Override with code
+   ```
+
+5. **Idempotent Registration**
+   - Uses `TryAddSingleton` and `TryAddEnumerable`
+   - Safe to call from multiple plugins
+   - No duplicate registrations
+
+### Configuration Hierarchy
+
+```json
+{
+  "Ai": {                          // Global (AiOptions)
+    "Resilience": { ... },          // Shared by all providers
+    
+    "OpenAi": { ... },              // OpenAiOptions (provider-specific)
+    "Anthropic": { ... },           // AnthropicOptions
+    "Google": { ... },              // GoogleOptions
+    "X": { ... }                    // XOptions
+  }
+}
+```
+
+### Provider Options Inheritance
+
+```csharp
+// Base class for all provider options
+public abstract class AiProviderOptions
+{
+    public string? ApiKey { get; set; }
+    public string? BaseUrl { get; set; }
+    public TimeSpan? Timeout { get; set; }
+}
+
+// Each provider extends the base
+public sealed class OpenAiOptions : AiProviderOptions
+{
+    public const string SectionName = "Ai:OpenAi";
+    public string? OrganizationId { get; set; }  // OpenAI-specific
+}
+
+public sealed class AnthropicOptions : AiProviderOptions
+{
+    public const string SectionName = "Ai:Anthropic";
+    // Anthropic-specific properties can be added here
+}
+```
+
+### Dependency Injection Flow
+
+```
+User Code
+  ↓
+services.AddAiOpenAi()
+  ↓
+├─ services.AddAi()                    # Core services (idempotent)
+│  ├─ Register IAiProvider
+│  ├─ Configure AiOptions
+│  └─ Auto-discover providers
+│
+├─ Configure OpenAiOptions             # Provider-specific
+│  └─ BindConfiguration("Ai:OpenAi")
+│
+├─ Register OpenAiProvider             # Provider implementation
+│  └─ TryAddEnumerable (no duplicates)
+│
+└─ AddHttpClient<OpenAiProvider>()     # Resilience
+   └─ AddStandardResilienceHandler()
 ```
 
 ---
