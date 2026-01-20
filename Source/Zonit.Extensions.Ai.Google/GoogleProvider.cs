@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.Google;
 
@@ -19,7 +20,7 @@ public sealed class GoogleProvider : IModelProvider
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<GoogleProvider> _logger;
-    private readonly AiOptions _options;
+    private readonly GoogleOptions _options;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,7 +32,7 @@ public sealed class GoogleProvider : IModelProvider
 
     public GoogleProvider(
         HttpClient httpClient,
-        IOptions<AiOptions> options,
+        IOptions<GoogleOptions> options,
         ILogger<GoogleProvider> logger)
     {
         _httpClient = httpClient;
@@ -62,7 +63,7 @@ public sealed class GoogleProvider : IModelProvider
 
         _logger.LogDebug("Google request: {Payload}", jsonPayload);
 
-        var endpoint = $"/v1beta/models/{llm.Name}:generateContent?key={_options.Google.ApiKey}";
+        var endpoint = $"/v1beta/models/{llm.Name}:generateContent?key={_options.ApiKey}";
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
@@ -138,7 +139,7 @@ public sealed class GoogleProvider : IModelProvider
             content = new { parts = new[] { new { text = input } } }
         };
 
-        var endpoint = $"/v1beta/models/{llm.Name}:embedContent?key={_options.Google.ApiKey}";
+        var endpoint = $"/v1beta/models/{llm.Name}:embedContent?key={_options.ApiKey}";
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -172,7 +173,7 @@ public sealed class GoogleProvider : IModelProvider
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
-        var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.Google.ApiKey}";
+        var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.ApiKey}";
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
@@ -209,7 +210,7 @@ public sealed class GoogleProvider : IModelProvider
 
     private void ConfigureHttpClient()
     {
-        var baseUrl = _options.Google.BaseUrl ?? "https://generativelanguage.googleapis.com";
+        var baseUrl = _options.BaseUrl ?? "https://generativelanguage.googleapis.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
     }
 

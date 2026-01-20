@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.OpenAi;
 
@@ -20,7 +21,7 @@ public sealed class OpenAiProvider : IModelProvider
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAiProvider> _logger;
-    private readonly AiOptions _options;
+    private readonly OpenAiOptions _options;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,7 +33,7 @@ public sealed class OpenAiProvider : IModelProvider
 
     public OpenAiProvider(
         HttpClient httpClient,
-        IOptions<AiOptions> options,
+        IOptions<OpenAiOptions> options,
         ILogger<OpenAiProvider> logger)
     {
         _httpClient = httpClient;
@@ -296,18 +297,18 @@ public sealed class OpenAiProvider : IModelProvider
 
     private void ConfigureHttpClient()
     {
-        var baseUrl = _options.OpenAi.BaseUrl ?? "https://api.openai.com";
+        var baseUrl = _options.BaseUrl ?? "https://api.openai.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
 
-        if (!string.IsNullOrEmpty(_options.OpenAi.ApiKey))
+        if (!string.IsNullOrEmpty(_options.ApiKey))
         {
             _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.OpenAi.ApiKey);
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
         }
 
-        if (!string.IsNullOrEmpty(_options.OpenAi.OrganizationId))
+        if (!string.IsNullOrEmpty(_options.OrganizationId))
         {
-            _httpClient.DefaultRequestHeaders.Add("OpenAI-Organization", _options.OpenAi.OrganizationId);
+            _httpClient.DefaultRequestHeaders.Add("OpenAI-Organization", _options.OrganizationId);
         }
     }
 

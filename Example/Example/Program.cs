@@ -3,8 +3,8 @@ using Example.Backgrounds;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai;
-using Zonit.Extensions.Ai.OpenAi;
 
 namespace Example;
 
@@ -37,14 +37,8 @@ internal class Program
 
         builder.Configuration.AddConfiguration(CreateConfiguration(args));
 
-        // Get API key from configuration
-        var apiKey = builder.Configuration["OpenAi:ApiKey"] ?? "";
-
-        // Register AI with OpenAI provider - single call!
-        builder.Services.AddOpenAi(options =>
-        {
-            options.OpenAi.ApiKey = apiKey;
-        });
+        // Register OpenAI provider - configuration loaded from appsettings.json "Ai:OpenAi"
+        builder.Services.AddAiOpenAi();
 
         builder.Services.AddHostedService<TextBackground>();
 

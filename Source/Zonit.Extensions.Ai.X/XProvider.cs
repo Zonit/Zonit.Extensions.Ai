@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.X;
 
@@ -20,7 +21,7 @@ public sealed class XProvider : IModelProvider
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<XProvider> _logger;
-    private readonly AiOptions _options;
+    private readonly XOptions _options;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -32,7 +33,7 @@ public sealed class XProvider : IModelProvider
 
     public XProvider(
         HttpClient httpClient,
-        IOptions<AiOptions> options,
+        IOptions<XOptions> options,
         ILogger<XProvider> logger)
     {
         _httpClient = httpClient;
@@ -180,13 +181,13 @@ public sealed class XProvider : IModelProvider
 
     private void ConfigureHttpClient()
     {
-        var baseUrl = _options.X.BaseUrl ?? "https://api.x.ai";
+        var baseUrl = _options.BaseUrl ?? "https://api.x.ai";
         _httpClient.BaseAddress = new Uri(baseUrl);
 
-        if (!string.IsNullOrEmpty(_options.X.ApiKey))
+        if (!string.IsNullOrEmpty(_options.ApiKey))
         {
             _httpClient.DefaultRequestHeaders.Authorization =
-                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.X.ApiKey);
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
         }
     }
 

@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.Anthropic;
 
@@ -19,7 +20,7 @@ public sealed class AnthropicProvider : IModelProvider
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AnthropicProvider> _logger;
-    private readonly AiOptions _options;
+    private readonly AnthropicOptions _options;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -31,7 +32,7 @@ public sealed class AnthropicProvider : IModelProvider
 
     public AnthropicProvider(
         HttpClient httpClient,
-        IOptions<AiOptions> options,
+        IOptions<AnthropicOptions> options,
         ILogger<AnthropicProvider> logger)
     {
         _httpClient = httpClient;
@@ -178,13 +179,13 @@ public sealed class AnthropicProvider : IModelProvider
 
     private void ConfigureHttpClient()
     {
-        var baseUrl = _options.Anthropic.BaseUrl ?? "https://api.anthropic.com";
+        var baseUrl = _options.BaseUrl ?? "https://api.anthropic.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
-        if (!string.IsNullOrEmpty(_options.Anthropic.ApiKey))
+        if (!string.IsNullOrEmpty(_options.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Add("x-api-key", _options.Anthropic.ApiKey);
+            _httpClient.DefaultRequestHeaders.Add("x-api-key", _options.ApiKey);
         }
     }
 
