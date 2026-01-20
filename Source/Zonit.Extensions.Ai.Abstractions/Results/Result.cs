@@ -25,7 +25,7 @@ public sealed class MetaData
     /// <summary>
     /// The model that was used for the operation.
     /// </summary>
-    public required string Model { get; init; }
+    public required ILlm Model { get; init; }
 
     /// <summary>
     /// The provider that handled the request (e.g., "OpenAI", "Anthropic").

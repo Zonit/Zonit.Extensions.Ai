@@ -98,7 +98,7 @@ public sealed class XProvider : IModelProvider
             Value = result,
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = prompt.GetType().Name.Replace("Prompt", ""),
                 Duration = stopwatch.Elapsed,
@@ -116,9 +116,9 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<AiFile>> GenerateImageAsync(
+    public Task<Result<File>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<AiFile> prompt,
+        IPrompt<File> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("X does not support image generation");
@@ -174,7 +174,7 @@ public sealed class XProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

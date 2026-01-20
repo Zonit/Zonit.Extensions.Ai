@@ -10,6 +10,13 @@ public interface IAiProvider
 {
     #region Text Generation
 
+    [Obsolete("Support legacy, use GenerateAsync<TResponse>(ILlm llm, IPrompt<TResponse> prompt, CancellationToken cancellationToken = default)")]
+    Task<Result<TResponse>> GenerateAsync<TResponse>(
+        IPrompt<TResponse> prompt,
+        ILlm llm,
+        CancellationToken cancellationToken = default) 
+            => GenerateAsync(llm, prompt, cancellationToken);
+
     /// <summary>
     /// Generates a structured response from a typed prompt.
     /// </summary>
@@ -37,7 +44,7 @@ public interface IAiProvider
     /// <summary>
     /// Generates an image from a text description.
     /// </summary>
-    Task<Result<AiFile>> GenerateAsync(
+    Task<Result<File>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default);
@@ -67,7 +74,7 @@ public interface IAiProvider
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default);
 

@@ -44,7 +44,7 @@ internal sealed class AiProvider : IAiProvider
     #region Image Generation
 
     /// <inheritdoc />
-    public async Task<Result<AiFile>> GenerateAsync(
+    public async Task<Result<File>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default)
@@ -78,7 +78,7 @@ internal sealed class AiProvider : IAiProvider
     /// <inheritdoc />
     public async Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

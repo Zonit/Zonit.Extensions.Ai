@@ -21,5 +21,5 @@ public interface IPrompt<TResponse>
     /// <summary>
     /// Files attached to this prompt (images, documents, etc.).
     /// </summary>
-    IReadOnlyList<AiFile>? Files { get; }
+    IReadOnlyList<File>? Files { get; }
 }

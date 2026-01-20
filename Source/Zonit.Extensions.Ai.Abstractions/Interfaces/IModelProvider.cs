@@ -34,9 +34,9 @@ public interface IModelProvider
     /// <summary>
     /// Generates an image.
     /// </summary>
-    Task<Result<AiFile>> GenerateImageAsync(
+    Task<Result<File>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<AiFile> prompt,
+        IPrompt<File> prompt,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -66,7 +66,7 @@ public interface IModelProvider
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default);
 }

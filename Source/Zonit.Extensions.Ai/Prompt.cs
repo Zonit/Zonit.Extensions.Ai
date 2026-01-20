@@ -35,7 +35,7 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
     /// <summary>
     /// Files attached to this prompt.
     /// </summary>
-    public virtual IReadOnlyList<AiFile>? Files { get; init; }
+    public virtual IReadOnlyList<File>? Files { get; init; }
 
     private string RenderTemplate()
     {
@@ -108,13 +108,13 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
     public string Text { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<AiFile>? Files { get; init; }
+    public IReadOnlyList<File>? Files { get; init; }
 }
 
 /// <summary>
-/// Image generation prompt (returns AiFile).
+/// Image generation prompt (returns File).
 /// </summary>
-public sealed class ImagePrompt : IPrompt<AiFile>
+public sealed class ImagePrompt : IPrompt<File>
 {
     /// <summary>
     /// Creates an image generation prompt.
@@ -131,5 +131,5 @@ public sealed class ImagePrompt : IPrompt<AiFile>
     public string Text { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<AiFile>? Files { get; init; }
+    public IReadOnlyList<File>? Files { get; init; }
 }

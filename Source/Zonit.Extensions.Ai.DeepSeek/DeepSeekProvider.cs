@@ -100,7 +100,7 @@ public sealed class DeepSeekProvider : IModelProvider
             Value = result,
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = prompt.GetType().Name.Replace("Prompt", ""),
                 Duration = stopwatch.Elapsed,
@@ -119,9 +119,9 @@ public sealed class DeepSeekProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<AiFile>> GenerateImageAsync(
+    public Task<Result<File>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<AiFile> prompt,
+        IPrompt<File> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("DeepSeek does not support image generation");
@@ -177,7 +177,7 @@ public sealed class DeepSeekProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

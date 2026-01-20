@@ -10,13 +10,13 @@ public class GPT5Nano : OpenAiReasoningBase
     public override string Name => "gpt-5-nano";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 0.10m;
+    public override decimal PriceInput => 0.05m;
 
     /// <inheritdoc />
     public override decimal PriceOutput => 0.40m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.025m;
+    public override decimal? PriceCachedInput => 0.005m;
 
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 0.05m;

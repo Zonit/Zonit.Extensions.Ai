@@ -105,7 +105,7 @@ public sealed class OpenAiProvider : IModelProvider
             Value = result,
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = prompt.GetType().Name.Replace("Prompt", ""),
                 Duration = stopwatch.Elapsed,
@@ -126,9 +126,9 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<AiFile>> GenerateImageAsync(
+    public async Task<Result<File>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<AiFile> prompt,
+        IPrompt<File> prompt,
         CancellationToken cancellationToken = default)
     {
         if (llm is not OpenAiImageBase imageLlm)
@@ -158,7 +158,7 @@ public sealed class OpenAiProvider : IModelProvider
             throw new InvalidOperationException("No image data");
 
         var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json);
-        var file = new AiFile
+        var file = new File
         {
             Name = "generated.png",
             MimeType = "image/png",
@@ -167,12 +167,12 @@ public sealed class OpenAiProvider : IModelProvider
 
         var imageCost = AiCostCalculator.CalculateImageCost(imageLlm);
 
-        return new Result<AiFile>
+        return new Result<File>
         {
             Value = file,
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = prompt.GetType().Name.Replace("Prompt", ""),
                 Duration = stopwatch.Elapsed,
@@ -220,7 +220,7 @@ public sealed class OpenAiProvider : IModelProvider
             Value = embeddingResponse.Data[0].Embedding,
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = "Embedding",
                 Duration = stopwatch.Elapsed,
@@ -272,7 +272,7 @@ public sealed class OpenAiProvider : IModelProvider
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        AiFile audioFile,
+        File audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {
@@ -297,7 +297,7 @@ public sealed class OpenAiProvider : IModelProvider
             Value = result?.Text ?? "",
             MetaData = new MetaData
             {
-                Model = llm.Name,
+                Model = llm,
                 Provider = Name,
                 PromptName = "Transcription",
                 Duration = stopwatch.Elapsed,

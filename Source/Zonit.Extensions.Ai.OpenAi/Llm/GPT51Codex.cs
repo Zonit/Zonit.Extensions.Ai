@@ -9,13 +9,13 @@ public class GPT51Codex : OpenAiReasoningBase
     public override string Name => "gpt-5.1-codex";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.00m;
+    public override decimal PriceInput => 1.25m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 8.00m;
+    public override decimal PriceOutput => 10.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.50m;
+    public override decimal? PriceCachedInput => 0.125m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 400_000;

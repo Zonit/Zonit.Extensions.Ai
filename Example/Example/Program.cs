@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Zonit.Extensions;
 using Zonit.Extensions.Ai;
+using IOFile = System.IO.File;
 
 namespace Example;
 
@@ -19,7 +20,7 @@ internal class Program
 
         var configuration = builder.Build();
 
-        if (!File.Exists("appsettings.json"))
+        if (!IOFile.Exists("appsettings.json"))
             throw new FileNotFoundException("Nie znaleziono pliku ustawień appsettings.json.");
 
         return configuration;
