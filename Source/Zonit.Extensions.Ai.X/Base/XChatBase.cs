@@ -12,10 +12,10 @@ public abstract class XChatBase : XBase, ITextLlm
 
     /// <inheritdoc />
     public decimal? PriceCachedInput => PriceCachedInputValue;
-    
+
     /// <inheritdoc />
     public virtual double Temperature { get; set; } = 1.0;
-    
+
     /// <inheritdoc />
     public virtual double TopP { get; set; } = 1.0;
 

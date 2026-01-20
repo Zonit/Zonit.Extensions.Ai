@@ -11,28 +11,28 @@ public class GPT5Nano : OpenAiReasoningBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 0.10m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 0.40m;
-    
+
     /// <inheritdoc />
     public override decimal? PriceCachedInput => 0.025m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 0.05m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceOutput => 0.20m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 128_000;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 32_000;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 

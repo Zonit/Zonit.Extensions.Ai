@@ -7,10 +7,10 @@ public abstract class OpenAiChatBase : OpenAiBase, ITextLlm
 {
     /// <inheritdoc />
     public virtual decimal? PriceCachedInput { get; } = null;
-    
+
     /// <inheritdoc />
     public virtual double Temperature { get; set; } = 1.0;
-    
+
     /// <inheritdoc />
     public virtual double TopP { get; set; } = 1.0;
 }

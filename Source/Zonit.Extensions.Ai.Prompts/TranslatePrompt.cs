@@ -12,13 +12,13 @@ public class TranslateResponse
     /// </summary>
     [Description("Translated text in the target language")]
     public required string TranslatedText { get; set; }
-    
+
     /// <summary>
     /// Detected source language (ISO 639-1 code).
     /// </summary>
     [Description("Detected source language ISO 639-1 code (e.g., 'en', 'pl', 'de')")]
     public string? DetectedLanguage { get; set; }
-    
+
     /// <summary>
     /// Confidence score (0-1).
     /// </summary>
@@ -41,12 +41,12 @@ public class TranslatePrompt : PromptBase<TranslateResponse>
     /// Text to translate.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <summary>
     /// Target language name (e.g., "Polish", "German", "French").
     /// </summary>
     public required string Language { get; init; }
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Translate the following text into {{ language }}.

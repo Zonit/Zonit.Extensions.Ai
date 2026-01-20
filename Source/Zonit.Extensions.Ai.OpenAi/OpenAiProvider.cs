@@ -31,14 +31,14 @@ public sealed class OpenAiProvider : IModelProvider
     };
 
     public OpenAiProvider(
-        HttpClient httpClient, 
-        IOptions<AiOptions> options, 
+        HttpClient httpClient,
+        IOptions<AiOptions> options,
         ILogger<OpenAiProvider> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
-        
+
         ConfigureHttpClient();
     }
 
@@ -57,15 +57,15 @@ public sealed class OpenAiProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
-        
+
         _logger.LogDebug("OpenAI request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
-        
+
         stopwatch.Stop();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -77,14 +77,14 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, JsonOptions)!;
-        
+
         if (openAiResponse.Status != "completed")
             throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
 
         var textContent = openAiResponse.Output?
             .FirstOrDefault(o => o.Type == "message")?
             .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
-        
+
         if (string.IsNullOrEmpty(textContent))
             throw new InvalidOperationException("No text in OpenAI response");
 
@@ -132,7 +132,7 @@ public sealed class OpenAiProvider : IModelProvider
             throw new ArgumentException($"Expected OpenAI image model, got {llm.GetType().Name}");
 
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = new
         {
             model = llm.Name,
@@ -145,7 +145,7 @@ public sealed class OpenAiProvider : IModelProvider
 
         using var response = await _httpClient.PostAsJsonAsync("/v1/images/generations", request, cancellationToken);
         stopwatch.Stop();
-        
+
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -155,11 +155,11 @@ public sealed class OpenAiProvider : IModelProvider
             throw new InvalidOperationException("No image data");
 
         var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json);
-        var file = new AiFile 
-        { 
-            Name = "generated.png", 
-            MimeType = "image/png", 
-            Data = imageBytes 
+        var file = new AiFile
+        {
+            Name = "generated.png",
+            MimeType = "image/png",
+            Data = imageBytes
         };
 
         var imageCost = AiCostCalculator.CalculateImageCost(imageLlm);
@@ -187,7 +187,7 @@ public sealed class OpenAiProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = new
         {
             model = llm.Name,
@@ -197,7 +197,7 @@ public sealed class OpenAiProvider : IModelProvider
 
         using var response = await _httpClient.PostAsJsonAsync("/v1/embeddings", request, cancellationToken);
         stopwatch.Stop();
-        
+
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -238,7 +238,7 @@ public sealed class OpenAiProvider : IModelProvider
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -268,17 +268,17 @@ public sealed class OpenAiProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         using var formContent = new MultipartFormDataContent();
         formContent.Add(new ByteArrayContent(audioFile.Data), "file", audioFile.Name);
         formContent.Add(new StringContent(llm.Name), "model");
-        
+
         if (language != null)
             formContent.Add(new StringContent(language), "language");
 
         using var response = await _httpClient.PostAsync("/v1/audio/transcriptions", formContent, cancellationToken);
         stopwatch.Stop();
-        
+
         response.EnsureSuccessStatusCode();
 
         var result = await response.Content.ReadFromJsonAsync<TranscriptionResponse>(cancellationToken: cancellationToken);
@@ -298,13 +298,13 @@ public sealed class OpenAiProvider : IModelProvider
     {
         var baseUrl = _options.OpenAi.BaseUrl ?? "https://api.openai.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
-        
+
         if (!string.IsNullOrEmpty(_options.OpenAi.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Authorization = 
+            _httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.OpenAi.ApiKey);
         }
-        
+
         if (!string.IsNullOrEmpty(_options.OpenAi.OrganizationId))
         {
             _httpClient.DefaultRequestHeaders.Add("OpenAI-Organization", _options.OpenAi.OrganizationId);
@@ -314,8 +314,8 @@ public sealed class OpenAiProvider : IModelProvider
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     private Dictionary<string, object> BuildRequest<TResponse>(
-        ILlm llm, 
-        IPrompt<TResponse> prompt, 
+        ILlm llm,
+        IPrompt<TResponse> prompt,
         Type responseType,
         bool streaming = false)
     {
@@ -326,10 +326,10 @@ public sealed class OpenAiProvider : IModelProvider
         };
 
         var messages = new List<object>();
-        
+
         if (!string.IsNullOrEmpty(prompt.System))
             messages.Add(new { role = "system", content = prompt.System });
-        
+
         var content = new List<object> { new { type = "text", text = prompt.Text } };
 
         if (prompt.Files != null)

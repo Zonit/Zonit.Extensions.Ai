@@ -31,14 +31,14 @@ public sealed class XProvider : IModelProvider
     };
 
     public XProvider(
-        HttpClient httpClient, 
-        IOptions<AiOptions> options, 
+        HttpClient httpClient,
+        IOptions<AiOptions> options,
         ILogger<XProvider> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
-        
+
         ConfigureHttpClient();
     }
 
@@ -57,15 +57,15 @@ public sealed class XProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
-        
+
         _logger.LogDebug("X request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v1/chat/completions", content, cancellationToken);
-        
+
         stopwatch.Stop();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -77,9 +77,9 @@ public sealed class XProvider : IModelProvider
         }
 
         var xResponse = JsonSerializer.Deserialize<XResponse>(responseJson, JsonOptions)!;
-        
+
         var textContent = xResponse.Choices?.FirstOrDefault()?.Message?.Content;
-        
+
         if (string.IsNullOrEmpty(textContent))
             throw new InvalidOperationException("No text in X response");
 
@@ -140,13 +140,13 @@ public sealed class XProvider : IModelProvider
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         request["stream"] = true;
-        
+
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -162,7 +162,7 @@ public sealed class XProvider : IModelProvider
 
             var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
-            
+
             if (text != null)
                 yield return text;
         }
@@ -182,10 +182,10 @@ public sealed class XProvider : IModelProvider
     {
         var baseUrl = _options.X.BaseUrl ?? "https://api.x.ai";
         _httpClient.BaseAddress = new Uri(baseUrl);
-        
+
         if (!string.IsNullOrEmpty(_options.X.ApiKey))
         {
-            _httpClient.DefaultRequestHeaders.Authorization = 
+            _httpClient.DefaultRequestHeaders.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.X.ApiKey);
         }
     }
@@ -193,12 +193,12 @@ public sealed class XProvider : IModelProvider
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     private Dictionary<string, object> BuildRequest<TResponse>(
-        ILlm llm, 
-        IPrompt<TResponse> prompt, 
+        ILlm llm,
+        IPrompt<TResponse> prompt,
         Type responseType)
     {
         var messages = new List<object>();
-        
+
         if (!string.IsNullOrEmpty(prompt.System))
             messages.Add(new { role = "system", content = prompt.System });
 

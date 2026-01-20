@@ -10,28 +10,28 @@ public class GPT41Mini : OpenAiChatBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 0.40m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 1.60m;
-    
+
     /// <inheritdoc />
     public override decimal? PriceCachedInput => 0.10m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 0.20m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceOutput => 0.80m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_047_576;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 32_768;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 

@@ -30,14 +30,14 @@ public sealed class GoogleProvider : IModelProvider
     };
 
     public GoogleProvider(
-        HttpClient httpClient, 
-        IOptions<AiOptions> options, 
+        HttpClient httpClient,
+        IOptions<AiOptions> options,
         ILogger<GoogleProvider> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
-        
+
         ConfigureHttpClient();
     }
 
@@ -56,17 +56,17 @@ public sealed class GoogleProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
-        
+
         _logger.LogDebug("Google request: {Payload}", jsonPayload);
 
         var endpoint = $"/v1beta/models/{llm.Name}:generateContent?key={_options.Google.ApiKey}";
-        
+
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
-        
+
         stopwatch.Stop();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -78,10 +78,10 @@ public sealed class GoogleProvider : IModelProvider
         }
 
         var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseJson, JsonOptions)!;
-        
+
         var textContent = geminiResponse.Candidates?.FirstOrDefault()?
             .Content?.Parts?.FirstOrDefault()?.Text;
-        
+
         if (string.IsNullOrEmpty(textContent))
             throw new InvalidOperationException("No text in Google response");
 
@@ -131,19 +131,19 @@ public sealed class GoogleProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = new
         {
             model = $"models/{llm.Name}",
             content = new { parts = new[] { new { text = input } } }
         };
-        
+
         var endpoint = $"/v1beta/models/{llm.Name}:embedContent?key={_options.Google.ApiKey}";
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
-        
+
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
-        
+
         stopwatch.Stop();
         response.EnsureSuccessStatusCode();
 
@@ -173,11 +173,11 @@ public sealed class GoogleProvider : IModelProvider
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
         var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.Google.ApiKey}";
-        
+
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -190,7 +190,7 @@ public sealed class GoogleProvider : IModelProvider
 
             var data = line[6..];
             var chunk = JsonSerializer.Deserialize<GeminiResponse>(data, JsonOptions);
-            
+
             var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
             if (text != null)
                 yield return text;
@@ -216,8 +216,8 @@ public sealed class GoogleProvider : IModelProvider
     [RequiresUnreferencedCode("JSON serialization and schema generation might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and schema generation might require types that cannot be statically analyzed and might need runtime code generation.")]
     private Dictionary<string, object> BuildRequest<TResponse>(
-        ILlm llm, 
-        IPrompt<TResponse> prompt, 
+        ILlm llm,
+        IPrompt<TResponse> prompt,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
         var parts = new List<object> { new { text = prompt.Text } };

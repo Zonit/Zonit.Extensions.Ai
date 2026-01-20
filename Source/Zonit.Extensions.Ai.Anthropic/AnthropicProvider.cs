@@ -30,14 +30,14 @@ public sealed class AnthropicProvider : IModelProvider
     };
 
     public AnthropicProvider(
-        HttpClient httpClient, 
-        IOptions<AiOptions> options, 
+        HttpClient httpClient,
+        IOptions<AiOptions> options,
         ILogger<AnthropicProvider> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
-        
+
         ConfigureHttpClient();
     }
 
@@ -56,15 +56,15 @@ public sealed class AnthropicProvider : IModelProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        
+
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
-        
+
         _logger.LogDebug("Anthropic request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v1/messages", content, cancellationToken);
-        
+
         stopwatch.Stop();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -76,9 +76,9 @@ public sealed class AnthropicProvider : IModelProvider
         }
 
         var anthropicResponse = JsonSerializer.Deserialize<AnthropicResponse>(responseJson, JsonOptions)!;
-        
+
         var textContent = anthropicResponse.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
-        
+
         if (string.IsNullOrEmpty(textContent))
             throw new InvalidOperationException("No text in Anthropic response");
 
@@ -141,13 +141,13 @@ public sealed class AnthropicProvider : IModelProvider
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
         request["stream"] = true;
-        
+
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/messages") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-        
+
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -160,7 +160,7 @@ public sealed class AnthropicProvider : IModelProvider
 
             var data = line[6..];
             var chunk = JsonSerializer.Deserialize<StreamEvent>(data, JsonOptions);
-            
+
             if (chunk?.Type == "content_block_delta" && chunk.Delta?.Text != null)
                 yield return chunk.Delta.Text;
         }
@@ -181,7 +181,7 @@ public sealed class AnthropicProvider : IModelProvider
         var baseUrl = _options.Anthropic.BaseUrl ?? "https://api.anthropic.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-        
+
         if (!string.IsNullOrEmpty(_options.Anthropic.ApiKey))
         {
             _httpClient.DefaultRequestHeaders.Add("x-api-key", _options.Anthropic.ApiKey);
@@ -191,8 +191,8 @@ public sealed class AnthropicProvider : IModelProvider
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     private Dictionary<string, object> BuildRequest<TResponse>(
-        ILlm llm, 
-        IPrompt<TResponse> prompt, 
+        ILlm llm,
+        IPrompt<TResponse> prompt,
         Type responseType)
     {
         var request = new Dictionary<string, object>

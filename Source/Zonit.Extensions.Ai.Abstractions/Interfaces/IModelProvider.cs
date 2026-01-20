@@ -12,7 +12,7 @@ public interface IModelProvider
     /// Provider name for logging and diagnostics.
     /// </summary>
     string Name { get; }
-    
+
     /// <summary>
     /// Checks if this provider supports the given model.
     /// Used by the main AiProvider to route requests.
@@ -20,7 +20,7 @@ public interface IModelProvider
     /// <param name="llm">The model to check.</param>
     /// <returns>True if supported.</returns>
     bool SupportsModel(ILlm llm);
-    
+
     /// <summary>
     /// Generates a structured response.
     /// </summary>
@@ -30,7 +30,7 @@ public interface IModelProvider
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Generates an image.
     /// </summary>
@@ -38,7 +38,7 @@ public interface IModelProvider
         IImageLlm llm,
         IPrompt<AiFile> prompt,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Generates embeddings.
     /// </summary>
@@ -48,7 +48,7 @@ public interface IModelProvider
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Streams text response.
     /// </summary>
@@ -58,7 +58,7 @@ public interface IModelProvider
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Transcribes audio.
     /// </summary>

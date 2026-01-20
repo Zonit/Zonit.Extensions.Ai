@@ -12,19 +12,19 @@ public class CodeResponse
     /// </summary>
     [Description("The generated code")]
     public required string Code { get; set; }
-    
+
     /// <summary>
     /// Programming language used.
     /// </summary>
     [Description("Programming language of the generated code")]
     public required string Language { get; set; }
-    
+
     /// <summary>
     /// Explanation of the code.
     /// </summary>
     [Description("Brief explanation of what the code does")]
     public string? Explanation { get; set; }
-    
+
     /// <summary>
     /// Usage example.
     /// </summary>
@@ -51,22 +51,22 @@ public class CodePrompt : PromptBase<CodeResponse>
     /// Description of the code to generate.
     /// </summary>
     public required string Description { get; init; }
-    
+
     /// <summary>
     /// Target programming language.
     /// </summary>
     public required string Language { get; init; }
-    
+
     /// <summary>
     /// Include code explanation.
     /// </summary>
     public bool IncludeExplanation { get; init; } = true;
-    
+
     /// <summary>
     /// Include usage example.
     /// </summary>
     public bool IncludeExample { get; init; } = true;
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Generate {{ language }} code based on the following description:

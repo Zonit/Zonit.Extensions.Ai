@@ -12,22 +12,22 @@ public class FunctionTool : IToolBase
     /// Function name.
     /// </summary>
     public required string Name { get; init; }
-    
+
     /// <summary>
     /// Function description for the AI.
     /// </summary>
     public required string Description { get; init; }
-    
+
     /// <summary>
     /// JSON Schema for function parameters.
     /// </summary>
     public required JsonElement Parameters { get; init; }
-    
+
     /// <summary>
     /// Whether to use strict schema validation.
     /// </summary>
     public bool Strict { get; init; } = true;
-    
+
     /// <summary>
     /// Creates a FunctionTool from a type and parameters object.
     /// </summary>

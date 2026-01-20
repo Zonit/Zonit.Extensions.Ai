@@ -9,22 +9,22 @@ public class WebSearchTool : IToolBase
     /// Country code for search results.
     /// </summary>
     public string? Country { get; init; }
-    
+
     /// <summary>
     /// Region code for search results.
     /// </summary>
     public string? Region { get; init; }
-    
+
     /// <summary>
     /// City for search results.
     /// </summary>
     public string? City { get; init; }
-    
+
     /// <summary>
     /// TimeZone for search results.
     /// </summary>
     public string? TimeZone { get; init; }
-    
+
     /// <summary>
     /// Context size for search results.
     /// </summary>

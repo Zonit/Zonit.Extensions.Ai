@@ -12,12 +12,12 @@ public interface IPrompt<TResponse>
     /// System message/instruction for the AI.
     /// </summary>
     string? System { get; }
-    
+
     /// <summary>
     /// The main prompt text sent to the AI.
     /// </summary>
     string Text { get; }
-    
+
     /// <summary>
     /// Files attached to this prompt (images, documents, etc.).
     /// </summary>

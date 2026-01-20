@@ -115,7 +115,7 @@ public class AiJsonSerializerGenerator : IIncrementalGenerator
         sb.AppendLine("[JsonSerializable(typeof(bool))]");
         sb.AppendLine("[JsonSerializable(typeof(double))]");
         sb.AppendLine("[JsonSerializable(typeof(float[]))]");
-        
+
         sb.AppendLine("[JsonSourceGenerationOptions(");
         sb.AppendLine("    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,");
         sb.AppendLine("    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,");

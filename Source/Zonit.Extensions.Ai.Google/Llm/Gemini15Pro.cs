@@ -10,19 +10,19 @@ public class Gemini15Pro : GoogleBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 1.25m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 5.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 2_097_152;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 8_192;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image | ChannelType.Audio;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 

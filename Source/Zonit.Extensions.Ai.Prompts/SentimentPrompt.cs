@@ -12,19 +12,19 @@ public class SentimentResponse
     /// </summary>
     [Description("Overall sentiment: Positive, Negative, Neutral, or Mixed")]
     public required string Sentiment { get; set; }
-    
+
     /// <summary>
     /// Confidence score (0-1).
     /// </summary>
     [Description("Confidence score from 0.0 to 1.0")]
     public double Confidence { get; set; }
-    
+
     /// <summary>
     /// Detected emotions.
     /// </summary>
     [Description("List of detected emotions (e.g., joy, anger, fear, sadness)")]
     public List<string>? Emotions { get; set; }
-    
+
     /// <summary>
     /// Brief explanation of the sentiment.
     /// </summary>
@@ -47,12 +47,12 @@ public class SentimentPrompt : PromptBase<SentimentResponse>
     /// Text to analyze.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <summary>
     /// Include emotion detection.
     /// </summary>
     public bool IncludeEmotions { get; init; } = true;
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Analyze the sentiment of the following text.

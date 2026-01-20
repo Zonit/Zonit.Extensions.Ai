@@ -27,26 +27,26 @@ public static class AiServiceCollectionExtensions
     {
         // Register core services (TryAdd prevents duplicates)
         services.TryAddSingleton<IAiProvider, AiProvider>();
-        
+
         // Configure global options from appsettings.json if available
         services.AddOptions<AiOptions>()
             .Configure<IConfiguration>((options, config) =>
             {
                 config.GetSection(AiOptions.SectionName).Bind(options);
             });
-        
+
         // Apply additional configuration if provided
         if (configure is not null)
         {
             services.Configure(configure);
         }
-        
+
         // Auto-discover and register providers from loaded assemblies
         DiscoverAndRegisterProviders(services);
-        
+
         return new AiBuilder(services);
     }
-    
+
     /// <summary>
     /// Adds AI services with configuration from IConfiguration.
     /// </summary>
@@ -59,14 +59,14 @@ public static class AiServiceCollectionExtensions
         IConfiguration configuration)
     {
         services.TryAddSingleton<IAiProvider, AiProvider>();
-        
+
         services.Configure<AiOptions>(configuration.GetSection(AiOptions.SectionName));
-        
+
         DiscoverAndRegisterProviders(services);
-        
+
         return new AiBuilder(services);
     }
-    
+
     /// <summary>
     /// Registers a model provider manually.
     /// Used by provider packages (Zonit.Extensions.Ai.OpenAi, etc.)
@@ -82,7 +82,7 @@ public static class AiServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, TProvider>());
         return services;
     }
-    
+
     [RequiresUnreferencedCode("Uses reflection to scan assemblies and types.")]
     private static void DiscoverAndRegisterProviders(IServiceCollection services)
     {
@@ -90,7 +90,7 @@ public static class AiServiceCollectionExtensions
         var assemblies = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && a.FullName?.StartsWith("System") != true)
             .ToList();
-        
+
         // Find all types with [AiProvider] attribute
         foreach (var assembly in assemblies)
         {
@@ -100,7 +100,7 @@ public static class AiServiceCollectionExtensions
                     .Where(t => t.IsClass && !t.IsAbstract)
                     .Where(t => t.GetCustomAttribute<AiProviderAttribute>() != null)
                     .Where(t => typeof(IModelProvider).IsAssignableFrom(t));
-                
+
                 foreach (var type in providerTypes)
                 {
                     // TryAddEnumerable prevents duplicates
@@ -124,12 +124,12 @@ public sealed class AiBuilder
     /// The underlying service collection.
     /// </summary>
     public IServiceCollection Services { get; }
-    
+
     internal AiBuilder(IServiceCollection services)
     {
         Services = services;
     }
-    
+
     /// <summary>
     /// Configures OpenAI options.
     /// </summary>
@@ -140,7 +140,7 @@ public sealed class AiBuilder
         Services.Configure<AiOptions>(options => configure(options.OpenAi));
         return this;
     }
-    
+
     /// <summary>
     /// Configures Anthropic options.
     /// </summary>
@@ -151,7 +151,7 @@ public sealed class AiBuilder
         Services.Configure<AiOptions>(options => configure(options.Anthropic));
         return this;
     }
-    
+
     /// <summary>
     /// Configures Google options.
     /// </summary>
@@ -162,7 +162,7 @@ public sealed class AiBuilder
         Services.Configure<AiOptions>(options => configure(options.Google));
         return this;
     }
-    
+
     /// <summary>
     /// Configures X (Grok) options.
     /// </summary>
@@ -173,7 +173,7 @@ public sealed class AiBuilder
         Services.Configure<AiOptions>(options => configure(options.X));
         return this;
     }
-    
+
     /// <summary>
     /// Configures resilience options.
     /// </summary>

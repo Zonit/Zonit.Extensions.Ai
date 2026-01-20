@@ -36,7 +36,7 @@ public class Grok4 : XReasoningBase
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
-    
+
     /// <inheritdoc />
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |

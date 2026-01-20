@@ -11,28 +11,28 @@ public class GPT52 : OpenAiReasoningBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 2.00m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 10.00m;
-    
+
     /// <inheritdoc />
     public override decimal? PriceCachedInput => 0.50m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 1.00m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceOutput => 5.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 400_000;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 128_000;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 

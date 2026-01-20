@@ -19,7 +19,7 @@ public static class GoogleServiceCollectionExtensions
     {
         return services.AddGoogle(options => options.Google.ApiKey = apiKey);
     }
-    
+
     /// <summary>
     /// Adds Google provider with configuration.
     /// </summary>
@@ -30,10 +30,10 @@ public static class GoogleServiceCollectionExtensions
     {
         services.AddAi(configure);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, GoogleProvider>());
-        
+
         services.AddHttpClient<GoogleProvider>()
             .AddStandardResilienceHandler();
-        
+
         return services;
     }
 }

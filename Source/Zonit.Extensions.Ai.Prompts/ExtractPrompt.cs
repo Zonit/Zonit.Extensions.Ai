@@ -13,13 +13,13 @@ public class ExtractResponse<T>
     /// </summary>
     [Description("Extracted structured data")]
     public required T Data { get; set; }
-    
+
     /// <summary>
     /// Confidence score (0-1).
     /// </summary>
     [Description("Extraction confidence score from 0.0 to 1.0")]
     public double Confidence { get; set; }
-    
+
     /// <summary>
     /// Fields that could not be extracted.
     /// </summary>
@@ -34,16 +34,16 @@ public class PersonInfo
 {
     [Description("Full name of the person")]
     public string? Name { get; set; }
-    
+
     [Description("Email address")]
     public string? Email { get; set; }
-    
+
     [Description("Phone number")]
     public string? Phone { get; set; }
-    
+
     [Description("Company or organization")]
     public string? Company { get; set; }
-    
+
     [Description("Job title or position")]
     public string? Title { get; set; }
 }
@@ -66,7 +66,7 @@ public class ExtractContactPrompt : PromptBase<ExtractResponse<PersonInfo>>
     /// Text to extract contact information from.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Extract contact information from the following text.
@@ -86,16 +86,16 @@ public class ProductInfo
 {
     [Description("Product name")]
     public string? Name { get; set; }
-    
+
     [Description("Product price as decimal")]
     public decimal? Price { get; set; }
-    
+
     [Description("Currency code (USD, EUR, PLN, etc.)")]
     public string? Currency { get; set; }
-    
+
     [Description("Product category")]
     public string? Category { get; set; }
-    
+
     [Description("Key features")]
     public List<string>? Features { get; set; }
 }
@@ -109,7 +109,7 @@ public class ExtractProductPrompt : PromptBase<ExtractResponse<ProductInfo>>
     /// Text to extract product information from.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Extract product information from the following text.

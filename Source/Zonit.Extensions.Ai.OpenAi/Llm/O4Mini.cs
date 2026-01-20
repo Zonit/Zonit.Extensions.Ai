@@ -10,28 +10,28 @@ public class O4Mini : OpenAiReasoningBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 1.10m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 4.40m;
-    
+
     /// <inheritdoc />
     public override decimal? PriceCachedInput => 0.275m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 0.55m;
-    
+
     /// <inheritdoc />
     public override decimal? BatchPriceOutput => 2.20m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 200_000;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 100_000;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 

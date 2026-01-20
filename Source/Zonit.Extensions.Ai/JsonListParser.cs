@@ -202,7 +202,7 @@ public static partial class JsonListParser
     private static List<T> ParsePrimitiveList<T>(string text, JsonSerializerOptions options)
     {
         var result = new List<T>();
-        
+
         // Try to extract numbers or values
         var pattern = typeof(T) == typeof(int) || typeof(T) == typeof(long)
             ? IntegerPattern()
@@ -226,7 +226,7 @@ public static partial class JsonListParser
     {
         // Remove common list prefixes: "1.", "1)", "-", "*", "•", "→"
         var cleaned = ListPrefixPattern().Replace(item, "").Trim();
-        
+
         // Remove quotes if wrapped
         if (cleaned.StartsWith('"') && cleaned.EndsWith('"') && cleaned.Length > 2)
             cleaned = cleaned[1..^1];

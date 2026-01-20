@@ -20,57 +20,57 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
     /// Override to provide system message/instruction.
     /// </summary>
     public virtual string? System => null;
-    
+
     /// <summary>
     /// Override to provide the prompt with Scriban syntax.
     /// Properties are available as snake_case (e.g., MyProperty -> {{ my_property }}).
     /// </summary>
     public abstract string Prompt { get; }
-    
+
     /// <summary>
     /// Gets the rendered prompt text.
     /// </summary>
     public string Text => RenderTemplate();
-    
+
     /// <summary>
     /// Files attached to this prompt.
     /// </summary>
     public virtual IReadOnlyList<AiFile>? Files { get; init; }
-    
+
     private string RenderTemplate()
     {
         var template = Scriban.Template.Parse(Prompt);
-        
+
         if (template.HasErrors)
             throw new InvalidOperationException($"Template parse error: {string.Join(", ", template.Messages)}");
-        
+
         var scriptObject = new ScriptObject();
-        
+
         // Add all public properties as snake_case
         foreach (var prop in GetType().GetProperties())
         {
             if (prop.Name is nameof(System) or nameof(Text) or nameof(Files) or nameof(Prompt))
                 continue;
-                
+
             var value = prop.GetValue(this);
             var snakeName = ToSnakeCase(prop.Name);
             scriptObject.Add(snakeName, value);
         }
-        
+
         var context = new TemplateContext();
         context.PushGlobal(scriptObject);
-        
+
         return template.Render(context);
     }
-    
+
     private static string ToSnakeCase(string name)
     {
         var result = new System.Text.StringBuilder();
-        
+
         for (var i = 0; i < name.Length; i++)
         {
             var c = name[i];
-            
+
             if (char.IsUpper(c))
             {
                 if (i > 0)
@@ -82,7 +82,7 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
                 result.Append(c);
             }
         }
-        
+
         return result.ToString();
     }
 }
@@ -100,13 +100,13 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
     {
         Text = text ?? throw new ArgumentNullException(nameof(text));
     }
-    
+
     /// <inheritdoc />
     public string? System { get; init; }
-    
+
     /// <inheritdoc />
     public string Text { get; }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<AiFile>? Files { get; init; }
 }
@@ -123,13 +123,13 @@ public sealed class ImagePrompt : IPrompt<AiFile>
     {
         Text = description ?? throw new ArgumentNullException(nameof(description));
     }
-    
+
     /// <inheritdoc />
     public string? System { get; init; }
-    
+
     /// <inheritdoc />
     public string Text { get; }
-    
+
     /// <inheritdoc />
     public IReadOnlyList<AiFile>? Files { get; init; }
 }

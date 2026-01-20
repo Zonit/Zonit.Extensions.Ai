@@ -34,13 +34,13 @@ public class Grok41Fast : XReasoningBase
     public override ChannelType Output => ChannelType.Text;
 
     /// <inheritdoc />
-    public override ToolsType SupportedTools => 
-        ToolsType.WebSearch | 
+    public override ToolsType SupportedTools =>
+        ToolsType.WebSearch |
         ToolsType.CodeExecution;
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
-    
+
     /// <inheritdoc />
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |

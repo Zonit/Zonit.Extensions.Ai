@@ -19,7 +19,7 @@ public static class AnthropicServiceCollectionExtensions
     {
         return services.AddAnthropic(options => options.Anthropic.ApiKey = apiKey);
     }
-    
+
     /// <summary>
     /// Adds Anthropic provider with configuration.
     /// </summary>
@@ -30,10 +30,10 @@ public static class AnthropicServiceCollectionExtensions
     {
         services.AddAi(configure);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, AnthropicProvider>());
-        
+
         services.AddHttpClient<AnthropicProvider>()
             .AddStandardResilienceHandler();
-        
+
         return services;
     }
 }

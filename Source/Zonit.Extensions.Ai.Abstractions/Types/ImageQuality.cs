@@ -9,12 +9,12 @@ public enum ImageQuality
     /// Standard quality, faster generation.
     /// </summary>
     Standard,
-    
+
     /// <summary>
     /// High quality, more detailed.
     /// </summary>
     High,
-    
+
     /// <summary>
     /// Highest quality, best details.
     /// </summary>

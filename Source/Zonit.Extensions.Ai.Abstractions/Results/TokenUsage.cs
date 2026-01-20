@@ -11,38 +11,38 @@ public sealed class TokenUsage
     /// Input/prompt tokens.
     /// </summary>
     public int InputTokens { get; init; }
-    
+
     /// <summary>
     /// Output/completion tokens.
     /// </summary>
     public int OutputTokens { get; init; }
-    
+
     /// <summary>
     /// Total tokens (input + output).
     /// </summary>
     public int TotalTokens => InputTokens + OutputTokens;
-    
+
     /// <summary>
     /// Cached input tokens (if supported by provider).
     /// Cached tokens are typically cheaper.
     /// </summary>
     public int CachedTokens { get; init; }
-    
+
     /// <summary>
     /// Reasoning/thinking tokens (for reasoning models like o1, o3).
     /// </summary>
     public int ReasoningTokens { get; init; }
-    
+
     /// <summary>
     /// Cost of input tokens.
     /// </summary>
     public Price InputCost { get; init; }
-    
+
     /// <summary>
     /// Cost of output tokens.
     /// </summary>
     public Price OutputCost { get; init; }
-    
+
     /// <summary>
     /// Total cost (input + output).
     /// </summary>

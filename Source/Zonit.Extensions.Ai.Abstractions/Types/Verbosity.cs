@@ -9,12 +9,12 @@ public enum Verbosity
     /// Concise responses with minimal elaboration.
     /// </summary>
     Low,
-    
+
     /// <summary>
     /// Balanced detail and brevity (default).
     /// </summary>
     Medium,
-    
+
     /// <summary>
     /// Detailed, comprehensive responses with full elaboration.
     /// </summary>

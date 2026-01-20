@@ -18,10 +18,10 @@ public static class AiCostCalculator
     public static Price CalculateInputCost(ILlm llm, int inputTokens, int cachedTokens = 0)
     {
         var inputPrice = llm.GetInputPrice(inputTokens);
-        
+
         // Prices are per 1M tokens
         var inputCost = (inputTokens / 1_000_000m) * inputPrice;
-        
+
         // Apply cached tokens discount if model supports it
         if (cachedTokens > 0 && llm is ITextLlm textLlm && textLlm.PriceCachedInput.HasValue)
         {
@@ -30,10 +30,10 @@ public static class AiCostCalculator
             var nonCachedTokens = inputTokens - cachedTokens;
             inputCost = (nonCachedTokens / 1_000_000m) * inputPrice + cachedCost;
         }
-        
+
         return new Price(inputCost);
     }
-    
+
     /// <summary>
     /// Calculates the output cost for a text generation operation.
     /// </summary>
@@ -46,7 +46,7 @@ public static class AiCostCalculator
         var outputCost = (outputTokens / 1_000_000m) * outputPrice;
         return new Price(outputCost);
     }
-    
+
     /// <summary>
     /// Calculates the total cost for a text generation operation.
     /// </summary>
@@ -59,7 +59,7 @@ public static class AiCostCalculator
         var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
         return inputCost + outputCost;
     }
-    
+
     /// <summary>
     /// Calculates input and output costs separately.
     /// </summary>
@@ -72,7 +72,7 @@ public static class AiCostCalculator
         var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
         return (inputCost, outputCost);
     }
-    
+
     /// <summary>
     /// Calculates the total cost for a batch operation.
     /// Batch operations typically have 50% discount.
@@ -84,13 +84,13 @@ public static class AiCostCalculator
     {
         var inputPrice = llm.BatchPriceInput ?? llm.PriceInput * 0.5m;
         var outputPrice = llm.BatchPriceOutput ?? llm.PriceOutput * 0.5m;
-        
+
         var inputCost = (usage.InputTokens / 1_000_000m) * inputPrice;
         var outputCost = (usage.OutputTokens / 1_000_000m) * outputPrice;
-        
+
         return new Price(inputCost + outputCost);
     }
-    
+
     /// <summary>
     /// Calculates the cost for image generation.
     /// </summary>
@@ -102,7 +102,7 @@ public static class AiCostCalculator
         // Image models typically have per-image pricing
         return new Price(llm.PriceOutput * imageCount);
     }
-    
+
     /// <summary>
     /// Calculates the cost for embedding operations.
     /// </summary>
@@ -114,7 +114,7 @@ public static class AiCostCalculator
         var inputCost = (inputTokens / 1_000_000m) * llm.PriceInput;
         return new Price(inputCost);
     }
-    
+
     /// <summary>
     /// Calculates the cost for audio transcription.
     /// </summary>
@@ -127,7 +127,7 @@ public static class AiCostCalculator
         var minutes = durationSeconds / 60.0m;
         return new Price(llm.PriceInput * minutes);
     }
-    
+
     /// <summary>
     /// Estimates the cost for a prompt before sending.
     /// Uses approximate token count (4 chars = 1 token).
@@ -139,10 +139,10 @@ public static class AiCostCalculator
     public static Price EstimateCost(ILlm llm, string promptText, int estimatedOutputTokens = 500)
     {
         var estimatedInputTokens = (promptText.Length / 4) + 10; // Add buffer
-        
+
         var inputCost = (estimatedInputTokens / 1_000_000m) * llm.PriceInput;
         var outputCost = (estimatedOutputTokens / 1_000_000m) * llm.PriceOutput;
-        
+
         return new Price(inputCost + outputCost);
     }
 }

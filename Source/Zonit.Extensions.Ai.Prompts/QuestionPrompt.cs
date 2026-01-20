@@ -12,19 +12,19 @@ public class AnswerResponse
     /// </summary>
     [Description("The answer to the question")]
     public required string Answer { get; set; }
-    
+
     /// <summary>
     /// Confidence score (0-1).
     /// </summary>
     [Description("Confidence score from 0.0 to 1.0")]
     public double Confidence { get; set; }
-    
+
     /// <summary>
     /// Sources or references used.
     /// </summary>
     [Description("Sources or references that support the answer")]
     public List<string>? Sources { get; set; }
-    
+
     /// <summary>
     /// Whether the answer is based on the provided context or general knowledge.
     /// </summary>
@@ -51,17 +51,17 @@ public class QuestionPrompt : PromptBase<AnswerResponse>
     /// The question to answer.
     /// </summary>
     public required string Question { get; init; }
-    
+
     /// <summary>
     /// Optional context to base the answer on.
     /// </summary>
     public string? Context { get; init; }
-    
+
     /// <summary>
     /// Whether to restrict answers to provided context only.
     /// </summary>
     public bool StrictContext { get; init; } = false;
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 {{~ if context ~}}

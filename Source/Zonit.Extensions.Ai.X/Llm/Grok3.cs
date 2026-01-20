@@ -34,7 +34,7 @@ public class Grok3 : XChatBase
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
-    
+
     /// <inheritdoc />
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |

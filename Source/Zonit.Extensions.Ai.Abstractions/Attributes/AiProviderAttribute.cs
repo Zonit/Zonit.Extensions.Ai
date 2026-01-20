@@ -12,7 +12,7 @@ public sealed class AiProviderAttribute : Attribute
     /// Provider identifier (e.g., "openai", "anthropic", "google", "x").
     /// </summary>
     public string ProviderId { get; }
-    
+
     /// <summary>
     /// Creates a new provider attribute.
     /// </summary>

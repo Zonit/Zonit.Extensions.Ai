@@ -51,10 +51,10 @@ public class TestPromptResponse
 {
     [Description("Summary of the test prompt values.")]
     public string? Summary { get; set; }
-    
+
     [Description("The test number that was provided.")]
     public int TestNumber { get; set; }
-    
+
     [Description("Whether the system was enabled.")]
     public bool WasEnabled { get; set; }
 }

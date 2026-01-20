@@ -19,7 +19,7 @@ public static class OpenAiServiceCollectionExtensions
     {
         return services.AddOpenAi(options => options.OpenAi.ApiKey = apiKey);
     }
-    
+
     /// <summary>
     /// Adds OpenAI provider with configuration.
     /// </summary>
@@ -30,14 +30,14 @@ public static class OpenAiServiceCollectionExtensions
     {
         // Ensure core AI services are registered
         services.AddAi(configure);
-        
+
         // Register OpenAI provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, OpenAiProvider>());
-        
+
         // Register HttpClient with resilience
         services.AddHttpClient<OpenAiProvider>()
             .AddStandardResilienceHandler();
-        
+
         return services;
     }
 }

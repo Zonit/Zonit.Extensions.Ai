@@ -19,7 +19,7 @@ public static class XServiceCollectionExtensions
     {
         return services.AddX(options => options.X.ApiKey = apiKey);
     }
-    
+
     /// <summary>
     /// Adds X provider with configuration.
     /// </summary>
@@ -30,10 +30,10 @@ public static class XServiceCollectionExtensions
     {
         services.AddAi(configure);
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, XProvider>());
-        
+
         services.AddHttpClient<XProvider>()
             .AddStandardResilienceHandler();
-        
+
         return services;
     }
 }

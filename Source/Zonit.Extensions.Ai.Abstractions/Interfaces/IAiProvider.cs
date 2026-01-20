@@ -10,7 +10,7 @@ namespace Zonit.Extensions.Ai;
 public interface IAiProvider
 {
     #region Text Generation
-    
+
     /// <summary>
     /// Generates a structured response from a typed prompt.
     /// </summary>
@@ -20,7 +20,7 @@ public interface IAiProvider
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Generates a text response from a simple string prompt.
     /// </summary>
@@ -30,11 +30,11 @@ public interface IAiProvider
         ILlm llm,
         string prompt,
         CancellationToken cancellationToken = default);
-    
+
     #endregion
-    
+
     #region Image Generation
-    
+
     /// <summary>
     /// Generates an image from a text description.
     /// </summary>
@@ -42,11 +42,11 @@ public interface IAiProvider
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default);
-    
+
     #endregion
-    
+
     #region Embeddings
-    
+
     /// <summary>
     /// Generates text embeddings (vector representation).
     /// </summary>
@@ -56,11 +56,11 @@ public interface IAiProvider
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default);
-    
+
     #endregion
-    
+
     #region Audio
-    
+
     /// <summary>
     /// Transcribes audio to text.
     /// </summary>
@@ -71,11 +71,11 @@ public interface IAiProvider
         AiFile audioFile,
         string? language = null,
         CancellationToken cancellationToken = default);
-    
+
     #endregion
-    
+
     #region Streaming
-    
+
     /// <summary>
     /// Streams a text response token by token.
     /// </summary>
@@ -85,35 +85,35 @@ public interface IAiProvider
         ILlm llm,
         string prompt,
         CancellationToken cancellationToken = default);
-    
+
     #endregion
-    
+
     #region Cost Calculation
-    
+
     /// <summary>
     /// Calculates cost for text model based on token counts.
     /// </summary>
     Price CalculateCost(ILlm llm, int inputTokens, int outputTokens);
-    
+
     /// <summary>
     /// Calculates cost for image generation.
     /// </summary>
     Price CalculateCost(IImageLlm llm, int imageCount = 1);
-    
+
     /// <summary>
     /// Calculates cost for embedding.
     /// </summary>
     Price CalculateCost(IEmbeddingLlm llm, int inputTokens);
-    
+
     /// <summary>
     /// Calculates cost for audio transcription.
     /// </summary>
     Price CalculateCost(IAudioLlm llm, int durationSeconds);
-    
+
     /// <summary>
     /// Estimates cost for a prompt before sending.
     /// </summary>
     Price EstimateCost(ILlm llm, string promptText, int estimatedOutputTokens = 500);
-    
+
     #endregion
 }

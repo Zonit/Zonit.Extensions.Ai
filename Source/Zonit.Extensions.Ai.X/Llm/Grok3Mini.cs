@@ -34,7 +34,7 @@ public class Grok3Mini : XReasoningBase
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
-    
+
     /// <inheritdoc />
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |

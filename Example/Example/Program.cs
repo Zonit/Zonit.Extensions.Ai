@@ -39,13 +39,13 @@ internal class Program
 
         // Get API key from configuration
         var apiKey = builder.Configuration["OpenAi:ApiKey"] ?? "";
-        
+
         // Register AI with OpenAI provider - single call!
         builder.Services.AddOpenAi(options =>
         {
             options.OpenAi.ApiKey = apiKey;
         });
-        
+
         builder.Services.AddHostedService<TextBackground>();
 
         var app = builder.Build();

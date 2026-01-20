@@ -12,19 +12,19 @@ public class ClassifyResponse
     /// </summary>
     [Description("The selected category from the provided options")]
     public required string Category { get; set; }
-    
+
     /// <summary>
     /// Confidence score (0-1).
     /// </summary>
     [Description("Classification confidence score from 0.0 to 1.0")]
     public double Confidence { get; set; }
-    
+
     /// <summary>
     /// Reasoning for the classification.
     /// </summary>
     [Description("Brief explanation of why this category was chosen")]
     public string? Reasoning { get; set; }
-    
+
     /// <summary>
     /// Alternative categories with scores.
     /// </summary>
@@ -51,17 +51,17 @@ public class ClassifyPrompt : PromptBase<ClassifyResponse>
     /// Text to classify.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <summary>
     /// Available categories.
     /// </summary>
     public required List<string> Categories { get; init; }
-    
+
     /// <summary>
     /// Include alternative categories with scores.
     /// </summary>
     public bool IncludeAlternatives { get; init; } = false;
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Classify the following text into one of these categories:
@@ -88,7 +88,7 @@ public class MultiLabelResponse
     /// </summary>
     [Description("Selected labels with their confidence scores")]
     public required Dictionary<string, double> Labels { get; set; }
-    
+
     /// <summary>
     /// Reasoning for the selection.
     /// </summary>
@@ -105,17 +105,17 @@ public class MultiLabelPrompt : PromptBase<MultiLabelResponse>
     /// Text to classify.
     /// </summary>
     public required string Content { get; init; }
-    
+
     /// <summary>
     /// Available labels.
     /// </summary>
     public required List<string> Labels { get; init; }
-    
+
     /// <summary>
     /// Minimum confidence threshold for a label to be included.
     /// </summary>
     public double MinConfidence { get; init; } = 0.5;
-    
+
     /// <inheritdoc />
     public override string Prompt => @"
 Classify the following text with ALL applicable labels from this list:

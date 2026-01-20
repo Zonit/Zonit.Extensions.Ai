@@ -56,7 +56,7 @@ public static partial class JsonResponseParser
 
         // For complex types, extract JSON and parse
         var json = ExtractJson(response);
-        
+
         try
         {
             return JsonSerializer.Deserialize<T>(json, opts)
@@ -130,7 +130,7 @@ public static partial class JsonResponseParser
     public static string ExtractTextContent(string response)
     {
         var trimmed = response.Trim();
-        
+
         // Remove markdown code blocks
         trimmed = RemoveMarkdownCodeBlocks(trimmed);
 
@@ -154,7 +154,7 @@ public static partial class JsonResponseParser
             {
                 using var doc = JsonDocument.Parse(trimmed);
                 var root = doc.RootElement;
-                
+
                 // Try common text field names
                 string[] textFields = ["text", "content", "message", "result", "response", "answer", "output"];
                 foreach (var field in textFields)
@@ -184,17 +184,17 @@ public static partial class JsonResponseParser
     {
         // Remove trailing commas before } or ]
         json = TrailingCommaPattern().Replace(json, "$1");
-        
+
         // Fix common escape issues
         json = json.Replace("\\'", "'");
-        
+
         return json;
     }
 
     private static int ParseInt(string response)
     {
         var text = ExtractTextContent(response);
-        
+
         // Try direct parse
         if (int.TryParse(text, out var result))
             return result;
@@ -210,7 +210,7 @@ public static partial class JsonResponseParser
     private static long ParseLong(string response)
     {
         var text = ExtractTextContent(response);
-        
+
         if (long.TryParse(text, out var result))
             return result;
 
@@ -224,7 +224,7 @@ public static partial class JsonResponseParser
     private static double ParseDouble(string response)
     {
         var text = ExtractTextContent(response);
-        
+
         if (double.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var result))
             return result;
 
@@ -238,7 +238,7 @@ public static partial class JsonResponseParser
     private static decimal ParseDecimal(string response)
     {
         var text = ExtractTextContent(response);
-        
+
         if (decimal.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var result))
             return result;
 

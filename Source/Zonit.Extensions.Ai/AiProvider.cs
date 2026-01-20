@@ -27,7 +27,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating with {Provider}/{Model}", provider.Name, llm.Name);
-        
+
         return await provider.GenerateAsync(llm, prompt, cancellationToken);
     }
 
@@ -52,7 +52,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
-        
+
         return await provider.GenerateImageAsync(llm, new ImagePrompt(description), cancellationToken);
     }
 
@@ -68,7 +68,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Embedding with {Provider}/{Model}", provider.Name, llm.Name);
-        
+
         return await provider.EmbedAsync(llm, input, cancellationToken);
     }
 
@@ -85,7 +85,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Transcribing with {Provider}/{Model}", provider.Name, llm.Name);
-        
+
         return await provider.TranscribeAsync(llm, audioFile, language, cancellationToken);
     }
 
@@ -101,7 +101,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Streaming with {Provider}/{Model}", provider.Name, llm.Name);
-        
+
         return provider.StreamAsync<string>(llm, new SimplePrompt<string>(prompt), cancellationToken);
     }
 
@@ -114,10 +114,10 @@ internal sealed class AiProvider : IAiProvider
     {
         var inputPrice = llm.GetInputPrice(inputTokens);
         var outputPrice = llm.GetOutputPrice(outputTokens);
-        
+
         var inputCost = (inputTokens / 1_000_000m) * inputPrice;
         var outputCost = (outputTokens / 1_000_000m) * outputPrice;
-        
+
         return new Price(inputCost + outputCost);
     }
 
@@ -153,7 +153,7 @@ internal sealed class AiProvider : IAiProvider
     private IModelProvider GetProviderForModel(ILlm llm)
     {
         var provider = _providers.FirstOrDefault(p => p.SupportsModel(llm));
-        
+
         if (provider is null)
         {
             var available = string.Join(", ", _providers.Select(p => p.Name));
@@ -162,7 +162,7 @@ internal sealed class AiProvider : IAiProvider
                 $"Available providers: [{available}]. " +
                 $"Make sure you've installed the correct provider package (e.g., Zonit.Extensions.Ai.OpenAi).");
         }
-        
+
         return provider;
     }
 }

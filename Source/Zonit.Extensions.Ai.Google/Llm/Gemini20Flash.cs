@@ -10,19 +10,19 @@ public class Gemini20Flash : GoogleBase
 
     /// <inheritdoc />
     public override decimal PriceInput => 0.10m;
-    
+
     /// <inheritdoc />
     public override decimal PriceOutput => 0.40m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_048_576;
-    
+
     /// <inheritdoc />
     public override int MaxOutputTokens => 8_192;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image | ChannelType.Audio;
-    
+
     /// <inheritdoc />
     public override ChannelType Output => ChannelType.Text;
 
