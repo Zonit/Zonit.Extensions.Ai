@@ -217,10 +217,13 @@ public sealed class DeepSeekProvider : IModelProvider
             ["max_tokens"] = llm.MaxTokens
         };
 
+        // Only send temperature/top_p if not default - OpenAI-compatible API recommends altering one, not both
         if (llm is DeepSeekBase deepSeekLlm)
         {
-            request["temperature"] = deepSeekLlm.Temperature;
-            request["top_p"] = deepSeekLlm.TopP;
+            if (deepSeekLlm.Temperature < 1.0)
+                request["temperature"] = deepSeekLlm.Temperature;
+            if (deepSeekLlm.TopP < 1.0)
+                request["top_p"] = deepSeekLlm.TopP;
         }
 
         // Structured output

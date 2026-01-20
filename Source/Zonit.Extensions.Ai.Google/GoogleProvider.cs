@@ -230,7 +230,21 @@ public sealed class GoogleProvider : IModelProvider
 
         if (prompt.Files != null)
         {
+            // Images support
             foreach (var file in prompt.Files.Where(f => f.IsImage))
+            {
+                parts.Insert(0, new
+                {
+                    inlineData = new
+                    {
+                        mimeType = file.MimeType,
+                        data = file.ToBase64()
+                    }
+                });
+            }
+
+            // PDF document support (Gemini supports PDFs natively)
+            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.MimeType == "application/pdf"))
             {
                 parts.Insert(0, new
                 {
@@ -254,10 +268,13 @@ public sealed class GoogleProvider : IModelProvider
             ["maxOutputTokens"] = llm.MaxTokens
         };
 
+        // Only send temperature/topP if not default - Google accepts both but cleaner to send only non-defaults
         if (llm is GoogleBase googleLlm)
         {
-            config["temperature"] = googleLlm.Temperature;
-            config["topP"] = googleLlm.TopP;
+            if (googleLlm.Temperature < 1.0)
+                config["temperature"] = googleLlm.Temperature;
+            if (googleLlm.TopP < 1.0)
+                config["topP"] = googleLlm.TopP;
         }
 
         // Structured output

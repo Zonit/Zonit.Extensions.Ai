@@ -244,10 +244,20 @@ public sealed class AnthropicProvider : IModelProvider
         request["messages"] = new[] { new { role = "user", content } };
 
         // Model-specific settings
+        // Anthropic API does not allow both temperature and top_p to be set simultaneously
+        // Only send one parameter, and only if it's not the default value
         if (llm is AnthropicBase anthropicLlm)
         {
-            request["temperature"] = anthropicLlm.Temperature;
-            request["top_p"] = anthropicLlm.TopP;
+            // Prefer top_p if explicitly set (not default 1.0), otherwise use temperature if not default
+            if (anthropicLlm.TopP < 1.0)
+            {
+                request["top_p"] = anthropicLlm.TopP;
+            }
+            else if (anthropicLlm.Temperature < 1.0)
+            {
+                request["temperature"] = anthropicLlm.Temperature;
+            }
+            // If both are default (1.0), don't send either - Anthropic uses its own defaults
         }
 
         // Extended thinking

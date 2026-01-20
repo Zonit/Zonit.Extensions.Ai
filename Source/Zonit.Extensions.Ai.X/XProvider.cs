@@ -228,10 +228,13 @@ public sealed class XProvider : IModelProvider
             ["max_tokens"] = llm.MaxTokens
         };
 
+        // Only send temperature/top_p if not default - OpenAI-compatible API recommends altering one, not both
         if (llm is XChatBase xLlm)
         {
-            request["temperature"] = xLlm.Temperature;
-            request["top_p"] = xLlm.TopP;
+            if (xLlm.Temperature < 1.0)
+                request["temperature"] = xLlm.Temperature;
+            if (xLlm.TopP < 1.0)
+                request["top_p"] = xLlm.TopP;
 
             // WebSearch support
             if (xLlm.WebSearch.Mode != ModeType.Never)

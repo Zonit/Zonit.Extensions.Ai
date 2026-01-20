@@ -401,10 +401,13 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         // Model-specific settings - Responses API format
+        // Only send temperature/top_p if not default (1.0) - OpenAI recommends altering one, not both
         if (llm is OpenAiChatBase textLlm)
         {
-            request["temperature"] = textLlm.Temperature;
-            request["top_p"] = textLlm.TopP;
+            if (textLlm.Temperature < 1.0)
+                request["temperature"] = textLlm.Temperature;
+            if (textLlm.TopP < 1.0)
+                request["top_p"] = textLlm.TopP;
         }
         else if (llm is OpenAiReasoningBase reasoningLlm)
         {

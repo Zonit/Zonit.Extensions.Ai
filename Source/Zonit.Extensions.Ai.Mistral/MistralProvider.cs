@@ -254,10 +254,13 @@ public sealed class MistralProvider : IModelProvider
             ["max_tokens"] = llm.MaxTokens
         };
 
+        // Only send temperature/top_p if not default - Mistral recommends altering one, not both
         if (llm is MistralBase mistralLlm)
         {
-            request["temperature"] = mistralLlm.Temperature;
-            request["top_p"] = mistralLlm.TopP;
+            if (mistralLlm.Temperature < 1.0)
+                request["temperature"] = mistralLlm.Temperature;
+            if (mistralLlm.TopP < 1.0)
+                request["top_p"] = mistralLlm.TopP;
         }
 
         // Structured output
