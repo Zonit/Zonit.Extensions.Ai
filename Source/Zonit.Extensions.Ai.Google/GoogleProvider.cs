@@ -8,7 +8,6 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.Google;
 
@@ -51,7 +50,7 @@ public sealed class GoogleProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -96,26 +95,29 @@ public sealed class GoogleProvider : IModelProvider
             OutputTokens = outputTokens
         });
 
-        return new AiResult<TResponse>
+        return new Result<TResponse>
         {
             Value = result,
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = prompt.GetType().Name.Replace("Prompt", ""),
-            Duration = stopwatch.Elapsed,
-            Usage = new TokenUsage
+            MetaData = new MetaData
             {
-                InputTokens = inputTokens,
-                OutputTokens = outputTokens,
-                ReasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0,
-                InputCost = inputCost,
-                OutputCost = outputCost
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    ReasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
             }
         };
     }
 
     /// <inheritdoc />
-    public Task<AiResult<AiFile>> GenerateImageAsync(
+    public Task<Result<AiFile>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<AiFile> prompt,
         CancellationToken cancellationToken = default)
@@ -126,7 +128,7 @@ public sealed class GoogleProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<float[]>> EmbedAsync(
+    public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default)
@@ -151,14 +153,17 @@ public sealed class GoogleProvider : IModelProvider
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var embeddingResponse = JsonSerializer.Deserialize<EmbeddingResponse>(responseJson, JsonOptions);
 
-        return new AiResult<float[]>
+        return new Result<float[]>
         {
             Value = embeddingResponse?.Embedding?.Values ?? [],
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = "Embedding",
-            Duration = stopwatch.Elapsed,
-            Usage = new TokenUsage()
+            MetaData = new MetaData
+            {
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = "Embedding",
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage()
+            }
         };
     }
 
@@ -199,7 +204,7 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<AiResult<string>> TranscribeAsync(
+    public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         AiFile audioFile,
         string? language = null,

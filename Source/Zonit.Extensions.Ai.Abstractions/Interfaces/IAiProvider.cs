@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai;
 
@@ -16,7 +15,7 @@ public interface IAiProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<AiResult<TResponse>> GenerateAsync<TResponse>(
+    Task<Result<TResponse>> GenerateAsync<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
@@ -26,7 +25,7 @@ public interface IAiProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<AiResult<string>> GenerateAsync(
+    Task<Result<string>> GenerateAsync(
         ILlm llm,
         string prompt,
         CancellationToken cancellationToken = default);
@@ -38,7 +37,7 @@ public interface IAiProvider
     /// <summary>
     /// Generates an image from a text description.
     /// </summary>
-    Task<AiResult<AiFile>> GenerateAsync(
+    Task<Result<AiFile>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default);
@@ -52,7 +51,7 @@ public interface IAiProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<AiResult<float[]>> GenerateAsync(
+    Task<Result<float[]>> GenerateAsync(
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default);
@@ -66,7 +65,7 @@ public interface IAiProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<AiResult<string>> GenerateAsync(
+    Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
         AiFile audioFile,
         string? language = null,

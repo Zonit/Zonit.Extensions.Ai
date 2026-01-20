@@ -26,7 +26,7 @@ public interface IModelProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    Task<AiResult<TResponse>> GenerateAsync<TResponse>(
+    Task<Result<TResponse>> GenerateAsync<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
@@ -34,7 +34,7 @@ public interface IModelProvider
     /// <summary>
     /// Generates an image.
     /// </summary>
-    Task<AiResult<AiFile>> GenerateImageAsync(
+    Task<Result<AiFile>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<AiFile> prompt,
         CancellationToken cancellationToken = default);
@@ -44,7 +44,7 @@ public interface IModelProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    Task<AiResult<float[]>> EmbedAsync(
+    Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default);
@@ -64,7 +64,7 @@ public interface IModelProvider
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    Task<AiResult<string>> TranscribeAsync(
+    Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         AiFile audioFile,
         string? language = null,

@@ -9,7 +9,6 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.OpenAi;
 
@@ -52,7 +51,7 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -101,22 +100,25 @@ public sealed class OpenAiProvider : IModelProvider
             CachedTokens = cachedTokens
         });
 
-        return new AiResult<TResponse>
+        return new Result<TResponse>
         {
             Value = result,
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = prompt.GetType().Name.Replace("Prompt", ""),
-            Duration = stopwatch.Elapsed,
-            RequestId = openAiResponse.Id,
-            Usage = new TokenUsage
+            MetaData = new MetaData
             {
-                InputTokens = inputTokens,
-                OutputTokens = outputTokens,
-                CachedTokens = cachedTokens,
-                ReasoningTokens = openAiResponse.Usage?.OutputTokensDetails?.ReasoningTokens ?? 0,
-                InputCost = inputCost,
-                OutputCost = outputCost
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                RequestId = openAiResponse.Id,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    CachedTokens = cachedTokens,
+                    ReasoningTokens = openAiResponse.Usage?.OutputTokensDetails?.ReasoningTokens ?? 0,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
             }
         };
     }
@@ -124,7 +126,7 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<AiFile>> GenerateImageAsync(
+    public async Task<Result<AiFile>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<AiFile> prompt,
         CancellationToken cancellationToken = default)
@@ -165,16 +167,19 @@ public sealed class OpenAiProvider : IModelProvider
 
         var imageCost = AiCostCalculator.CalculateImageCost(imageLlm);
 
-        return new AiResult<AiFile>
+        return new Result<AiFile>
         {
             Value = file,
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = prompt.GetType().Name.Replace("Prompt", ""),
-            Duration = stopwatch.Elapsed,
-            Usage = new TokenUsage
+            MetaData = new MetaData
             {
-                OutputCost = imageCost
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage
+                {
+                    OutputCost = imageCost
+                }
             }
         };
     }
@@ -182,7 +187,7 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<float[]>> EmbedAsync(
+    public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default)
@@ -210,17 +215,20 @@ public sealed class OpenAiProvider : IModelProvider
         var inputTokens = embeddingResponse.Usage?.PromptTokens ?? 0;
         var embeddingCost = AiCostCalculator.CalculateEmbeddingCost(llm, inputTokens);
 
-        return new AiResult<float[]>
+        return new Result<float[]>
         {
             Value = embeddingResponse.Data[0].Embedding,
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = "Embedding",
-            Duration = stopwatch.Elapsed,
-            Usage = new TokenUsage
+            MetaData = new MetaData
             {
-                InputTokens = inputTokens,
-                InputCost = embeddingCost
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = "Embedding",
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    InputCost = embeddingCost
+                }
             }
         };
     }
@@ -262,7 +270,7 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<AiResult<string>> TranscribeAsync(
+    public async Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         AiFile audioFile,
         string? language = null,
@@ -284,14 +292,17 @@ public sealed class OpenAiProvider : IModelProvider
 
         var result = await response.Content.ReadFromJsonAsync<TranscriptionResponse>(cancellationToken: cancellationToken);
 
-        return new AiResult<string>
+        return new Result<string>
         {
             Value = result?.Text ?? "",
-            Model = llm.Name,
-            Provider = Name,
-            PromptName = "Transcription",
-            Duration = stopwatch.Elapsed,
-            Usage = new TokenUsage()
+            MetaData = new MetaData
+            {
+                Model = llm.Name,
+                Provider = Name,
+                PromptName = "Transcription",
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage()
+            }
         };
     }
 

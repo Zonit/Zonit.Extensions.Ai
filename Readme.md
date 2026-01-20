@@ -201,30 +201,63 @@ var result = await aiClient.GenerateAsync(
     new TranslatePrompt { Content = "Hello!", Language = "Polish" }
 );
 Console.WriteLine(result.Value.TranslatedText); // "Cześć!"
-Console.WriteLine(result.PromptName); // "Translate" (auto-generated)
+Console.WriteLine(result.MetaData.PromptName); // "Translate" (auto-generated)
 ```
 
 ---
 
 ## Cost Calculation
 
-All results include calculated costs using the `Price` value object:
+All results include a `MetaData` object with calculated costs using the `Price` value object:
 
 ```csharp
 var result = await aiClient.GenerateAsync(new GPT51(), prompt);
 
-// Token usage
-Console.WriteLine($"Tokens: {result.Usage.InputTokens} in / {result.Usage.OutputTokens} out");
-Console.WriteLine($"Total tokens: {result.Usage.TotalTokens}");
-Console.WriteLine($"Cached tokens: {result.Usage.CachedTokens}");
+// Token usage (via MetaData)
+Console.WriteLine($"Tokens: {result.MetaData.InputTokens} in / {result.MetaData.OutputTokens} out");
+Console.WriteLine($"Total tokens: {result.MetaData.TotalTokens}");
+Console.WriteLine($"Cached tokens: {result.MetaData.Usage.CachedTokens}");
 
 // Cost breakdown (Price value object from Zonit.Extensions)
-Console.WriteLine($"Input cost: {result.InputCost}");      // e.g. 0.01
-Console.WriteLine($"Output cost: {result.OutputCost}");    // e.g. 0.03
-Console.WriteLine($"Total cost: {result.TotalCost}");      // e.g. 0.04
+Console.WriteLine($"Input cost: {result.MetaData.InputCost}");      // e.g. 0.01
+Console.WriteLine($"Output cost: {result.MetaData.OutputCost}");    // e.g. 0.03
+Console.WriteLine($"Total cost: {result.MetaData.TotalCost}");      // e.g. 0.04
 
-// Duration
-Console.WriteLine($"Duration: {result.Duration.TotalSeconds:F2}s");
+// Duration and request info
+Console.WriteLine($"Duration: {result.MetaData.Duration.TotalSeconds:F2}s");
+Console.WriteLine($"Model: {result.MetaData.Model}");
+Console.WriteLine($"Provider: {result.MetaData.Provider}");
+Console.WriteLine($"Request ID: {result.MetaData.RequestId}");
+```
+
+### Result<T> Structure
+
+```csharp
+// Result contains the value and metadata
+public class Result<T>
+{
+    public required T Value { get; init; }
+    public required MetaData MetaData { get; init; }
+}
+
+// MetaData contains all operation details
+public class MetaData
+{
+    public required string Model { get; init; }
+    public required string Provider { get; init; }
+    public required string PromptName { get; init; }
+    public required TokenUsage Usage { get; init; }
+    public TimeSpan Duration { get; init; }
+    public string? RequestId { get; init; }
+    
+    // Computed properties (shortcuts)
+    public int InputTokens => Usage.InputTokens;
+    public int OutputTokens => Usage.OutputTokens;
+    public int TotalTokens => Usage.TotalTokens;
+    public Price InputCost => Usage.InputCost;
+    public Price OutputCost => Usage.OutputCost;
+    public Price TotalCost => Usage.TotalCost;
+}
 ```
 
 ### Estimate costs before calling
@@ -293,11 +326,11 @@ The model interface determines the operation:
 
 | Interface | Method | Returns |
 |-----------|--------|---------|
-| `ILlm` | `GenerateAsync(model, string)` | `AiResult<string>` |
-| `ILlm` | `GenerateAsync(model, IPrompt<T>)` | `AiResult<T>` |
-| `IImageLlm` | `GenerateAsync(model, string)` | `AiResult<AiFile>` |
-| `IEmbeddingLlm` | `GenerateAsync(model, string)` | `AiResult<float[]>` |
-| `IAudioLlm` | `GenerateAsync(model, AiFile)` | `AiResult<string>` |
+| `ILlm` | `GenerateAsync(model, string)` | `Result<string>` |
+| `ILlm` | `GenerateAsync(model, IPrompt<T>)` | `Result<T>` |
+| `IImageLlm` | `GenerateAsync(model, string)` | `Result<AiFile>` |
+| `IEmbeddingLlm` | `GenerateAsync(model, string)` | `Result<float[]>` |
+| `IAudioLlm` | `GenerateAsync(model, AiFile)` | `Result<string>` |
 
 ---
 

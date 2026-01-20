@@ -26,7 +26,7 @@ public sealed class OpenAiOptions : AiProviderOptions
     /// Configuration section name in appsettings.json.
     /// </summary>
     public const string SectionName = "Ai:OpenAi";
-    
+
     /// <summary>
     /// OpenAI Organization ID (optional).
     /// </summary>

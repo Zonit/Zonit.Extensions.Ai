@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Logging;
-using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai;
 
@@ -20,7 +19,7 @@ internal sealed class AiProvider : IAiProvider
     #region Text Generation
 
     /// <inheritdoc />
-    public async Task<AiResult<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -32,7 +31,7 @@ internal sealed class AiProvider : IAiProvider
     }
 
     /// <inheritdoc />
-    public Task<AiResult<string>> GenerateAsync(
+    public Task<Result<string>> GenerateAsync(
         ILlm llm,
         string prompt,
         CancellationToken cancellationToken = default)
@@ -45,7 +44,7 @@ internal sealed class AiProvider : IAiProvider
     #region Image Generation
 
     /// <inheritdoc />
-    public async Task<AiResult<AiFile>> GenerateAsync(
+    public async Task<Result<AiFile>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default)
@@ -61,7 +60,7 @@ internal sealed class AiProvider : IAiProvider
     #region Embeddings
 
     /// <inheritdoc />
-    public async Task<AiResult<float[]>> GenerateAsync(
+    public async Task<Result<float[]>> GenerateAsync(
         IEmbeddingLlm llm,
         string input,
         CancellationToken cancellationToken = default)
@@ -77,7 +76,7 @@ internal sealed class AiProvider : IAiProvider
     #region Audio
 
     /// <inheritdoc />
-    public async Task<AiResult<string>> GenerateAsync(
+    public async Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
         AiFile audioFile,
         string? language = null,

@@ -29,8 +29,8 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
         Console.WriteLine($"Summary: {result.Value.Summary}");
         Console.WriteLine($"Number: {result.Value.TestNumber}");
         Console.WriteLine($"Was enabled: {result.Value.WasEnabled}");
-        Console.WriteLine($"Tokens: {result.Usage.InputTokens} in / {result.Usage.OutputTokens} out");
-        Console.WriteLine($"Duration: {result.Duration.TotalMilliseconds:F0}ms\n");
+        Console.WriteLine($"Tokens: {result.MetaData.Usage.InputTokens} in / {result.MetaData.Usage.OutputTokens} out");
+        Console.WriteLine($"Duration: {result.MetaData.Duration.TotalMilliseconds:F0}ms\n");
 
         // ===== Example 2: Simple prompt (quick usage) =====
         Console.WriteLine("2. Testing simple prompt...\n");
