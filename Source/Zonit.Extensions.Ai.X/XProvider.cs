@@ -213,10 +213,11 @@ public sealed class XProvider : IModelProvider
         {
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
+                // Use DataUrl which already contains MediaType detected from binary signature
                 content.Add(new
                 {
                     type = "image_url",
-                    image_url = new { url = file.ToDataUrl() }
+                    image_url = new { url = file.DataUrl }
                 });
             }
         }

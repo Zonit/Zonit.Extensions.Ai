@@ -232,30 +232,33 @@ public sealed class GoogleProvider : IModelProvider
 
         if (prompt.Files != null)
         {
-            // Images support - Asset auto-detects MIME type from binary data
+            // Images support - use MediaType detected from binary signature
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
                 parts.Insert(0, new
                 {
                     inlineData = new
                     {
-                        mimeType = file.ContentType.Value,
-                        data = file.ToBase64()
+                        mimeType = file.MediaType,
+                        data = file.Base64
                     }
                 });
             }
 
             // PDF document support (Gemini supports PDFs natively)
-            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.ContentType.Value == "application/pdf"))
+            foreach (var file in prompt.Files.Where(f => f.IsDocument))
             {
-                parts.Insert(0, new
+                if (file.MediaType == Asset.MimeType.ApplicationPdf)
                 {
-                    inlineData = new
+                    parts.Insert(0, new
                     {
-                        mimeType = file.ContentType.Value,
-                        data = file.ToBase64()
-                    }
-                });
+                        inlineData = new
+                        {
+                            mimeType = file.MediaType,
+                            data = file.Base64
+                        }
+                    });
+                }
             }
         }
 

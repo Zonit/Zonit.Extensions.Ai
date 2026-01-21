@@ -6,6 +6,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Xunit;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.OpenAi;
 
 namespace Zonit.Extensions.Ai.Tests.Providers;
@@ -136,10 +137,11 @@ public class OpenAiProviderTests
 
         var provider = CreateProvider();
         var model = new GPT41();
+        Asset.MimeType pngMime = Asset.MimeType.ImagePng;
         var prompt = new TestPrompt
         {
             Text = "Describe this image",
-            Files = [File.FromBytes([0x89, 0x50, 0x4E, 0x47], "image/png", "test.png")]
+            Files = [new Asset([0x89, 0x50, 0x4E, 0x47], "test.png", pngMime)]
         };
 
         // Act
@@ -159,10 +161,11 @@ public class OpenAiProviderTests
 
         var provider = CreateProvider();
         var model = new GPT41();
+        Asset.MimeType pdfMime = Asset.MimeType.ApplicationPdf;
         var prompt = new TestPrompt
         {
             Text = "Analyze this PDF",
-            Files = [File.FromBytes([0x25, 0x50, 0x44, 0x46], "application/pdf", "test.pdf")]
+            Files = [new Asset([0x25, 0x50, 0x44, 0x46], "test.pdf", pdfMime)]
         };
 
         // Act
@@ -269,14 +272,14 @@ public class OpenAiProviderTests
     {
         public string? System { get; set; }
         public required string Text { get; set; }
-        public IReadOnlyList<File>? Files { get; set; }
+        public IReadOnlyList<Asset>? Files { get; set; }
     }
 
     private class StructuredPrompt : IPrompt<StructuredResponse>
     {
         public string? System { get; set; }
         public required string Text { get; set; }
-        public IReadOnlyList<File>? Files { get; set; }
+        public IReadOnlyList<Asset>? Files { get; set; }
     }
 
     private class StructuredResponse

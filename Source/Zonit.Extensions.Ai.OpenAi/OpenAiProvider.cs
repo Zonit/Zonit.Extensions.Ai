@@ -161,7 +161,7 @@ public sealed class OpenAiProvider : IModelProvider
             throw new InvalidOperationException("No image data");
 
         var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json);
-        
+
         // Create Asset from generated image bytes
         Asset generatedImage = new(imageBytes, "generated.png");
 
@@ -349,13 +349,14 @@ public sealed class OpenAiProvider : IModelProvider
         {
             foreach (var file in prompt.Files)
             {
+                // Use DataUrl which already contains MediaType detected from binary signature
                 if (file.IsImage)
                 {
                     // Handle images using input_image type
                     content.Add(new
                     {
                         type = "input_image",
-                        image_url = file.ToDataUrl()
+                        image_url = file.DataUrl
                     });
                 }
                 else if (file.IsDocument)
@@ -364,7 +365,7 @@ public sealed class OpenAiProvider : IModelProvider
                     content.Add(new
                     {
                         type = "input_file",
-                        file_data = file.ToDataUrl(),
+                        file_data = file.DataUrl,
                         filename = file.OriginalName.Value
                     });
                 }

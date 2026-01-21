@@ -266,7 +266,7 @@ public sealed class File : IFile
     public static implicit operator File(Asset asset) => new()
     {
         Name = asset.OriginalName.Value,
-        MimeType = asset.ContentType.Value,
+        MimeType = asset.MediaType.Value,
         Data = asset.Data
     };
 

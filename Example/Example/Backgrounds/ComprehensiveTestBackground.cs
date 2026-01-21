@@ -133,7 +133,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             throw new Exception("Empty image response");
 
         if (!result.Value.IsImage)
-            throw new Exception($"Generated file is not an image: {result.Value.ContentType}");
+            throw new Exception($"Generated file is not an image: {result.Value.MediaType}");
 
         // Save the generated image to verify it worked
         var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-{Guid.NewGuid()}.png");
@@ -150,7 +150,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
         // This is exactly how Stand project calls it - with IPrompt<Asset> and Landscape size
         IPrompt<Asset> prompt = new SimpleImagePrompt("A professional business meeting in a modern office");
         IImageLlm model = new GPTImage1Mini { Quality = GPTImage1Mini.QualityType.Medium, Size = GPTImage1Mini.SizeType.Landscape };
-        
+
         // This should route to GenerateAsync(IImageLlm, IPrompt<Asset>) not GenerateAsync<Asset>(ILlm, IPrompt<Asset>)
         var result = await provider.GenerateAsync(model, prompt, ct);
 
@@ -158,7 +158,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             throw new Exception("Empty image response");
 
         if (!result.Value.IsImage)
-            throw new Exception($"Generated file is not an image: {result.Value.ContentType}");
+            throw new Exception($"Generated file is not an image: {result.Value.MediaType}");
 
         var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-mini-{Guid.NewGuid()}.png");
         await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
@@ -348,43 +348,43 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
         var errors = new List<string>();
 
         // String validations
-        if (v.StringValue != "Hello World") 
+        if (v.StringValue != "Hello World")
             errors.Add($"StringValue: expected 'Hello World', got '{v.StringValue}'");
-        
+
         // Integer validations
-        if (v.IntValue != 42) 
+        if (v.IntValue != 42)
             errors.Add($"IntValue: expected 42, got {v.IntValue}");
-        if (v.LongValue != 9876543210) 
+        if (v.LongValue != 9876543210)
             errors.Add($"LongValue: expected 9876543210, got {v.LongValue}");
-        if (v.NegativeInt != -42) 
+        if (v.NegativeInt != -42)
             errors.Add($"NegativeInt: expected -42, got {v.NegativeInt}");
-        if (v.ZeroValue != 0) 
+        if (v.ZeroValue != 0)
             errors.Add($"ZeroValue: expected 0, got {v.ZeroValue}");
-        if (v.MaxIntTest != int.MaxValue) 
+        if (v.MaxIntTest != int.MaxValue)
             errors.Add($"MaxIntTest: expected {int.MaxValue}, got {v.MaxIntTest}");
-        if (v.MinIntTest != int.MinValue) 
+        if (v.MinIntTest != int.MinValue)
             errors.Add($"MinIntTest: expected {int.MinValue}, got {v.MinIntTest}");
 
         // Floating point validations (with tolerance)
-        if (Math.Abs(v.DoubleValue - 3.14159) > 0.001) 
+        if (Math.Abs(v.DoubleValue - 3.14159) > 0.001)
             errors.Add($"DoubleValue: expected ~3.14159, got {v.DoubleValue}");
-        if (Math.Abs(v.FloatValue - 2.718f) > 0.01) 
+        if (Math.Abs(v.FloatValue - 2.718f) > 0.01)
             errors.Add($"FloatValue: expected ~2.718, got {v.FloatValue}");
-        if (Math.Abs(v.DecimalValue - 1299.99m) > 0.01m) 
+        if (Math.Abs(v.DecimalValue - 1299.99m) > 0.01m)
             errors.Add($"DecimalValue: expected 1299.99, got {v.DecimalValue}");
-        if (Math.Abs(v.NegativeDecimal - (-123.45m)) > 0.01m) 
+        if (Math.Abs(v.NegativeDecimal - (-123.45m)) > 0.01m)
             errors.Add($"NegativeDecimal: expected -123.45, got {v.NegativeDecimal}");
-        if (Math.Abs(v.Percentage - 75.5) > 0.1) 
+        if (Math.Abs(v.Percentage - 75.5) > 0.1)
             errors.Add($"Percentage: expected 75.5, got {v.Percentage}");
 
         // Boolean validations
-        if (!v.BoolValue) 
+        if (!v.BoolValue)
             errors.Add($"BoolValue: expected true, got false");
-        if (v.BoolFalseValue) 
+        if (v.BoolFalseValue)
             errors.Add($"BoolFalseValue: expected false, got true");
 
         // Guid validation
-        if (v.GuidValue == Guid.Empty) 
+        if (v.GuidValue == Guid.Empty)
             errors.Add("GuidValue: is empty GUID");
 
         // DateTime validations
@@ -396,28 +396,28 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             errors.Add($"TimeOnlyValue: expected 14:30:00, got {v.TimeOnlyValue}");
 
         // Enum validations
-        if (v.EnumValue != StatusType.Active) 
+        if (v.EnumValue != StatusType.Active)
             errors.Add($"EnumValue: expected Active, got {v.EnumValue}");
-        if (v.EnumNullable != StatusType.Pending) 
+        if (v.EnumNullable != StatusType.Pending)
             errors.Add($"EnumNullable: expected Pending, got {v.EnumNullable}");
-        if (v.PriorityLevel != PriorityLevel.High) 
+        if (v.PriorityLevel != PriorityLevel.High)
             errors.Add($"PriorityLevel: expected High, got {v.PriorityLevel}");
 
         // Nullable validations
-        if (v.NullableInt != 100) 
+        if (v.NullableInt != 100)
             errors.Add($"NullableInt: expected 100, got {v.NullableInt}");
-        if (v.NullableString != "Not null") 
+        if (v.NullableString != "Not null")
             errors.Add($"NullableString: expected 'Not null', got '{v.NullableString}'");
-        if (v.NullableDecimal != 99.99m) 
+        if (v.NullableDecimal != 99.99m)
             errors.Add($"NullableDecimal: expected 99.99, got {v.NullableDecimal}");
-        if (v.EmptyNullableInt != null) 
+        if (v.EmptyNullableInt != null)
             errors.Add($"EmptyNullableInt: expected null, got {v.EmptyNullableInt}");
 
         // Array validations
-        if (v.StringArray == null || v.StringArray.Length != 3 || 
+        if (v.StringArray == null || v.StringArray.Length != 3 ||
             v.StringArray[0] != "apple" || v.StringArray[1] != "banana" || v.StringArray[2] != "cherry")
             errors.Add($"StringArray: expected [apple, banana, cherry], got [{string.Join(", ", v.StringArray ?? [])}]");
-        if (v.IntArray == null || v.IntArray.Length != 5 || 
+        if (v.IntArray == null || v.IntArray.Length != 5 ||
             !v.IntArray.SequenceEqual([1, 2, 3, 4, 5]))
             errors.Add($"IntArray: expected [1,2,3,4,5], got [{string.Join(", ", v.IntArray ?? [])}]");
 
@@ -426,7 +426,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             errors.Add($"UnicodeString: expected Polish/Japanese/emoji text, got '{v.UnicodeString}'");
 
         // Empty/whitespace string validations
-        if (v.EmptyString != "") 
+        if (v.EmptyString != "")
             errors.Add($"EmptyString: expected empty string, got '{v.EmptyString}'");
 
         if (errors.Count > 0)

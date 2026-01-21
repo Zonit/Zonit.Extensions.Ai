@@ -223,7 +223,7 @@ public sealed class AnthropicProvider : IModelProvider
         {
             var schema = JsonSchemaGenerator.Generate(responseType);
             var schemaJson = schema.ToString();
-            
+
             // Strong instruction at system level
             var jsonInstruction = $@"
 
@@ -239,7 +239,7 @@ CRITICAL JSON OUTPUT REQUIREMENTS:
 Remember: Your response must start with the opening curly brace and be a valid JSON object matching the schema above.
 ";
             systemPrompt = string.IsNullOrEmpty(systemPrompt) ? jsonInstruction.Trim() : systemPrompt + jsonInstruction;
-            
+
             // Reminder to add at the end of user message
             userJsonReminder = "\n\nRespond with a JSON object matching the schema. Start your response with {";
         }
@@ -258,32 +258,35 @@ Remember: Your response must start with the opening curly brace and be a valid J
         {
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
-                // Use ContentType from Asset - it auto-detects MIME type from binary data
+                // Use MediaType which is detected from binary signature (magic bytes)
                 content.Insert(0, new
                 {
                     type = "image",
                     source = new
                     {
                         type = "base64",
-                        media_type = file.ContentType.Value,
-                        data = file.ToBase64()
+                        media_type = file.MediaType,
+                        data = file.Base64
                     }
                 });
             }
 
             // PDF document support (Anthropic supports PDFs via document type)
-            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.ContentType.Value == "application/pdf"))
+            foreach (var file in prompt.Files.Where(f => f.IsDocument))
             {
-                content.Insert(0, new
+                if (file.MediaType == Asset.MimeType.ApplicationPdf)
                 {
-                    type = "document",
-                    source = new
+                    content.Insert(0, new
                     {
-                        type = "base64",
-                        media_type = file.ContentType.Value,
-                        data = file.ToBase64()
-                    }
-                });
+                        type = "document",
+                        source = new
+                        {
+                            type = "base64",
+                            media_type = file.MediaType,
+                            data = file.Base64
+                        }
+                    });
+                }
             }
         }
 
