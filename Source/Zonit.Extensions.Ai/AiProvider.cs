@@ -56,6 +56,18 @@ internal sealed class AiProvider : IAiProvider
         return await provider.GenerateImageAsync(llm, new SimpleImagePrompt(description), cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<Result<Asset>> GenerateAsync(
+        IImageLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
+
+        return await provider.GenerateImageAsync(llm, prompt, cancellationToken);
+    }
+
     #endregion
 
     #region Embeddings

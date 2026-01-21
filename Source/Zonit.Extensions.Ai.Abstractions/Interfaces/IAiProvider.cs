@@ -51,6 +51,15 @@ public interface IAiProvider
         string description,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Generates an image from an image prompt.
+    /// Returns an Asset containing the generated image.
+    /// </summary>
+    Task<Result<Asset>> GenerateAsync(
+        IImageLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Embeddings
