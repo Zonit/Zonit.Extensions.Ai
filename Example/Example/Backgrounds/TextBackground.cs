@@ -51,9 +51,9 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
                 "A cute robot reading a book in a cozy library.",
                 stoppingToken);
 
-            // Save image
+            // Save image - Asset uses Data property and System.IO.File.WriteAllBytesAsync
             var path = Path.Combine(Path.GetTempPath(), $"ai_image_{DateTime.Now:yyyyMMdd_HHmmss}.png");
-            await image.Value.SaveAsync(path, stoppingToken);
+            await System.IO.File.WriteAllBytesAsync(path, image.Value.Data, stoppingToken);
             Console.WriteLine($"Image saved to: {path}");
 
             // Analyze the generated image

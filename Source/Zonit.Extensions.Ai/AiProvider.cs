@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai;
 
@@ -44,7 +45,7 @@ internal sealed class AiProvider : IAiProvider
     #region Image Generation
 
     /// <inheritdoc />
-    public async Task<Result<File>> GenerateAsync(
+    public async Task<Result<Asset>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default)
@@ -78,7 +79,7 @@ internal sealed class AiProvider : IAiProvider
     /// <inheritdoc />
     public async Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

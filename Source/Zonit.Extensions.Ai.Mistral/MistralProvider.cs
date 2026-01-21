@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.Mistral;
@@ -115,9 +116,9 @@ public sealed class MistralProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<File>> GenerateImageAsync(
+    public Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<File> prompt,
+        IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("Mistral does not support image generation");
@@ -215,7 +216,7 @@ public sealed class MistralProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

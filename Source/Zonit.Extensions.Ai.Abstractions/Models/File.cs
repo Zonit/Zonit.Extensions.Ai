@@ -1,8 +1,11 @@
+using Zonit.Extensions;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
 /// Interface for files used in AI operations.
 /// </summary>
+[Obsolete("Use Asset from Zonit.Extensions instead. This interface will be removed in a future version.")]
 public interface IFile
 {
     /// <summary>
@@ -60,10 +63,15 @@ public interface IFile
 /// Represents a file for AI operations (input images, documents, output images, etc.).
 /// </summary>
 /// <remarks>
-/// This is the primary class for AI file operations.
-/// Legacy code can use <see cref="AiFile"/> which is an obsolete alias.
+/// <para>This class is deprecated. Use <see cref="Asset"/> from Zonit.Extensions instead.</para>
+/// <para>Migration: Replace <c>File</c> with <c>Asset</c>. Asset provides implicit conversions 
+/// from byte[], Stream, and supports all the same operations plus additional features like 
+/// file signature detection, validation, and Entity Framework Core integration.</para>
 /// </remarks>
+[Obsolete("Use Asset from Zonit.Extensions instead. This class will be removed in a future version.")]
+#pragma warning disable CS0618 // Type or member is obsolete
 public sealed class File : IFile
+#pragma warning restore CS0618
 {
     /// <summary>
     /// File name.
@@ -238,12 +246,40 @@ public sealed class File : IFile
 
         return null;
     }
+
+    /// <summary>
+    /// Converts this File to an Asset value object.
+    /// </summary>
+    /// <returns>An Asset containing the file data and metadata.</returns>
+    public Asset ToAsset() => new(Data, Name);
+
+    /// <summary>
+    /// Implicit conversion from File to Asset.
+    /// Allows seamless migration to the new Asset value object.
+    /// </summary>
+    public static implicit operator Asset(File file) => file.ToAsset();
+
+    /// <summary>
+    /// Implicit conversion from Asset to File.
+    /// Provides backward compatibility with existing code using File.
+    /// </summary>
+    public static implicit operator File(Asset asset) => new()
+    {
+        Name = asset.OriginalName.Value,
+        MimeType = asset.ContentType.Value,
+        Data = asset.Data
+    };
+
+    /// <summary>
+    /// Creates a File from an Asset.
+    /// </summary>
+    public static File FromAsset(Asset asset) => asset;
 }
 
 /// <summary>
 /// Legacy alias for <see cref="File"/>.
 /// </summary>
-[Obsolete("Use File instead. This alias will be removed in a future version.")]
+[Obsolete("Use Asset from Zonit.Extensions instead. This alias will be removed in a future version.")]
 public sealed class AiFile
 {
     /// <summary>

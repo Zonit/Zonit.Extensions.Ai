@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.Google;
@@ -118,9 +119,9 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<File>> GenerateImageAsync(
+    public Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<File> prompt,
+        IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("Google Gemini image generation not yet implemented");
@@ -207,7 +208,7 @@ public sealed class GoogleProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {
@@ -231,27 +232,27 @@ public sealed class GoogleProvider : IModelProvider
 
         if (prompt.Files != null)
         {
-            // Images support - use GetActualMimeType() to detect real MIME type from binary data
+            // Images support - Asset auto-detects MIME type from binary data
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
                 parts.Insert(0, new
                 {
                     inlineData = new
                     {
-                        mimeType = file.GetActualMimeType(),
+                        mimeType = file.ContentType.Value,
                         data = file.ToBase64()
                     }
                 });
             }
 
             // PDF document support (Gemini supports PDFs natively)
-            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.MimeType == "application/pdf"))
+            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.ContentType.Value == "application/pdf"))
             {
                 parts.Insert(0, new
                 {
                     inlineData = new
                     {
-                        mimeType = file.MimeType,
+                        mimeType = file.ContentType.Value,
                         data = file.ToBase64()
                     }
                 });

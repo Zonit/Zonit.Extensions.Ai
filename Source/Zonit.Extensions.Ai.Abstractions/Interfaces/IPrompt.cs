@@ -1,3 +1,5 @@
+using Zonit.Extensions;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
@@ -20,6 +22,7 @@ public interface IPrompt<TResponse>
 
     /// <summary>
     /// Files attached to this prompt (images, documents, etc.).
+    /// Uses the Asset value object from Zonit.Extensions.
     /// </summary>
-    IReadOnlyList<File>? Files { get; }
+    IReadOnlyList<Asset>? Files { get; }
 }

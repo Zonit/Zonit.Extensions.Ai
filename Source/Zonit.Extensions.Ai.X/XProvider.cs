@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.X;
@@ -117,9 +118,9 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<File>> GenerateImageAsync(
+    public Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<File> prompt,
+        IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("X does not support image generation");
@@ -175,7 +176,7 @@ public sealed class XProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {

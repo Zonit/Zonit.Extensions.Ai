@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.Anthropic;
@@ -118,9 +119,9 @@ public sealed class AnthropicProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<File>> GenerateImageAsync(
+    public Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<File> prompt,
+        IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
         throw new NotSupportedException("Anthropic does not support image generation");
@@ -173,7 +174,7 @@ public sealed class AnthropicProvider : IModelProvider
     /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {
@@ -257,22 +258,21 @@ Remember: Your response must start with the opening curly brace and be a valid J
         {
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
-                // Use GetActualMimeType() to detect real MIME type from binary data
-                // This prevents mismatches between declared MIME type and actual image format
+                // Use ContentType from Asset - it auto-detects MIME type from binary data
                 content.Insert(0, new
                 {
                     type = "image",
                     source = new
                     {
                         type = "base64",
-                        media_type = file.GetActualMimeType(),
+                        media_type = file.ContentType.Value,
                         data = file.ToBase64()
                     }
                 });
             }
 
             // PDF document support (Anthropic supports PDFs via document type)
-            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.MimeType == "application/pdf"))
+            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.ContentType.Value == "application/pdf"))
             {
                 content.Insert(0, new
                 {
@@ -280,7 +280,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
                     source = new
                     {
                         type = "base64",
-                        media_type = file.MimeType,
+                        media_type = file.ContentType.Value,
                         data = file.ToBase64()
                     }
                 });

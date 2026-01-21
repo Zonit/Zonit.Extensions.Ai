@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Scriban;
 using Scriban.Runtime;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai;
 
@@ -34,8 +35,9 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
 
     /// <summary>
     /// Files attached to this prompt.
+    /// Uses the Asset value object from Zonit.Extensions.
     /// </summary>
-    public virtual IReadOnlyList<File>? Files { get; init; }
+    public virtual IReadOnlyList<Asset>? Files { get; init; }
 
     private string RenderTemplate()
     {
@@ -108,7 +110,7 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
     public string Text { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<File>? Files { get; init; }
+    public IReadOnlyList<Asset>? Files { get; init; }
 }
 
 /// <summary>
@@ -132,14 +134,15 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
 /// </code>
 /// </example>
 [RequiresUnreferencedCode("Uses reflection to get properties for template rendering.")]
-public abstract class ImagePromptBase : PromptBase<File>
+public abstract class ImagePromptBase : PromptBase<Asset>
 {
 }
 
 /// <summary>
 /// Simple image prompt for quick one-off usage without creating a class.
+/// Returns an Asset containing the generated image.
 /// </summary>
-public sealed class SimpleImagePrompt : IPrompt<File>
+public sealed class SimpleImagePrompt : IPrompt<Asset>
 {
     /// <summary>
     /// Creates a simple image prompt with description.
@@ -156,5 +159,5 @@ public sealed class SimpleImagePrompt : IPrompt<File>
     public string Text { get; }
 
     /// <inheritdoc />
-    public IReadOnlyList<File>? Files { get; init; }
+    public IReadOnlyList<Asset>? Files { get; init; }
 }

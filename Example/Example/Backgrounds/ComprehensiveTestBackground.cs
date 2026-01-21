@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.Hosting;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.OpenAi;
 using Zonit.Extensions.Ai.Anthropic;
@@ -8,7 +9,6 @@ using Zonit.Extensions.Ai.Google;
 using Zonit.Extensions.Ai.Mistral;
 using Zonit.Extensions.Ai.DeepSeek;
 using Zonit.Extensions.Ai.X;
-using File = Zonit.Extensions.Ai.File;
 
 namespace Example.Backgrounds;
 
@@ -69,6 +69,9 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("OpenAI o3-mini - Reasoning", async ct => await TestReasoning(new O3Mini(), "OpenAI o3", ct)),
             ("Anthropic Claude - Extended Thinking", async ct => await TestAnthropicThinking(ct)),
             ("DeepSeek R1 - Reasoning", async ct => await TestReasoning(new DeepSeekR1(), "DeepSeek R1", ct)),
+
+            // Image generation tests
+            ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage1(), "OpenAI", ct)),
         };
 
         var passed = 0;
@@ -121,6 +124,22 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             throw new Exception("Empty response");
     }
 
+    private async Task TestImageGeneration(IImageLlm model, string providerName, CancellationToken ct)
+    {
+        var result = await provider.GenerateAsync(model, "A beautiful sunset over a calm ocean with silhouettes of palm trees", ct);
+
+        if (!result.Value.HasValue)
+            throw new Exception("Empty image response");
+
+        if (!result.Value.IsImage)
+            throw new Exception($"Generated file is not an image: {result.Value.ContentType}");
+
+        // Save the generated image to verify it worked
+        var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-{Guid.NewGuid()}.png");
+        await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
+        Console.WriteLine($"\n      [OK] Image saved to: {outputPath} ({result.Value.Size})");
+    }
+
     private async Task TestStructuredOutput(ILlm model, string providerName, CancellationToken ct)
     {
         var prompt = new SimplePrompt<StructuredTestResponse>("Provide a test response with name='Test', count=42, active=true");
@@ -156,12 +175,14 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
     private async Task TestImageAnalysisUrl(ILlm model, string providerName, CancellationToken ct)
     {
-        // Use a reliable public test image URL
-        var file = await File.FromUrlAsync("https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png", null, ct);
+        // Use a reliable public test image URL - download and create Asset
+        using var httpClient = new HttpClient();
+        var imageBytes = await httpClient.GetByteArrayAsync("https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png", ct);
+        var asset = new Asset(imageBytes, "test-image.png");
 
         var prompt = new SimplePrompt<string>("What objects do you see in this image? Answer briefly.")
         {
-            Files = [file]
+            Files = [asset]
         };
 
         var result = await provider.GenerateAsync(model, prompt, ct);

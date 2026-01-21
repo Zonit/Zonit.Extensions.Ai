@@ -68,10 +68,10 @@ public abstract class OpenAiImageBase : OpenAiBase, IImageLlm
     /// </summary>
     internal string QualityValue => _quality switch
     {
-        ImageQuality.Standard => "standard",
-        ImageQuality.High => "hd",
-        ImageQuality.Ultra => "hd",
-        _ => "standard"
+        ImageQuality.Standard => "medium",
+        ImageQuality.High => "high",
+        ImageQuality.Ultra => "high",
+        _ => "medium"
     };
 
     #region Nested types for model configuration

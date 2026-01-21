@@ -313,14 +313,16 @@ Console.WriteLine(result.Value.TranslatedText); // "Cześć!"
 
 // Image generation (IImageLlm) - same method name, different model type
 var image = await aiClient.GenerateAsync(new GPTImage1(), "A sunset over mountains");
-await image.Value.SaveAsync("sunset.png");
+if (image.IsSuccess)
+    await File.WriteAllBytesAsync("sunset.png", image.Value.Data);
 
 // Embeddings (IEmbeddingLlm)
 var embedding = await aiClient.GenerateAsync(new TextEmbedding3Large(), "Hello world");
 float[] vector = embedding.Value;
 
 // Audio transcription (IAudioLlm)  
-var audio = await AiFile.CreateFromFilePathAsync("speech.mp3");
+var audioBytes = await File.ReadAllBytesAsync("speech.mp3");
+var audio = new Asset(audioBytes, "speech.mp3");
 var transcription = await aiClient.GenerateAsync(new Whisper1(), audio, language: "en");
 Console.WriteLine(transcription.Value);
 
@@ -339,9 +341,9 @@ The model interface determines the operation:
 |-----------|--------|---------|
 | `ILlm` | `GenerateAsync(model, string)` | `Result<string>` |
 | `ILlm` | `GenerateAsync(model, IPrompt<T>)` | `Result<T>` |
-| `IImageLlm` | `GenerateAsync(model, string)` | `Result<AiFile>` |
+| `IImageLlm` | `GenerateAsync(model, string)` | `Result<Asset>` |
 | `IEmbeddingLlm` | `GenerateAsync(model, string)` | `Result<float[]>` |
-| `IAudioLlm` | `GenerateAsync(model, AiFile)` | `Result<string>` |
+| `IAudioLlm` | `GenerateAsync(model, Asset)` | `Result<string>` |
 
 ---
 
@@ -465,16 +467,30 @@ Topics:
 
 ## Files and Images
 
+The library uses `Asset` from `Zonit.Extensions` for file handling. Asset is a versatile value object that:
+- Auto-detects MIME type from binary data
+- Provides `IsImage`, `IsDocument`, `IsAudio` properties
+- Includes `ToBase64()`, `ToDataUrl()` for encoding
+- Has implicit conversions from `byte[]` and `Stream`
+
 ```csharp
 public class AnalyzePrompt : PromptBase<AnalysisResult>
 {
     public override string Prompt => "Analyze the documents";
 }
 
-var file = await AiFile.CreateFromFilePathAsync("image.jpg");
+// From file path
+using var httpClient = new HttpClient();
+var imageBytes = await httpClient.GetByteArrayAsync("https://example.com/image.jpg");
+var asset = new Asset(imageBytes, "image.jpg");
+
+// Or from local file
+var localBytes = await File.ReadAllBytesAsync("document.pdf");
+var pdfAsset = new Asset(localBytes, "document.pdf");
+
 var result = await aiClient.GenerateAsync(
     new GPT51(),
-    new AnalyzePrompt { Files = [file] }
+    new AnalyzePrompt { Files = [asset] }
 );
 ```
 
@@ -492,7 +508,8 @@ var result = await aiClient.GenerateAsync(
     new GPTImage1 { Quality = ImageQuality.High, Size = ImageSize.Landscape },
     new ImagePromptBase("A sunset over mountains with dramatic clouds")
 );
-await result.Value.SaveAsync("sunset.png");
+if (result.IsSuccess)
+    await File.WriteAllBytesAsync("sunset.png", result.Value.Data);
 
 // Custom image prompt with additional context
 public class ProductImagePrompt : ImagePromptBase

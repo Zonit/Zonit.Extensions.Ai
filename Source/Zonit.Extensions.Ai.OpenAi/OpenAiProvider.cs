@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Zonit.Extensions;
 using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai.OpenAi;
@@ -127,9 +128,9 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<File>> GenerateImageAsync(
+    public async Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
-        IPrompt<File> prompt,
+        IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
         if (llm is not OpenAiImageBase imageLlm)
@@ -143,14 +144,18 @@ public sealed class OpenAiProvider : IModelProvider
             prompt = prompt.Text,
             n = 1,
             size = imageLlm.SizeValue,
-            quality = imageLlm.QualityValue,
-            response_format = "b64_json"
+            quality = imageLlm.QualityValue
         };
 
         using var response = await _httpClient.PostAsJsonAsync("/v1/images/generations", request, cancellationToken);
         stopwatch.Stop();
 
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("OpenAI image generation error: {Status} - {Response}", response.StatusCode, errorContent);
+            throw new HttpRequestException($"OpenAI Image API failed: {response.StatusCode}: {errorContent}");
+        }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
         var imageResponse = JsonSerializer.Deserialize<ImageResponse>(responseJson, JsonOptions);
@@ -159,18 +164,15 @@ public sealed class OpenAiProvider : IModelProvider
             throw new InvalidOperationException("No image data");
 
         var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json);
-        var file = new File
-        {
-            Name = "generated.png",
-            MimeType = "image/png",
-            Data = imageBytes
-        };
+        
+        // Create Asset from generated image bytes
+        Asset generatedImage = new(imageBytes, "generated.png");
 
         var imageCost = AiCostCalculator.CalculateImageCost(imageLlm);
 
-        return new Result<File>
+        return new Result<Asset>
         {
-            Value = file,
+            Value = generatedImage,
             MetaData = new MetaData
             {
                 Model = llm,
@@ -273,14 +275,14 @@ public sealed class OpenAiProvider : IModelProvider
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
 
         using var formContent = new MultipartFormDataContent();
-        formContent.Add(new ByteArrayContent(audioFile.Data), "file", audioFile.Name);
+        formContent.Add(new ByteArrayContent(audioFile.Data), "file", audioFile.OriginalName.Value);
         formContent.Add(new StringContent(llm.Name), "model");
 
         if (language != null)
@@ -366,7 +368,7 @@ public sealed class OpenAiProvider : IModelProvider
                     {
                         type = "input_file",
                         file_data = file.ToDataUrl(),
-                        filename = file.Name
+                        filename = file.OriginalName.Value
                     });
                 }
             }

@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai;
 
@@ -43,8 +44,9 @@ public interface IAiProvider
 
     /// <summary>
     /// Generates an image from a text description.
+    /// Returns an Asset containing the generated image.
     /// </summary>
-    Task<Result<File>> GenerateAsync(
+    Task<Result<Asset>> GenerateAsync(
         IImageLlm llm,
         string description,
         CancellationToken cancellationToken = default);
@@ -74,7 +76,7 @@ public interface IAiProvider
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
-        File audioFile,
+        Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default);
 
