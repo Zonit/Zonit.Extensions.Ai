@@ -1,8 +1,10 @@
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
-/// Image size/dimensions.
+/// Global image size/dimensions enum.
+/// Deprecated: Use model-specific SizeType enums instead (e.g., GPTImage1.SizeType).
 /// </summary>
+[Obsolete("Use model-specific SizeType enums instead (e.g., GPTImage1.SizeType). Each model defines its own size options with correct API values.")]
 public enum ImageSize
 {
     /// <summary>
@@ -11,22 +13,24 @@ public enum ImageSize
     Square,
 
     /// <summary>
-    /// Portrait format (1024x1792).
+    /// Portrait format (1024x1536).
     /// </summary>
     Portrait,
 
     /// <summary>
-    /// Landscape format (1792x1024).
+    /// Landscape format (1536x1024).
     /// </summary>
     Landscape,
 
     /// <summary>
-    /// Small square (512x512).
+    /// Small square - not supported by GPT Image models.
     /// </summary>
+    [Obsolete("GPT Image models don't support 512x512.")]
     Small,
 
     /// <summary>
-    /// Large square (1536x1536).
+    /// Large square - not supported by GPT Image models.
     /// </summary>
+    [Obsolete("GPT Image models don't support 1536x1536.")]
     Large
 }

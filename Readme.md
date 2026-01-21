@@ -500,12 +500,12 @@ var result = await aiClient.GenerateAsync(
 
 ### Using ImagePromptBase
 
-`ImagePromptBase` is the recommended base class for image generation prompts:
+Each image model (GPTImage1, GPTImage1Mini, GPTImage15) defines its own `QualityType` and `SizeType` enums with `[EnumValue]` attributes that map directly to API values. This ensures correct API parameters per model.
 
 ```csharp
-// Simple usage with ImagePromptBase
+// Simple usage with model-specific enums (required)
 var result = await aiClient.GenerateAsync(
-    new GPTImage1 { Quality = ImageQuality.High, Size = ImageSize.Landscape },
+    new GPTImage1 { Quality = GPTImage1.QualityType.High, Size = GPTImage1.SizeType.Landscape },
     new ImagePromptBase("A sunset over mountains with dramatic clouds")
 );
 if (result.IsSuccess)
@@ -521,56 +521,73 @@ public class ProductImagePrompt : ImagePromptBase
 }
 
 var productImage = await aiClient.GenerateAsync(
-    new GPTImage1 { Quality = ImageQuality.High },
+    new GPTImage1 { Quality = GPTImage1.QualityType.High, Size = GPTImage1.SizeType.Square },
     new ProductImagePrompt("wireless headphones", "minimalist")
 );
 ```
 
 ### Image Quality and Size Options
 
+Each model has its own QualityType and SizeType enums. Quality and Size are **required** parameters.
+
 ```csharp
-// Using global enums (recommended)
+// GPT Image 1 - supports Auto, Low, Medium, High quality and Auto, Square, Landscape, Portrait sizes
 var result = await aiClient.GenerateAsync(
     new GPTImage1
     {
-        Quality = ImageQuality.High,      // Standard, High, Ultra
-        Size = ImageSize.Landscape        // Square, Portrait, Landscape, Small, Large
+        Quality = GPTImage1.QualityType.High,      // Auto, Low, Medium, High
+        Size = GPTImage1.SizeType.Landscape        // Auto, Square, Landscape, Portrait
     },
     "A beautiful landscape"
 );
 
-// Legacy nested types (deprecated but supported for backward compatibility)
-var result = await aiClient.GenerateAsync(
-    new GPTImage1
+// GPT Image 1 Mini - no Auto options (must be explicit)
+var miniResult = await aiClient.GenerateAsync(
+    new GPTImage1Mini
     {
-        Quality = (ImageQuality)GPTImage1.QualityType.High,
-        Size = (ImageSize)GPTImage1.SizeType.Landscape
+        Quality = GPTImage1Mini.QualityType.Medium,  // Low, Medium, High (no Auto)
+        Size = GPTImage1Mini.SizeType.Square         // Square, Portrait, Landscape (no Auto)
     },
-    "A beautiful landscape"
+    "A simple icon"
 );
+
+// Get image generation price based on quality and size
+var model = new GPTImage1 { Quality = GPTImage1.QualityType.High, Size = GPTImage1.SizeType.Landscape };
+var pricePerImage = model.GetImageGenerationPrice(); // Returns $0.25
 ```
 
 ### Different Image Models
 
 ```csharp
-// GPT Image 1 - Full featured
+// GPT Image 1 - Full featured with Auto support
 var image1 = await aiClient.GenerateAsync(
-    new GPTImage1 { Quality = ImageQuality.Ultra, Size = ImageSize.Large },
+    new GPTImage1 { Quality = GPTImage1.QualityType.High, Size = GPTImage1.SizeType.Landscape },
     "A detailed architectural rendering"
 );
 
-// GPT Image 1 Mini - Cost-effective
+// GPT Image 1 Mini - Cost-effective (cheapest option)
 var imageMini = await aiClient.GenerateAsync(
-    new GPTImage1Mini { Size = ImageSize.Square },
+    new GPTImage1Mini { Quality = GPTImage1Mini.QualityType.Low, Size = GPTImage1Mini.SizeType.Square },
     "A simple icon design"
 );
 
-// GPT Image 1.5 - Latest model
+// GPT Image 1.5 - Latest model with best quality
 var image15 = await aiClient.GenerateAsync(
-    new GPTImage15 { Quality = ImageQuality.High },
+    new GPTImage15 { Quality = GPTImage15.QualityType.High, Size = GPTImage15.SizeType.Auto },
     "A photorealistic portrait"
 );
 ```
+
+### Image Pricing (per image)
+
+| Model          | Quality | Square (1024x1024) | Landscape/Portrait |
+|----------------|---------|-------------------:|-------------------:|
+| GPT Image 1    | Low     | $0.011             | $0.016             |
+| GPT Image 1    | Medium  | $0.042             | $0.063             |
+| GPT Image 1    | High    | $0.167             | $0.250             |
+| GPT Image 1 Mini | Low   | $0.005             | $0.006             |
+| GPT Image 1 Mini | Medium | $0.011            | $0.015             |
+| GPT Image 1 Mini | High  | $0.036             | $0.052             |
 
 ---
 

@@ -133,9 +133,6 @@ public sealed class OpenAiProvider : IModelProvider
         IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
-        if (llm is not OpenAiImageBase imageLlm)
-            throw new ArgumentException($"Expected OpenAI image model, got {llm.GetType().Name}");
-
         var stopwatch = Stopwatch.StartNew();
 
         var request = new
@@ -143,8 +140,8 @@ public sealed class OpenAiProvider : IModelProvider
             model = llm.Name,
             prompt = prompt.Text,
             n = 1,
-            size = imageLlm.SizeValue,
-            quality = imageLlm.QualityValue
+            size = llm.SizeValue,
+            quality = llm.QualityValue
         };
 
         using var response = await _httpClient.PostAsJsonAsync("/v1/images/generations", request, cancellationToken);
@@ -168,7 +165,7 @@ public sealed class OpenAiProvider : IModelProvider
         // Create Asset from generated image bytes
         Asset generatedImage = new(imageBytes, "generated.png");
 
-        var imageCost = AiCostCalculator.CalculateImageCost(imageLlm);
+        var imageCost = llm.GetImageGenerationPrice();
 
         return new Result<Asset>
         {

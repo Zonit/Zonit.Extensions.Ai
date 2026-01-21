@@ -1,110 +1,39 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// Base class for OpenAI image generation models.
+/// Base class for OpenAI image generation models with model-specific Quality and Size enums.
+/// Each derived model defines its own QualityType and SizeType enums with [EnumValue] attributes.
 /// </summary>
-public abstract class OpenAiImageBase : OpenAiBase, IImageLlm
+/// <typeparam name="TQuality">The model-specific quality enum type.</typeparam>
+/// <typeparam name="TSize">The model-specific size enum type.</typeparam>
+public abstract class OpenAiImageBase<TQuality, TSize> : OpenAiBase, IImageLlm
+    where TQuality : struct, Enum
+    where TSize : struct, Enum
 {
-    private ImageQuality _quality = ImageQuality.Standard;
-    private ImageSize _size = ImageSize.Square;
+    /// <summary>
+    /// Image quality setting using model-specific enum.
+    /// </summary>
+    public abstract TQuality Quality { get; init; }
 
     /// <summary>
-    /// Image quality setting using <see cref="QualityType"/>.
+    /// Image size/dimensions using model-specific enum.
     /// </summary>
-    /// <example>
-    /// <code>
-    /// new GPTImage1 { Quality = OpenAiImageBase.QualityType.High }
-    /// </code>
-    /// </example>
-    public virtual QualityType Quality
-    {
-        get => (QualityType)_quality;
-        init => _quality = (ImageQuality)value;
-    }
+    public abstract TSize Size { get; init; }
 
     /// <summary>
-    /// Image size/dimensions using <see cref="SizeType"/>.
+    /// Gets the quality value for API request (from EnumValue attribute).
     /// </summary>
-    /// <example>
-    /// <code>
-    /// new GPTImage1 { Size = OpenAiImageBase.SizeType.Landscape }
-    /// </code>
-    /// </example>
-    public virtual SizeType Size
-    {
-        get => (SizeType)_size;
-        init => _size = (ImageSize)value;
-    }
-
-    #region IImageLlm implementation
+    public string QualityValue => Quality.GetEnumValue();
 
     /// <summary>
-    /// Internal: Gets quality for provider implementation.
+    /// Gets the size value for API request (from EnumValue attribute).
     /// </summary>
-    ImageQuality IImageLlm.Quality => _quality;
+    public string SizeValue => Size.GetEnumValue();
 
     /// <summary>
-    /// Internal: Gets size for provider implementation.
+    /// Calculates the price for generating a single image based on quality and size.
+    /// Override in derived classes for specific pricing.
     /// </summary>
-    ImageSize IImageLlm.Size => _size;
-
-    #endregion
-
-    /// <summary>
-    /// Gets the size value for API request.
-    /// </summary>
-    internal string SizeValue => _size switch
-    {
-        ImageSize.Square => "1024x1024",
-        ImageSize.Portrait => "1024x1792",
-        ImageSize.Landscape => "1792x1024",
-        ImageSize.Small => "512x512",
-        ImageSize.Large => "1536x1536",
-        _ => "1024x1024"
-    };
-
-    /// <summary>
-    /// Gets the quality value for API request.
-    /// </summary>
-    internal string QualityValue => _quality switch
-    {
-        ImageQuality.Standard => "medium",
-        ImageQuality.High => "high",
-        ImageQuality.Ultra => "high",
-        _ => "medium"
-    };
-
-    #region Nested types for model configuration
-
-    /// <summary>
-    /// Image quality setting for OpenAI image models.
-    /// </summary>
-    public enum QualityType
-    {
-        /// <summary>Standard quality, faster generation.</summary>
-        Standard = 0,
-        /// <summary>High quality, more detailed.</summary>
-        High = 1,
-        /// <summary>Highest quality, best details.</summary>
-        Ultra = 2,
-    }
-
-    /// <summary>
-    /// Image size/dimensions for OpenAI image models.
-    /// </summary>
-    public enum SizeType
-    {
-        /// <summary>Square format (1024x1024).</summary>
-        Square = 0,
-        /// <summary>Portrait format (1024x1792).</summary>
-        Portrait = 1,
-        /// <summary>Landscape format (1792x1024).</summary>
-        Landscape = 2,
-        /// <summary>Small format (512x512).</summary>
-        Small = 3,
-        /// <summary>Large format (1536x1536).</summary>
-        Large = 4,
-    }
-
-    #endregion
+    /// <returns>Price in dollars for generating one image.</returns>
+    public abstract decimal GetImageGenerationPrice();
 }

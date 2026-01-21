@@ -99,8 +99,8 @@ public static class AiCostCalculator
     /// <returns>Total cost as Price.</returns>
     public static Price CalculateImageCost(IImageLlm llm, int imageCount = 1)
     {
-        // Image models typically have per-image pricing
-        return new Price(llm.PriceOutput * imageCount);
+        // Each model calculates its own price based on quality and size
+        return new Price(llm.GetImageGenerationPrice() * imageCount);
     }
 
     /// <summary>

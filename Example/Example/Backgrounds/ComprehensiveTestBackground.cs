@@ -71,7 +71,8 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("DeepSeek R1 - Reasoning", async ct => await TestReasoning(new DeepSeekR1(), "DeepSeek R1", ct)),
 
             // Image generation tests
-            ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage1(), "OpenAI", ct)),
+            ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage1 { Quality = GPTImage1.QualityType.Medium, Size = GPTImage1.SizeType.Square }, "OpenAI", ct)),
+            ("OpenAI - Image Generation Mini", async ct => await TestImageGenerationMini(ct)),
         };
 
         var passed = 0;
@@ -138,6 +139,30 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
         var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-{Guid.NewGuid()}.png");
         await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
         Console.WriteLine($"\n      [OK] Image saved to: {outputPath} ({result.Value.Size})");
+    }
+
+    /// <summary>
+    /// Test image generation with GPTImage1Mini using IPrompt&lt;Asset&gt; to ensure correct routing.
+    /// This simulates how ArticleImageGenerator in Stand project calls the API.
+    /// </summary>
+    private async Task TestImageGenerationMini(CancellationToken ct)
+    {
+        // This is exactly how Stand project calls it - with IPrompt<Asset> and Landscape size
+        IPrompt<Asset> prompt = new SimpleImagePrompt("A professional business meeting in a modern office");
+        IImageLlm model = new GPTImage1Mini { Quality = GPTImage1Mini.QualityType.Medium, Size = GPTImage1Mini.SizeType.Landscape };
+        
+        // This should route to GenerateAsync(IImageLlm, IPrompt<Asset>) not GenerateAsync<Asset>(ILlm, IPrompt<Asset>)
+        var result = await provider.GenerateAsync(model, prompt, ct);
+
+        if (!result.Value.HasValue)
+            throw new Exception("Empty image response");
+
+        if (!result.Value.IsImage)
+            throw new Exception($"Generated file is not an image: {result.Value.ContentType}");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-mini-{Guid.NewGuid()}.png");
+        await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
+        Console.WriteLine($"\n      [OK] Mini image (1536x1024 Landscape) saved to: {outputPath} ({result.Value.Size})");
     }
 
     private async Task TestStructuredOutput(ILlm model, string providerName, CancellationToken ct)
