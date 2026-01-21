@@ -265,7 +265,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
                     source = new
                     {
                         type = "base64",
-                        media_type = file.MediaType,
+                        media_type = file.MediaType.Value,
                         data = file.Base64
                     }
                 });
@@ -282,7 +282,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
                         source = new
                         {
                             type = "base64",
-                            media_type = file.MediaType,
+                            media_type = file.MediaType.Value,
                             data = file.Base64
                         }
                     });

@@ -239,7 +239,7 @@ public sealed class GoogleProvider : IModelProvider
                 {
                     inlineData = new
                     {
-                        mimeType = file.MediaType,
+                        mimeType = file.MediaType.Value,
                         data = file.Base64
                     }
                 });
@@ -254,7 +254,7 @@ public sealed class GoogleProvider : IModelProvider
                     {
                         inlineData = new
                         {
-                            mimeType = file.MediaType,
+                            mimeType = file.MediaType.Value,
                             data = file.Base64
                         }
                     });
