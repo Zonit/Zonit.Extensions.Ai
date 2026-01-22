@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -49,7 +48,6 @@ public static class AiServiceCollectionExtensions
     /// });
     /// </code>
     /// </example>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAi(
         this IServiceCollection services,
         Action<AiOptions>? options = null)
@@ -65,8 +63,15 @@ public static class AiServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Auto-discover and register providers from loaded assemblies
-        DiscoverAndRegisterProviders(services);
+        // NOTE: Auto-discovery of providers was REMOVED because it registered providers
+        // without properly configured HttpClient (typed client with resilience handlers).
+        // Providers must be registered explicitly via their extension methods:
+        // - services.AddAiOpenAi()
+        // - services.AddAiAnthropic()
+        // - services.AddAiGoogle()
+        // - etc.
+        // This ensures HttpClient is configured with proper timeout (40+ min for AI)
+        // and resilience policies (retry, circuit breaker).
 
         return services;
     }
@@ -87,33 +92,5 @@ public static class AiServiceCollectionExtensions
     {
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, TProvider>());
         return services;
-    }
-
-    [RequiresUnreferencedCode("Uses reflection to scan assemblies and types.")]
-    private static void DiscoverAndRegisterProviders(IServiceCollection services)
-    {
-        var assemblies = AppDomain.CurrentDomain.GetAssemblies()
-            .Where(a => !a.IsDynamic && a.FullName?.StartsWith("System") != true)
-            .ToList();
-
-        foreach (var assembly in assemblies)
-        {
-            try
-            {
-                var providerTypes = assembly.GetTypes()
-                    .Where(t => t.IsClass && !t.IsAbstract)
-                    .Where(t => t.GetCustomAttribute<AiProviderAttribute>() != null)
-                    .Where(t => typeof(IModelProvider).IsAssignableFrom(t));
-
-                foreach (var type in providerTypes)
-                {
-                    services.TryAddEnumerable(ServiceDescriptor.Singleton(typeof(IModelProvider), type));
-                }
-            }
-            catch
-            {
-                // Skip assemblies that can't be scanned
-            }
-        }
     }
 }

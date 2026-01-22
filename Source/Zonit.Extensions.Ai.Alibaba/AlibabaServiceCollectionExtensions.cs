@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -36,7 +35,6 @@ public static class AlibabaServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="apiKey">DashScope API key.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiAlibaba(
         this IServiceCollection services,
         string apiKey)
@@ -50,7 +48,6 @@ public static class AlibabaServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="options">Optional configuration action for Alibaba options.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiAlibaba(
         this IServiceCollection services,
         Action<AlibabaOptions>? options = null)

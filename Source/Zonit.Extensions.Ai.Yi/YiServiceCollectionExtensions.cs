@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -36,7 +35,6 @@ public static class YiServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="apiKey">01.AI API key.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiYi(
         this IServiceCollection services,
         string apiKey)
@@ -50,7 +48,6 @@ public static class YiServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="options">Optional configuration action for Yi options.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiYi(
         this IServiceCollection services,
         Action<YiOptions>? options = null)

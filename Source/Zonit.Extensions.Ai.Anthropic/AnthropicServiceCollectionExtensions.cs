@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -39,7 +38,6 @@ public static class AnthropicServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="apiKey">Anthropic API key.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiAnthropic(
         this IServiceCollection services,
         string apiKey)
@@ -62,7 +60,6 @@ public static class AnthropicServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="options">Optional configuration action for Anthropic options.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiAnthropic(
         this IServiceCollection services,
         Action<AnthropicOptions>? options = null)

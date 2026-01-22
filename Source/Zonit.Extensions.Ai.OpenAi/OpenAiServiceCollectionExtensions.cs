@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -40,7 +39,6 @@ public static class OpenAiServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="apiKey">OpenAI API key.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiOpenAi(
         this IServiceCollection services,
         string apiKey)
@@ -73,7 +71,6 @@ public static class OpenAiServiceCollectionExtensions
     /// });
     /// </code>
     /// </example>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiOpenAi(
         this IServiceCollection services,
         Action<OpenAiOptions>? options = null)

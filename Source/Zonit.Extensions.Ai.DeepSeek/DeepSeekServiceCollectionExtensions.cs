@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -39,7 +38,6 @@ public static class DeepSeekServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="apiKey">DeepSeek API key.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiDeepSeek(
         this IServiceCollection services,
         string apiKey)
@@ -62,7 +60,6 @@ public static class DeepSeekServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="options">Optional configuration action for DeepSeek options.</param>
     /// <returns>The service collection for chaining.</returns>
-    [RequiresUnreferencedCode("Auto-discovery of providers uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAiDeepSeek(
         this IServiceCollection services,
         Action<DeepSeekOptions>? options = null)
