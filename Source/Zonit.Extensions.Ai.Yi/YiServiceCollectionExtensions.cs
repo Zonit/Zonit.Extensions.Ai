@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Yi;
 
 namespace Zonit.Extensions;
@@ -52,6 +50,9 @@ public static class YiServiceCollectionExtensions
         this IServiceCollection services,
         Action<YiOptions>? options = null)
     {
+        if (services.IsProviderRegistered<YiProvider>())
+            return services;
+
         services.AddAi();
 
         services.AddOptions<YiOptions>()
@@ -60,13 +61,10 @@ public static class YiServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<YiProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate to use typed HttpClient
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<YiProvider>()));
+        services.TryAddModelProvider<YiProvider>();
 
         return services;
     }

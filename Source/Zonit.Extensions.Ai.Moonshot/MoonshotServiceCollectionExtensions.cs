@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Moonshot;
 
 namespace Zonit.Extensions;
@@ -52,6 +50,9 @@ public static class MoonshotServiceCollectionExtensions
         this IServiceCollection services,
         Action<MoonshotOptions>? options = null)
     {
+        if (services.IsProviderRegistered<MoonshotProvider>())
+            return services;
+
         services.AddAi();
 
         services.AddOptions<MoonshotOptions>()
@@ -60,13 +61,10 @@ public static class MoonshotServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<MoonshotProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate to use typed HttpClient
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<MoonshotProvider>()));
+        services.TryAddModelProvider<MoonshotProvider>();
 
         return services;
     }

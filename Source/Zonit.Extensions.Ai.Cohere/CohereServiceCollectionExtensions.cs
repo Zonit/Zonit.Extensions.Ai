@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Cohere;
 
 namespace Zonit.Extensions;
@@ -52,6 +50,9 @@ public static class CohereServiceCollectionExtensions
         this IServiceCollection services,
         Action<CohereOptions>? options = null)
     {
+        if (services.IsProviderRegistered<CohereProvider>())
+            return services;
+
         services.AddAi();
 
         services.AddOptions<CohereOptions>()
@@ -60,13 +61,10 @@ public static class CohereServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<CohereProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate to use typed HttpClient
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<CohereProvider>()));
+        services.TryAddModelProvider<CohereProvider>();
 
         return services;
     }

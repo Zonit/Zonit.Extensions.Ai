@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Anthropic;
 
 namespace Zonit.Extensions;
@@ -64,6 +62,10 @@ public static class AnthropicServiceCollectionExtensions
         this IServiceCollection services,
         Action<AnthropicOptions>? options = null)
     {
+        // Skip if already registered (idempotent - safe for multiple plugin registrations)
+        if (services.IsProviderRegistered<AnthropicProvider>())
+            return services;
+
         // Ensure core AI services are registered
         services.AddAi();
 
@@ -76,16 +78,11 @@ public static class AnthropicServiceCollectionExtensions
             services.PostConfigure(options);
 
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<AnthropicProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate.
-        // This resolves AnthropicProvider through the container, which uses the typed HttpClient
-        // registered by AddHttpClient<AnthropicProvider>() above.
-        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<AnthropicProvider>()));
+        // Register as IModelProvider (idempotent, uses typed HttpClient)
+        services.TryAddModelProvider<AnthropicProvider>();
 
         return services;
     }

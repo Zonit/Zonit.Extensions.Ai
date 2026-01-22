@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.DeepSeek;
 
 namespace Zonit.Extensions;
@@ -64,28 +62,21 @@ public static class DeepSeekServiceCollectionExtensions
         this IServiceCollection services,
         Action<DeepSeekOptions>? options = null)
     {
-        // Ensure core AI services are registered
+        if (services.IsProviderRegistered<DeepSeekProvider>())
+            return services;
+
         services.AddAi();
 
-        // Bind configuration from appsettings.json
         services.AddOptions<DeepSeekOptions>()
             .BindConfiguration(DeepSeekOptions.SectionName);
 
-        // Apply additional configuration via PostConfigure
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<DeepSeekProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate.
-        // This resolves DeepSeekProvider through the container, which uses the typed HttpClient
-        // registered by AddHttpClient<DeepSeekProvider>() above.
-        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<DeepSeekProvider>()));
+        services.TryAddModelProvider<DeepSeekProvider>();
 
         return services;
     }

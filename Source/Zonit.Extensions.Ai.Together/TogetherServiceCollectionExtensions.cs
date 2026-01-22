@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Together;
 
 namespace Zonit.Extensions;
@@ -52,6 +50,9 @@ public static class TogetherServiceCollectionExtensions
         this IServiceCollection services,
         Action<TogetherOptions>? options = null)
     {
+        if (services.IsProviderRegistered<TogetherProvider>())
+            return services;
+
         services.AddAi();
 
         services.AddOptions<TogetherOptions>()
@@ -60,13 +61,10 @@ public static class TogetherServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<TogetherProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate to use typed HttpClient
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<TogetherProvider>()));
+        services.TryAddModelProvider<TogetherProvider>();
 
         return services;
     }

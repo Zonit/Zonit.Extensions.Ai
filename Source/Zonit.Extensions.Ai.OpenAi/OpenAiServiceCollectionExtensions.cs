@@ -75,6 +75,10 @@ public static class OpenAiServiceCollectionExtensions
         this IServiceCollection services,
         Action<OpenAiOptions>? options = null)
     {
+        // Skip if already registered (idempotent - safe for multiple plugin registrations)
+        if (services.IsProviderRegistered<OpenAiProvider>())
+            return services;
+
         // Ensure core AI services are registered
         services.AddAi();
 
@@ -87,16 +91,11 @@ public static class OpenAiServiceCollectionExtensions
             services.PostConfigure(options);
 
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<OpenAiProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate.
-        // This resolves OpenAiProvider through the container, which uses the typed HttpClient
-        // registered by AddHttpClient<OpenAiProvider>() above.
-        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<OpenAiProvider>()));
+        // Register as IModelProvider (idempotent, uses typed HttpClient)
+        services.TryAddModelProvider<OpenAiProvider>();
 
         return services;
     }

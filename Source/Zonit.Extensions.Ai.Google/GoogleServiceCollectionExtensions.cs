@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Google;
 
 namespace Zonit.Extensions;
@@ -64,6 +62,10 @@ public static class GoogleServiceCollectionExtensions
         this IServiceCollection services,
         Action<GoogleOptions>? options = null)
     {
+        // Skip if already registered (idempotent - safe for multiple plugin registrations)
+        if (services.IsProviderRegistered<GoogleProvider>())
+            return services;
+
         // Ensure core AI services are registered
         services.AddAi();
 
@@ -76,16 +78,11 @@ public static class GoogleServiceCollectionExtensions
             services.PostConfigure(options);
 
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<GoogleProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate.
-        // This resolves GoogleProvider through the container, which uses the typed HttpClient
-        // registered by AddHttpClient<GoogleProvider>() above.
-        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<GoogleProvider>()));
+        // Register as IModelProvider (idempotent, uses typed HttpClient)
+        services.TryAddModelProvider<GoogleProvider>();
 
         return services;
     }

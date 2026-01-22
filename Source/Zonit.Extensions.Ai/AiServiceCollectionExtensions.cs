@@ -77,6 +77,61 @@ public static class AiServiceCollectionExtensions
     }
 
     /// <summary>
+    /// Checks if a specific model provider type is already registered.
+    /// </summary>
+    /// <remarks>
+    /// This method checks for both direct registrations and keyed service registrations.
+    /// It enables idempotent provider registration across multiple plugins.
+    /// </remarks>
+    /// <typeparam name="TProvider">The provider implementation type to check.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <returns>True if the provider is already registered; otherwise, false.</returns>
+    public static bool IsProviderRegistered<TProvider>(this IServiceCollection services)
+        where TProvider : class, IModelProvider
+    {
+        // Check if TProvider is already registered as IModelProvider
+        // This handles both direct registrations and keyed service registrations
+        return services.Any(sd =>
+            sd.ServiceType == typeof(IModelProvider) &&
+            (sd.ImplementationType == typeof(TProvider) ||
+             sd.ServiceKey is Type keyType && keyType == typeof(TProvider)));
+    }
+
+    /// <summary>
+    /// Registers a model provider with factory delegate, ensuring idempotent registration.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method is safe to call multiple times from different plugins.
+    /// It checks if the provider is already registered before adding.
+    /// </para>
+    /// <para>
+    /// Uses keyed services to track provider types, enabling detection of factory-based registrations
+    /// for idempotent behavior.
+    /// </para>
+    /// </remarks>
+    /// <typeparam name="TProvider">The provider implementation type.</typeparam>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection TryAddModelProvider<TProvider>(this IServiceCollection services)
+        where TProvider : class, IModelProvider
+    {
+        // Skip if already registered (idempotent)
+        if (services.IsProviderRegistered<TProvider>())
+            return services;
+
+        // Register using keyed service to track the provider type
+        // This allows IsProviderRegistered to detect factory-based registrations
+        services.Add(ServiceDescriptor.KeyedTransient<IModelProvider, TProvider>(typeof(TProvider)));
+
+        // Also register for IEnumerable<IModelProvider> using factory delegate
+        // The factory resolves through container to get the typed HttpClient
+        services.AddTransient<IModelProvider>(sp => sp.GetRequiredService<TProvider>());
+
+        return services;
+    }
+
+    /// <summary>
     /// Registers a model provider manually.
     /// </summary>
     /// <remarks>
@@ -86,6 +141,7 @@ public static class AiServiceCollectionExtensions
     /// <typeparam name="TProvider">The provider implementation type.</typeparam>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>
+    [Obsolete("Use TryAddModelProvider<TProvider> instead for proper idempotent registration with typed HttpClient.")]
     public static IServiceCollection AddAiProvider<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TProvider>(
         this IServiceCollection services)
         where TProvider : class, IModelProvider

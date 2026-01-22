@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Mistral;
 
 namespace Zonit.Extensions;
@@ -64,28 +62,21 @@ public static class MistralServiceCollectionExtensions
         this IServiceCollection services,
         Action<MistralOptions>? options = null)
     {
-        // Ensure core AI services are registered
+        if (services.IsProviderRegistered<MistralProvider>())
+            return services;
+
         services.AddAi();
 
-        // Bind configuration from appsettings.json
         services.AddOptions<MistralOptions>()
             .BindConfiguration(MistralOptions.SectionName);
 
-        // Apply additional configuration via PostConfigure
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<MistralProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate.
-        // This resolves MistralProvider through the container, which uses the typed HttpClient
-        // registered by AddHttpClient<MistralProvider>() above.
-        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<MistralProvider>()));
+        services.TryAddModelProvider<MistralProvider>();
 
         return services;
     }

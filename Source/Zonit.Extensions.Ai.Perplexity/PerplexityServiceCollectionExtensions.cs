@@ -1,6 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
-using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Perplexity;
 
 namespace Zonit.Extensions;
@@ -52,6 +50,9 @@ public static class PerplexityServiceCollectionExtensions
         this IServiceCollection services,
         Action<PerplexityOptions>? options = null)
     {
+        if (services.IsProviderRegistered<PerplexityProvider>())
+            return services;
+
         services.AddAi();
 
         services.AddOptions<PerplexityOptions>()
@@ -60,13 +61,10 @@ public static class PerplexityServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<PerplexityProvider>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider using factory delegate to use typed HttpClient
-        services.TryAddEnumerable(
-            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<PerplexityProvider>()));
+        services.TryAddModelProvider<PerplexityProvider>();
 
         return services;
     }
