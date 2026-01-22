@@ -1,28 +1,66 @@
 # Zonit.Extensions.Ai
 
-A .NET library for integrating with multiple AI providers (OpenAI, Anthropic Claude, Google Gemini, X Grok, DeepSeek, Mistral) with Scriban templating, type-safe prompts, and built-in resilience.
+A .NET library for integrating with multiple AI providers with Scriban templating, type-safe prompts, and built-in resilience.
+
+**Supported Providers:**
+- **Commercial:** OpenAI, Anthropic, Google, X (Grok), DeepSeek, Mistral
+- **Open-Source Inference:** Groq, Together, Fireworks, Cohere
+- **Search-Augmented:** Perplexity
+- **Chinese Providers:** Alibaba (Qwen), Baidu (ERNIE), Zhipu (GLM), Moonshot, Yi (01.AI)
 
 ---
 
 ## NuGet Packages
 
+### Core Packages
+
 | Package | Version | Downloads | Description |
 |---------|---------|-----------|-------------|
 | **Zonit.Extensions.Ai** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.svg) | Core library with prompts and DI |
 | **Zonit.Extensions.Ai.Abstractions** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Abstractions.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Abstractions.svg) | Interfaces and contracts |
-| **Zonit.Extensions.Ai.OpenAi** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.OpenAi.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.OpenAi.svg) | OpenAI provider (GPT-5, O3/O4, DALL-E) |
-| **Zonit.Extensions.Ai.Anthropic** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Anthropic.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Anthropic.svg) | Anthropic provider (Claude 4.5) |
-| **Zonit.Extensions.Ai.Google** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Google.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Google.svg) | Google provider (Gemini 2.5/3) |
-| **Zonit.Extensions.Ai.X** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.X.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.X.svg) | X provider (Grok 4) |
-| **Zonit.Extensions.Ai.DeepSeek** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.DeepSeek.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.DeepSeek.svg) | DeepSeek provider (V3, R1) |
-| **Zonit.Extensions.Ai.Mistral** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Mistral.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Mistral.svg) | Mistral provider (Large, Codestral) |
 | **Zonit.Extensions.Ai.Prompts** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Prompts.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Prompts.svg) | Ready-to-use example prompts |
+
+### Commercial Providers
+
+| Package | Version | Downloads | Description |
+|---------|---------|-----------|-------------|
+| **Zonit.Extensions.Ai.OpenAi** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.OpenAi.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.OpenAi.svg) | OpenAI (GPT-5, O3/O4, DALL-E) |
+| **Zonit.Extensions.Ai.Anthropic** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Anthropic.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Anthropic.svg) | Anthropic (Claude 4.5) |
+| **Zonit.Extensions.Ai.Google** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Google.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Google.svg) | Google (Gemini 2.5/3) |
+| **Zonit.Extensions.Ai.X** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.X.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.X.svg) | X (Grok 4) |
+| **Zonit.Extensions.Ai.DeepSeek** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.DeepSeek.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.DeepSeek.svg) | DeepSeek (V3, R1) |
+| **Zonit.Extensions.Ai.Mistral** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Mistral.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Mistral.svg) | Mistral (Large, Codestral) |
+
+### Open-Source Inference Providers
+
+| Package | Version | Downloads | Description |
+|---------|---------|-----------|-------------|
+| **Zonit.Extensions.Ai.Groq** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Groq.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Groq.svg) | Groq (Llama 4, Qwen3, ultra-fast inference) |
+| **Zonit.Extensions.Ai.Together** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Together.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Together.svg) | Together AI (Llama 4, DeepSeek, Qwen3) |
+| **Zonit.Extensions.Ai.Fireworks** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Fireworks.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Fireworks.svg) | Fireworks (Llama, Mixtral, fast inference) |
+| **Zonit.Extensions.Ai.Cohere** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Cohere.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Cohere.svg) | Cohere (Command A, Aya, embeddings) |
+
+### Search-Augmented Providers
+
+| Package | Version | Downloads | Description |
+|---------|---------|-----------|-------------|
+| **Zonit.Extensions.Ai.Perplexity** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Perplexity.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Perplexity.svg) | Perplexity (Sonar, deep research) |
+
+### Chinese Providers
+
+| Package | Version | Downloads | Description |
+|---------|---------|-----------|-------------|
+| **Zonit.Extensions.Ai.Alibaba** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Alibaba.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Alibaba.svg) | Alibaba Cloud (Qwen Max/Plus/Turbo) |
+| **Zonit.Extensions.Ai.Baidu** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Baidu.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Baidu.svg) | Baidu (ERNIE 4.0/3.5) |
+| **Zonit.Extensions.Ai.Zhipu** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Zhipu.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Zhipu.svg) | Zhipu AI (GLM-4 Plus/Air/Flash) |
+| **Zonit.Extensions.Ai.Moonshot** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Moonshot.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Moonshot.svg) | Moonshot (Kimi, 128K context) |
+| **Zonit.Extensions.Ai.Yi** | ![NuGet](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Yi.svg) | ![NuGet](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Yi.svg) | 01.AI (Yi Large/Medium) |
 
 ```powershell
 # Core library
 dotnet add package Zonit.Extensions.Ai
 
-# Add providers you need
+# Commercial providers
 dotnet add package Zonit.Extensions.Ai.OpenAi
 dotnet add package Zonit.Extensions.Ai.Anthropic
 dotnet add package Zonit.Extensions.Ai.Google
@@ -30,9 +68,21 @@ dotnet add package Zonit.Extensions.Ai.X
 dotnet add package Zonit.Extensions.Ai.DeepSeek
 dotnet add package Zonit.Extensions.Ai.Mistral
 
-# Or via NuGet Package Manager
-Install-Package Zonit.Extensions.Ai
-Install-Package Zonit.Extensions.Ai.OpenAi
+# Open-source inference (fastest & cheapest)
+dotnet add package Zonit.Extensions.Ai.Groq
+dotnet add package Zonit.Extensions.Ai.Together
+dotnet add package Zonit.Extensions.Ai.Fireworks
+dotnet add package Zonit.Extensions.Ai.Cohere
+
+# Search-augmented
+dotnet add package Zonit.Extensions.Ai.Perplexity
+
+# Chinese providers
+dotnet add package Zonit.Extensions.Ai.Alibaba
+dotnet add package Zonit.Extensions.Ai.Baidu
+dotnet add package Zonit.Extensions.Ai.Zhipu
+dotnet add package Zonit.Extensions.Ai.Moonshot
+dotnet add package Zonit.Extensions.Ai.Yi
 ```
 
 ---
@@ -95,12 +145,30 @@ Register providers using `appsettings.json` configuration:
 
 ```csharp
 // Program.cs - Configuration is automatically loaded via BindConfiguration
+
+// Commercial Providers
 services.AddAiOpenAi();      // Loads from "Ai:OpenAi"
 services.AddAiAnthropic();   // Loads from "Ai:Anthropic"
 services.AddAiGoogle();      // Loads from "Ai:Google"
 services.AddAiX();           // Loads from "Ai:X"
 services.AddAiDeepSeek();    // Loads from "Ai:DeepSeek"
 services.AddAiMistral();     // Loads from "Ai:Mistral"
+
+// Open-Source Inference (fastest & cheapest)
+services.AddAiGroq();        // Loads from "Ai:Groq"
+services.AddAiTogether();    // Loads from "Ai:Together"
+services.AddAiFireworks();   // Loads from "Ai:Fireworks"
+services.AddAiCohere();      // Loads from "Ai:Cohere"
+
+// Search-Augmented
+services.AddAiPerplexity();  // Loads from "Ai:Perplexity"
+
+// Chinese Providers
+services.AddAiAlibaba();     // Loads from "Ai:Alibaba"
+services.AddAiBaidu();       // Loads from "Ai:Baidu"
+services.AddAiZhipu();       // Loads from "Ai:Zhipu"
+services.AddAiMoonshot();    // Loads from "Ai:Moonshot"
+services.AddAiYi();          // Loads from "Ai:Yi"
 ```
 
 ### 2. Code-based Configuration
@@ -435,6 +503,116 @@ The model interface determines the operation:
 | Codestral | `Codestral` | $0.30 / $0.90 | Optimized for code |
 | Mistral Embed | `MistralEmbed` | $0.10 / - | Embeddings |
 
+### Groq (Ultra-Fast Inference)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Llama 4 Scout 17B | `Llama4Scout17B` | $0.11 / $0.34 | Vision, 131K context |
+| Llama 4 Maverick 17B | `Llama4Maverick17B` | $0.20 / $0.60 | Vision, advanced reasoning |
+| Llama 3.3 70B | `Llama3_3_70B` | $0.59 / $0.79 | 128K context, versatile |
+| Qwen3 32B | `Qwen3_32B` | $0.29 / $0.59 | Reasoning, 131K context |
+| Llama 3.1 8B | `Llama3_1_8B` | $0.05 / $0.08 | Fast, cost-effective |
+| DeepSeek R1 Distill 70B | `DeepSeekR1DistillLlama70B` | $0.75 / $0.99 | Reasoning |
+| Mixtral 8x7B | `Mixtral8x7B` | $0.24 / $0.24 | MoE, 32K context |
+| Gemma2 9B | `Gemma2_9B` | $0.20 / $0.20 | Google open model |
+| LlamaGuard 4 12B | `LlamaGuard4_12B` | $0.20 / $0.20 | Safety classifier |
+
+### Together AI
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Llama 4 Scout 17B | `Llama4Scout17B` | $0.18 / $0.59 | 512K context |
+| Llama 4 Maverick 17B | `Llama4Maverick17B` | $0.27 / $0.85 | 1M context |
+| Llama 3.3 70B Instruct | `MetaLlama3_3_70BInstruct` | $0.88 / $0.88 | 128K context |
+| DeepSeek R1 0528 | `DeepSeekR1_0528` | $1.65 / $7.20 | Latest reasoning |
+| DeepSeek V3.1 | `DeepSeekV3_1` | $0.49 / $0.89 | Latest base |
+| DeepSeek R1 | `DeepSeekR1` | $3.00 / $7.20 | Reasoning model |
+| DeepSeek V3 | `DeepSeekV3` | $0.35 / $0.90 | Base model |
+| Qwen3 235B | `Qwen3_235B` | $0.50 / $0.50 | Largest Qwen MoE |
+| Qwen3 VL 32B | `Qwen3VL32B` | $0.18 / $0.18 | Vision-language |
+| Qwen 2.5 72B Instruct | `Qwen2_5_72BInstruct` | $1.20 / $1.20 | Strong reasoning |
+| Qwen 2.5 Coder 32B | `Qwen2_5_Coder32BInstruct` | $0.80 / $0.80 | Coding specialist |
+
+### Fireworks
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Llama 3.3 70B Instruct | `Llama3_3_70BInstruct` | $0.90 / $0.90 | 128K context |
+| DeepSeek V3 | `DeepSeekV3` | $0.90 / $0.90 | General purpose |
+| Qwen 2.5 72B Instruct | `Qwen2_5_72BInstruct` | $0.90 / $0.90 | Strong reasoning |
+| Mixtral 8x22B Instruct | `MixtralMoe8x22BInstruct` | $0.90 / $0.90 | MoE, 65K context |
+
+### Cohere
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Command A | `CommandA` | $2.50 / $10.00 | Flagship, 256K context |
+| Command A Reasoning | `CommandAReasoning` | $2.50 / $10.00 | Extended reasoning, 32K output |
+| Command A Vision | `CommandAVision` | $2.50 / $10.00 | Multimodal, 128K context |
+| Command R+ | `CommandRPlus` | $2.50 / $10.00 | Previous flagship |
+| Command R | `CommandR` | $0.15 / $0.60 | Cost-effective |
+| Command R 7B | `CommandR7B` | $0.0375 / $0.15 | Lightweight |
+| Aya Expanse 32B | `AyaExpanse32B` | $0.50 / $1.00 | Multilingual |
+| Aya Expanse 8B | `AyaExpanse8B` | $0.10 / $0.20 | Lightweight multilingual |
+| Embed v4 | `EmbedV4` | $0.10 / - | 128K context embeddings |
+| Embed English v3 | `EmbedEnglishV3` | $0.10 / - | English embeddings |
+| Embed Multilingual v3 | `EmbedMultilingualV3` | $0.10 / - | 100+ languages |
+
+### Perplexity (Search-Augmented)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Sonar | `Sonar` | $1.00 / $1.00 | Standard search, 128K |
+| Sonar Pro | `SonarPro` | $3.00 / $15.00 | Enhanced search |
+| Sonar Reasoning Pro | `SonarReasoningPro` | $2.00 / $8.00 | Reasoning + search |
+| Sonar Deep Research | `SonarDeepResearch` | $5.00 / $20.00 | Deep research |
+
+### Alibaba Cloud (Qwen)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Qwen Max | `QwenMax` | $2.40 / $9.60 | Flagship, 32K context |
+| Qwen Plus | `QwenPlus` | $0.80 / $3.20 | Balanced |
+| Qwen Turbo | `QwenTurbo` | $0.30 / $0.60 | Fast |
+| Qwen Long | `QwenLong` | $0.60 / $2.40 | Extended context |
+| Qwen Coder Plus | `QwenCoderPlus` | $2.40 / $9.60 | Coding specialist |
+
+### Baidu (ERNIE)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| ERNIE 4.0 | `Ernie4` | $12.00 / $12.00 | Flagship, Chinese |
+| ERNIE 4.0 Turbo | `Ernie4Turbo` | $6.00 / $6.00 | Faster flagship |
+| ERNIE 3.5 | `Ernie3_5` | $1.20 / $1.20 | Balanced |
+| ERNIE Speed | `ErnieSpeed` | $0.40 / $0.80 | Fast |
+| ERNIE Lite | `ErnieLite` | $0.10 / $0.10 | Cost-effective |
+
+### Zhipu AI (GLM)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| GLM-4 Plus | `Glm4Plus` | $7.00 / $7.00 | Flagship, 128K context |
+| GLM-4 Long | `Glm4Long` | $0.14 / $0.14 | 1M context |
+| GLM-4 Air | `Glm4Air` | $0.14 / $0.14 | Balanced |
+| GLM-4 Flash | `Glm4Flash` | $0.01 / $0.01 | Ultra-fast |
+
+### Moonshot (Kimi)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Moonshot V1 128K | `MoonshotV1_128K` | $6.00 / $6.00 | Maximum context |
+| Moonshot V1 32K | `MoonshotV1_32K` | $1.70 / $1.70 | Standard context |
+| Moonshot V1 8K | `MoonshotV1_8K` | $0.85 / $0.85 | Fast, affordable |
+
+### 01.AI (Yi)
+
+| Model | Class | Price (in/out per 1M) | Features |
+|-------|-------|----------------------|----------|
+| Yi Large | `YiLarge` | $3.00 / $3.00 | Flagship, bilingual |
+| Yi Large Turbo | `YiLargeTurbo` | $1.50 / $1.50 | Fast flagship |
+| Yi Medium | `YiMedium` | $0.36 / $0.36 | Balanced |
+| Yi Medium 200K | `YiMedium200K` | $0.85 / $0.85 | Extended 200K context |
+
 ---
 
 ## Scriban Templating
@@ -695,7 +873,7 @@ The library uses **Microsoft.Extensions.Http.Resilience** with optimized setting
       "RetryBaseDelay": "00:00:02",          // Start with 2s delay
       "RetryMaxDelay": "00:00:30",           // Max 30s delay
       "UseJitter": true,                     // Add random jitter to prevent thundering herd
-      "CircuitBreakerSamplingDuration": "00:05:00",
+      "CircuitBreakerSamplingDuration": "00:25:00", // Must be >= 2x AttemptTimeout
       "CircuitBreakerFailureRatio": 0.5,
       "CircuitBreakerMinimumThroughput": 5,
       "CircuitBreakerBreakDuration": "00:00:30"
@@ -709,12 +887,13 @@ Or configure in code:
 ```csharp
 services.AddAi(options =>
 {
-    options.Resilience.TotalRequestTimeout = TimeSpan.FromMinutes(15);
+    options.Resilience.TotalRequestTimeout = TimeSpan.FromMinutes(40);
     options.Resilience.AttemptTimeout = TimeSpan.FromMinutes(10);
     options.Resilience.MaxRetryAttempts = 5;
     options.Resilience.RetryBaseDelay = TimeSpan.FromSeconds(3);
     options.Resilience.RetryMaxDelay = TimeSpan.FromMinutes(1);
     options.Resilience.UseJitter = true;
+    // Note: CircuitBreakerSamplingDuration is auto-corrected to be >= 2.5x AttemptTimeout
 });
 ```
 
@@ -728,6 +907,7 @@ services.AddAi(options =>
 | `RetryBaseDelay` | 2s | Initial delay between retries (exponential backoff) |
 | `RetryMaxDelay` | 30s | Maximum delay between retries |
 | `UseJitter` | true | Add randomness to delays to prevent thundering herd |
+| `CircuitBreakerSamplingDuration` | 25 min | Must be >= 2x AttemptTimeout (auto-corrected) |
 | `CircuitBreakerFailureRatio` | 0.5 | 50% failure rate opens circuit |
 | `CircuitBreakerBreakDuration` | 30s | Time circuit stays open before test |
 
@@ -811,12 +991,29 @@ Zonit.Extensions.Ai/
 │   │   ├── IPrompt.cs, ILlm.cs           # Contracts
 │   │   └── IAiProvider.cs                 # Provider interface
 │   │
-│   ├── Zonit.Extensions.Ai.OpenAi/        # OpenAI provider
-│   ├── Zonit.Extensions.Ai.Anthropic/     # Anthropic provider
-│   ├── Zonit.Extensions.Ai.Google/        # Google provider
-│   ├── Zonit.Extensions.Ai.X/             # X provider
-│   ├── Zonit.Extensions.Ai.DeepSeek/      # DeepSeek provider
-│   ├── Zonit.Extensions.Ai.Mistral/       # Mistral provider
+│   │  # Commercial Providers
+│   ├── Zonit.Extensions.Ai.OpenAi/        # OpenAI (GPT-5, O3/O4, DALL-E)
+│   ├── Zonit.Extensions.Ai.Anthropic/     # Anthropic (Claude 4.5)
+│   ├── Zonit.Extensions.Ai.Google/        # Google (Gemini)
+│   ├── Zonit.Extensions.Ai.X/             # X (Grok 4)
+│   ├── Zonit.Extensions.Ai.DeepSeek/      # DeepSeek (V3, R1)
+│   ├── Zonit.Extensions.Ai.Mistral/       # Mistral (Large, Codestral)
+│   │
+│   │  # Open-Source Inference
+│   ├── Zonit.Extensions.Ai.Groq/          # Groq (Llama 4, ultra-fast)
+│   ├── Zonit.Extensions.Ai.Together/      # Together AI (Llama, Qwen, DeepSeek)
+│   ├── Zonit.Extensions.Ai.Fireworks/     # Fireworks (fast inference)
+│   ├── Zonit.Extensions.Ai.Cohere/        # Cohere (Command A, embeddings)
+│   │
+│   │  # Search-Augmented
+│   ├── Zonit.Extensions.Ai.Perplexity/    # Perplexity (Sonar, deep research)
+│   │
+│   │  # Chinese Providers
+│   ├── Zonit.Extensions.Ai.Alibaba/       # Alibaba Cloud (Qwen)
+│   ├── Zonit.Extensions.Ai.Baidu/         # Baidu (ERNIE)
+│   ├── Zonit.Extensions.Ai.Zhipu/         # Zhipu AI (GLM-4)
+│   ├── Zonit.Extensions.Ai.Moonshot/      # Moonshot (Kimi)
+│   ├── Zonit.Extensions.Ai.Yi/            # 01.AI (Yi)
 │   │
 │   └── Zonit.Extensions.Ai.Prompts/       # Ready-to-use prompts
 ```
@@ -859,12 +1056,29 @@ Zonit.Extensions.Ai/
   "Ai": {                          // Global (AiOptions)
     "Resilience": { ... },          // Shared by all providers
     
-    "OpenAi": { ... },              // OpenAiOptions (provider-specific)
+    // Commercial Providers
+    "OpenAi": { ... },              // OpenAiOptions
     "Anthropic": { ... },           // AnthropicOptions
     "Google": { ... },              // GoogleOptions
     "X": { ... },                   // XOptions
     "DeepSeek": { ... },            // DeepSeekOptions
-    "Mistral": { ... }              // MistralOptions
+    "Mistral": { ... },             // MistralOptions
+    
+    // Open-Source Inference
+    "Groq": { ... },                // GroqOptions
+    "Together": { ... },            // TogetherOptions
+    "Fireworks": { ... },           // FireworksOptions
+    "Cohere": { ... },              // CohereOptions
+    
+    // Search-Augmented
+    "Perplexity": { ... },          // PerplexityOptions
+    
+    // Chinese Providers
+    "Alibaba": { ... },             // AlibabaOptions
+    "Baidu": { ... },               // BaiduOptions
+    "Zhipu": { ... },               // ZhipuOptions
+    "Moonshot": { ... },            // MoonshotOptions
+    "Yi": { ... }                   // YiOptions
   }
 }
 ```

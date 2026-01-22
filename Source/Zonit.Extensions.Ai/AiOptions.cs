@@ -39,6 +39,10 @@ public sealed class AiOptions
 /// Configures retry policies, timeouts, and circuit breaker behavior
 /// for all AI provider HTTP calls. Optimized for long-running AI requests.
 /// <para>
+/// <b>Important:</b> CircuitBreakerSamplingDuration must be at least 2x AttemptTimeout
+/// (Polly requirement). Default values are configured accordingly.
+/// </para>
+/// <para>
 /// Example appsettings.json:
 /// <code>
 /// {
@@ -74,6 +78,9 @@ public sealed class AiResilienceOptions
     /// Each individual request attempt (before retry) will timeout after this duration.
     /// Should be less than <see cref="TotalRequestTimeout"/>.
     /// AI models can take 5-10 minutes for complex reasoning tasks.
+    /// <para>
+    /// <b>Note:</b> CircuitBreakerSamplingDuration must be at least 2x this value.
+    /// </para>
     /// </remarks>
     public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromMinutes(10);
 
@@ -103,9 +110,13 @@ public sealed class AiResilienceOptions
 
     /// <summary>
     /// Duration of the sampling period for circuit breaker failure ratio calculation.
-    /// Default: 30 seconds.
+    /// Default: 25 minutes.
     /// </summary>
-    public TimeSpan CircuitBreakerSamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
+    /// <remarks>
+    /// <b>Must be at least 2x <see cref="AttemptTimeout"/></b> (Polly requirement).
+    /// Default is 25 minutes to accommodate the default 10-minute attempt timeout.
+    /// </remarks>
+    public TimeSpan CircuitBreakerSamplingDuration { get; set; } = TimeSpan.FromMinutes(25);
 
     /// <summary>
     /// Failure ratio threshold to open the circuit breaker.
@@ -134,6 +145,28 @@ public sealed class AiResilienceOptions
     /// </remarks>
     [Obsolete("Use TotalRequestTimeout and AttemptTimeout instead. This property is ignored.")]
     public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Validates the configuration and auto-corrects invalid values.
+    /// </summary>
+    /// <remarks>
+    /// Ensures CircuitBreakerSamplingDuration is at least 2x AttemptTimeout.
+    /// Called automatically during resilience handler configuration.
+    /// </remarks>
+    internal void EnsureValid()
+    {
+        var minSamplingDuration = AttemptTimeout * 2.5; // 2.5x for safety margin
+
+        if (CircuitBreakerSamplingDuration < minSamplingDuration)
+        {
+            CircuitBreakerSamplingDuration = minSamplingDuration;
+        }
+
+        if (TotalRequestTimeout <= AttemptTimeout)
+        {
+            TotalRequestTimeout = AttemptTimeout * 3; // Allow for retries
+        }
+    }
 }
 
 /// <summary>

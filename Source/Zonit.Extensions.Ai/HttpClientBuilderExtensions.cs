@@ -56,6 +56,9 @@ public static class HttpClientBuilderExtensions
         var aiOptions = serviceProvider.GetService<IOptions<AiOptions>>()?.Value ?? new AiOptions();
         var resilience = aiOptions.Resilience;
 
+        // Validate and auto-correct configuration
+        resilience.EnsureValid();
+
         // Configure timeouts
         options.TotalRequestTimeout.Timeout = resilience.TotalRequestTimeout;
         options.AttemptTimeout.Timeout = resilience.AttemptTimeout;

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <PackageId>Zonit.Extensions.Ai.Cohere</PackageId>
+    <Title>Zonit.Extensions.Ai.Cohere</Title>
+    <Description>Cohere AI provider for Zonit.Extensions.Ai. Includes Command R, Command R+, and Embed models.</Description>
+    <PackageTags>ai;llm;cohere;command-r;embeddings;rag;zonit</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+  </ItemGroup>
+
+</Project>

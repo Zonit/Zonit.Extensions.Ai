@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <RootNamespace>Zonit.Extensions.Ai.Yi</RootNamespace>
+    <Description>
+01.AI (Yi) provider for Zonit.Extensions.Ai library.
+Provides access to Yi series of large language models.
+
+Models included:
+- Yi Large: Flagship model with advanced reasoning (200B parameters)
+- Yi Medium: Balanced performance model (32K context)
+- Yi Vision: Multimodal image understanding
+- Yi Large Turbo: Optimized for speed
+
+Features:
+- OpenAI-compatible API format
+- Full streaming support
+- Strong multilingual capabilities (Chinese and English)
+- Long context understanding
+    </Description>
+    <PackageTags>$(PackageTags);ai;01ai;yi;llm;chat;chinese</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <ProjectReference Include="..\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+  </ItemGroup>
+
+</Project>
