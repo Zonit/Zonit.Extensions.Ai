@@ -60,10 +60,13 @@ public static class YiServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, YiProvider>());
-
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<YiProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate to use typed HttpClient
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<YiProvider>()));
 
         return services;
     }

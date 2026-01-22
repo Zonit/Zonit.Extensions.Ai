@@ -75,12 +75,17 @@ public static class GoogleServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register Google provider
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, GoogleProvider>());
-
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
+        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<GoogleProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate.
+        // This resolves GoogleProvider through the container, which uses the typed HttpClient
+        // registered by AddHttpClient<GoogleProvider>() above.
+        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<GoogleProvider>()));
 
         return services;
     }

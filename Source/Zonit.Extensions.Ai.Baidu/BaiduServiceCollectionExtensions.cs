@@ -60,10 +60,13 @@ public static class BaiduServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, BaiduProvider>());
-
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<BaiduProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate to use typed HttpClient
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<BaiduProvider>()));
 
         return services;
     }

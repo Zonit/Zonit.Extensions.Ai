@@ -94,7 +94,7 @@ dotnet add package Zonit.Extensions.Ai.Yi
 - **Scriban templating** - Dynamic prompts with variables and conditions
 - **Cost calculation** - Estimate costs before calling API
 - **Resilience** - Retry, circuit breaker, timeout with Microsoft.Extensions.Http.Resilience
-- **Plugin architecture** - Auto-discovery of providers, idempotent registration with `TryAddEnumerable`
+- **Plugin architecture** - Explicit provider registration with `TryAddEnumerable`, idempotent and safe
 - **Clean architecture** - SOLID principles, each provider self-contained with own Options and DI
 - **Best practices** - `BindConfiguration` + `PostConfigure` pattern for configuration
 - **Separation of concerns** - Provider-specific options separated from global configuration
@@ -1028,11 +1028,12 @@ Zonit.Extensions.Ai/
 2. **Dependency Inversion**
    - Providers implement `IModelProvider` from Abstractions
    - Core library depends only on abstractions
-   - Providers discovered via auto-discovery or explicit registration
+   - Providers registered explicitly via extension methods to ensure proper HttpClient configuration
 
 3. **Open/Closed Principle**
    - Add new providers without modifying core library
    - Extend via `IModelProvider` interface
+   - Providers registered explicitly via their extension methods (e.g., `AddAiOpenAi()`)
 
 4. **Configuration Pattern**
    ```csharp
@@ -1117,8 +1118,7 @@ services.AddAiOpenAi()
   ↓
 ├─ services.AddAi()                    # Core services (idempotent)
 │  ├─ Register IAiProvider
-│  ├─ Configure AiOptions
-│  └─ Auto-discover providers
+│  └─ Configure AiOptions
 │
 ├─ Configure OpenAiOptions             # Provider-specific
 │  └─ BindConfiguration("Ai:OpenAi")
@@ -1126,7 +1126,7 @@ services.AddAiOpenAi()
 ├─ Register OpenAiProvider             # Provider implementation
 │  └─ TryAddEnumerable (no duplicates)
 │
-└─ AddHttpClient<OpenAiProvider>()     # Resilience
+└─ AddHttpClient<OpenAiProvider>()     # Resilience (40min timeout, retry, circuit breaker)
    └─ AddStandardResilienceHandler()
 ```
 
@@ -1137,11 +1137,10 @@ services.AddAiOpenAi()
 This library uses reflection for:
 - Scriban templating (property discovery)
 - JSON serialization (response parsing)
-- Provider auto-discovery (assembly scanning)
 
 For AOT projects, use Source Generators:
 - `AiJsonSerializerGenerator` - Generates JsonSerializerContext
-- `AiProviderRegistrationGenerator` - Generates provider registration
+- `AiPromptRegistrationGenerator` - Generates prompt registration
 
 ---
 

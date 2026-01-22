@@ -1,9 +1,10 @@
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
-/// Marks a class as an AI provider for auto-discovery.
-/// The Source Generator will detect classes with this attribute
-/// and register them automatically with DI.
+/// Marks a class as an AI provider implementation.
+/// Used for provider identification and metadata purposes.
+/// Providers must be registered explicitly via their extension methods
+/// (e.g., <c>AddAiOpenAi()</c>) to ensure proper HttpClient configuration.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class AiProviderAttribute : Attribute

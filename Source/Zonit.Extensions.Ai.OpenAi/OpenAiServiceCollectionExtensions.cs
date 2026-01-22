@@ -86,12 +86,17 @@ public static class OpenAiServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register OpenAI provider
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, OpenAiProvider>());
-
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
+        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<OpenAiProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate.
+        // This resolves OpenAiProvider through the container, which uses the typed HttpClient
+        // registered by AddHttpClient<OpenAiProvider>() above.
+        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<OpenAiProvider>()));
 
         return services;
     }

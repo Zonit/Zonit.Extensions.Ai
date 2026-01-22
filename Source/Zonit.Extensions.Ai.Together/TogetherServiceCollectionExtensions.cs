@@ -60,10 +60,13 @@ public static class TogetherServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, TogetherProvider>());
-
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<TogetherProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate to use typed HttpClient
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<TogetherProvider>()));
 
         return services;
     }

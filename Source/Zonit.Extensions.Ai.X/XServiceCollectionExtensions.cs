@@ -75,12 +75,17 @@ public static class XServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register X provider
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, XProvider>());
-
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
+        // AddHttpClient<T>() registers T as Transient with properly configured HttpClient.
         services.AddHttpClient<XProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate.
+        // This resolves XProvider through the container, which uses the typed HttpClient
+        // registered by AddHttpClient<XProvider>() above.
+        // TryAddEnumerable ensures idempotent registration for IEnumerable<IModelProvider>.
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<XProvider>()));
 
         return services;
     }

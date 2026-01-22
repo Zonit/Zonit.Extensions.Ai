@@ -60,10 +60,13 @@ public static class FireworksServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, FireworksProvider>());
-
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<FireworksProvider>()
             .AddAiResilienceHandler();
+
+        // Register as IModelProvider using factory delegate to use typed HttpClient
+        services.TryAddEnumerable(
+            ServiceDescriptor.Transient<IModelProvider>(sp => sp.GetRequiredService<FireworksProvider>()));
 
         return services;
     }
