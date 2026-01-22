@@ -92,9 +92,9 @@ public static class OpenAiServiceCollectionExtensions
         // Register OpenAI provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, OpenAiProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<OpenAiProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }

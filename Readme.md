@@ -683,17 +683,22 @@ var newPrompt = new ImagePromptBase("A sunset");
 
 ## Resilience Configuration
 
-Configure retry, timeout, and circuit breaker behavior globally:
+The library uses **Microsoft.Extensions.Http.Resilience** with optimized settings for AI providers. Configure retry, timeout, and circuit breaker behavior globally:
 
 ```json
 {
   "Ai": {
     "Resilience": {
-      "HttpClientTimeout": "00:05:00",      // 5 minutes
-      "MaxRetryAttempts": 3,                // Retry up to 3 times
-      "RetryBaseDelay": "00:00:02",         // Start with 2s delay
-      "RetryMaxDelay": "00:00:30",          // Max 30s delay
-      "UseJitter": true                     // Add random jitter to prevent thundering herd
+      "TotalRequestTimeout": "00:40:00",    // 40 minutes total (including retries)
+      "AttemptTimeout": "00:10:00",          // 10 minutes per attempt
+      "MaxRetryAttempts": 3,                 // Retry up to 3 times
+      "RetryBaseDelay": "00:00:02",          // Start with 2s delay
+      "RetryMaxDelay": "00:00:30",           // Max 30s delay
+      "UseJitter": true,                     // Add random jitter to prevent thundering herd
+      "CircuitBreakerSamplingDuration": "00:05:00",
+      "CircuitBreakerFailureRatio": 0.5,
+      "CircuitBreakerMinimumThroughput": 5,
+      "CircuitBreakerBreakDuration": "00:00:30"
     }
   }
 }
@@ -704,13 +709,35 @@ Or configure in code:
 ```csharp
 services.AddAi(options =>
 {
+    options.Resilience.TotalRequestTimeout = TimeSpan.FromMinutes(15);
+    options.Resilience.AttemptTimeout = TimeSpan.FromMinutes(10);
     options.Resilience.MaxRetryAttempts = 5;
-    options.Resilience.HttpClientTimeout = TimeSpan.FromMinutes(10);
     options.Resilience.RetryBaseDelay = TimeSpan.FromSeconds(3);
     options.Resilience.RetryMaxDelay = TimeSpan.FromMinutes(1);
     options.Resilience.UseJitter = true;
 });
 ```
+
+### Default Resilience Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `TotalRequestTimeout` | 40 min | Maximum time for entire request pipeline (including retries) |
+| `AttemptTimeout` | 10 min | Timeout for single request attempt |
+| `MaxRetryAttempts` | 3 | Number of retry attempts on transient failures |
+| `RetryBaseDelay` | 2s | Initial delay between retries (exponential backoff) |
+| `RetryMaxDelay` | 30s | Maximum delay between retries |
+| `UseJitter` | true | Add randomness to delays to prevent thundering herd |
+| `CircuitBreakerFailureRatio` | 0.5 | 50% failure rate opens circuit |
+| `CircuitBreakerBreakDuration` | 30s | Time circuit stays open before test |
+
+### Retry Policy
+
+Requests are automatically retried on:
+- Network errors (`HttpRequestException`)
+- Timeouts (`TaskCanceledException`, `TimeoutException`)
+- Rate limiting (HTTP 429)
+- Server errors (HTTP 500, 502, 503, 504)
 
 ### Per-Provider Timeout Override
 
@@ -720,10 +747,10 @@ Each provider can override the global timeout:
 {
   "Ai": {
     "Resilience": {
-      "HttpClientTimeout": "00:05:00"  // Default for all
+      "TotalRequestTimeout": "00:40:00"  // Default for all
     },
     "OpenAi": {
-      "Timeout": "00:10:00"            // Override for OpenAI only
+      "Timeout": "01:00:00"              // Override for OpenAI only
     }
   }
 }
@@ -732,7 +759,7 @@ Each provider can override the global timeout:
 ```csharp
 services.AddAiOpenAi(options =>
 {
-    options.Timeout = TimeSpan.FromMinutes(10);  // OpenAI-specific
+    options.Timeout = TimeSpan.FromMinutes(15);  // OpenAI-specific
 });
 ```
 

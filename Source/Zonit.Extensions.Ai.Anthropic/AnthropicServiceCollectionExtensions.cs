@@ -81,9 +81,9 @@ public static class AnthropicServiceCollectionExtensions
         // Register Anthropic provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, AnthropicProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<AnthropicProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }

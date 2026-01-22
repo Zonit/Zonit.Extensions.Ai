@@ -81,9 +81,9 @@ public static class MistralServiceCollectionExtensions
         // Register Mistral provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, MistralProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<MistralProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }

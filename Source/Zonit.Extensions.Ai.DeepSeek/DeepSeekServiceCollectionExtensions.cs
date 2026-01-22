@@ -81,9 +81,9 @@ public static class DeepSeekServiceCollectionExtensions
         // Register DeepSeek provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, DeepSeekProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<DeepSeekProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }

@@ -81,9 +81,9 @@ public static class GoogleServiceCollectionExtensions
         // Register Google provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, GoogleProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<GoogleProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }

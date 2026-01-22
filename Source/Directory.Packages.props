@@ -4,7 +4,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Version -->
-    <Version>1.9.19</Version>
+    <Version>1.9.20</Version>
     <AssemblyVersion>$(Version)</AssemblyVersion>
     <FileVersion>$(Version)</FileVersion>
     <!-- Package Output -->
@@ -19,7 +19,7 @@
   <!-- Common Dependencies -->
   <ItemGroup>
     <PackageVersion Include="Scriban" Version="6.5.2" />
-    <PackageVersion Include="Zonit.Extensions" Version="0.2.9" />
+    <PackageVersion Include="Zonit.Extensions" Version="0.2.10" />
   </ItemGroup>
   <!-- Source Generators Dependencies -->
   <ItemGroup>

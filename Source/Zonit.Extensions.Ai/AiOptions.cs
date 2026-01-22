@@ -37,15 +37,45 @@ public sealed class AiOptions
 /// </summary>
 /// <remarks>
 /// Configures retry policies, timeouts, and circuit breaker behavior
-/// for all AI provider HTTP calls.
+/// for all AI provider HTTP calls. Optimized for long-running AI requests.
+/// <para>
+/// Example appsettings.json:
+/// <code>
+/// {
+///   "Ai": {
+///     "Resilience": {
+///       "TotalRequestTimeout": "00:40:00",
+///       "AttemptTimeout": "00:10:00",
+///       "MaxRetryAttempts": 3
+///     }
+///   }
+/// }
+/// </code>
+/// </para>
 /// </remarks>
 public sealed class AiResilienceOptions
 {
     /// <summary>
-    /// HTTP client timeout for requests.
-    /// Default: 5 minutes.
+    /// Total timeout for the entire request pipeline, including all retry attempts.
+    /// Default: 40 minutes.
     /// </summary>
-    public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(5);
+    /// <remarks>
+    /// This is the maximum time the request can take from start to finish,
+    /// including all retries. AI requests can take many minutes, especially
+    /// for complex prompts with reasoning models.
+    /// </remarks>
+    public TimeSpan TotalRequestTimeout { get; set; } = TimeSpan.FromMinutes(40);
+
+    /// <summary>
+    /// Timeout for a single request attempt.
+    /// Default: 10 minutes.
+    /// </summary>
+    /// <remarks>
+    /// Each individual request attempt (before retry) will timeout after this duration.
+    /// Should be less than <see cref="TotalRequestTimeout"/>.
+    /// AI models can take 5-10 minutes for complex reasoning tasks.
+    /// </remarks>
+    public TimeSpan AttemptTimeout { get; set; } = TimeSpan.FromMinutes(10);
 
     /// <summary>
     /// Maximum number of retry attempts before failing.
@@ -70,6 +100,40 @@ public sealed class AiResilienceOptions
     /// Default: true.
     /// </summary>
     public bool UseJitter { get; set; } = true;
+
+    /// <summary>
+    /// Duration of the sampling period for circuit breaker failure ratio calculation.
+    /// Default: 30 seconds.
+    /// </summary>
+    public TimeSpan CircuitBreakerSamplingDuration { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Failure ratio threshold to open the circuit breaker.
+    /// Default: 0.5 (50% failures).
+    /// </summary>
+    public double CircuitBreakerFailureRatio { get; set; } = 0.5;
+
+    /// <summary>
+    /// Minimum number of requests in sampling period before circuit breaker can open.
+    /// Default: 5.
+    /// </summary>
+    public int CircuitBreakerMinimumThroughput { get; set; } = 5;
+
+    /// <summary>
+    /// Duration the circuit breaker stays open before allowing test requests.
+    /// Default: 30 seconds.
+    /// </summary>
+    public TimeSpan CircuitBreakerBreakDuration { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// HTTP client timeout for requests.
+    /// Default: 5 minutes.
+    /// </summary>
+    /// <remarks>
+    /// Deprecated. Use <see cref="TotalRequestTimeout"/> and <see cref="AttemptTimeout"/> instead.
+    /// </remarks>
+    [Obsolete("Use TotalRequestTimeout and AttemptTimeout instead. This property is ignored.")]
+    public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(5);
 }
 
 /// <summary>

@@ -81,9 +81,9 @@ public static class XServiceCollectionExtensions
         // Register X provider
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IModelProvider, XProvider>());
 
-        // Register HttpClient with resilience
+        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<XProvider>()
-            .AddStandardResilienceHandler();
+            .AddAiResilienceHandler();
 
         return services;
     }
