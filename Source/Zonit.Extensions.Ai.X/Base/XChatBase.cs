@@ -21,6 +21,7 @@ public abstract class XChatBase : XBase, ITextLlm
 
     /// <summary>
     /// Web search configuration for Grok models.
+    /// Set to enable web/X search capabilities. Null disables search (default).
     /// </summary>
-    public virtual Search WebSearch { get; init; } = new Search();
+    public virtual Search? WebSearch { get; init; } = null;
 }

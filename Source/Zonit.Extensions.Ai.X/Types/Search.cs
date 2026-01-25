@@ -1,7 +1,8 @@
 namespace Zonit.Extensions.Ai.X;
 
 /// <summary>
-/// Search configuration for Grok models.
+/// Search configuration for Grok models using Agent Tools API.
+/// Supports web search and X (Twitter) search with advanced filtering.
 /// </summary>
 public class Search
 {
@@ -11,8 +12,10 @@ public class Search
     public virtual ModeType Mode { get; init; } = ModeType.Auto;
 
     /// <summary>
-    /// Returns citations to data sources as a list of URLs. Defaults to true.
+    /// Returns citations to data sources as a list of URLs.
+    /// Note: Citations are automatically returned by the Agent Tools API regardless of this setting.
     /// </summary>
+    [Obsolete("Citations are automatically provided by the X Agent Tools API. This property is kept for backward compatibility but has no effect.")]
     public virtual bool Citations { get; init; } = true;
 
     /// <summary>
@@ -37,11 +40,15 @@ public class Search
 
     /// <summary>
     /// Language preference for search results (ISO 639-1 code, e.g., "en", "pl").
+    /// Note: Not supported by Agent Tools API. Use Country property in WebSearchSource instead.
     /// </summary>
+    [Obsolete("Not supported by the X Agent Tools API. Use the Country property in WebSearchSource for region-specific results.")]
     public virtual string? Language { get; init; } = null;
 
     /// <summary>
     /// Geographic region to focus search results (ISO 3166-1 alpha-2 code, e.g., "US", "PL").
+    /// Note: Not supported by Agent Tools API. Use Country property in WebSearchSource instead.
     /// </summary>
+    [Obsolete("Not supported by the X Agent Tools API. Use the Country property in WebSearchSource for region-specific results.")]
     public virtual string? Region { get; init; } = null;
 }

@@ -248,7 +248,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
     private async Task TestGrokWebSearch(CancellationToken ct)
     {
-        var model = new Grok3
+        var model = new Grok4 // Grok-4 required for tools (web_search/x_search)
         {
             WebSearch = new Search { Mode = ModeType.Auto }
         };

@@ -15,7 +15,7 @@ namespace Zonit.Extensions.Ai.X;
 
 /// <summary>
 /// X (Grok) provider implementation.
-/// Uses OpenAI-compatible API.
+/// Uses Responses API (/v1/responses) with Agent Tools for web/X search.
 /// </summary>
 [AiProvider("x")]
 public sealed class XProvider : IModelProvider
@@ -66,7 +66,7 @@ public sealed class XProvider : IModelProvider
         _logger.LogDebug("X request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/chat/completions", content, cancellationToken);
+        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
 
         stopwatch.Stop();
 
@@ -80,7 +80,9 @@ public sealed class XProvider : IModelProvider
 
         var xResponse = JsonSerializer.Deserialize<XResponse>(responseJson, JsonOptions)!;
 
-        var textContent = xResponse.Choices?.FirstOrDefault()?.Message?.Content;
+        // Responses API uses 'output' array instead of 'choices'
+        var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
+            ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
 
         if (string.IsNullOrEmpty(textContent))
             throw new InvalidOperationException("No text in X response");
@@ -149,7 +151,7 @@ public sealed class XProvider : IModelProvider
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = content };
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         response.EnsureSuccessStatusCode();
@@ -166,7 +168,7 @@ public sealed class XProvider : IModelProvider
             if (data == "[DONE]") break;
 
             var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
-            var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
+            var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
 
             if (text != null)
                 yield return text;
@@ -202,34 +204,37 @@ public sealed class XProvider : IModelProvider
         IPrompt<TResponse> prompt,
         Type responseType)
     {
-        var messages = new List<object>();
-
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
-
-        var content = new List<object> { new { type = "text", text = prompt.Text } };
-
-        if (prompt.Files != null)
-        {
-            foreach (var file in prompt.Files.Where(f => f.IsImage))
-            {
-                // Use DataUrl which already contains MediaType detected from binary signature
-                content.Add(new
-                {
-                    type = "image_url",
-                    image_url = new { url = file.DataUrl }
-                });
-            }
-        }
-
-        messages.Add(new { role = "user", content });
-
         var request = new Dictionary<string, object>
         {
             ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            ["max_output_tokens"] = llm.MaxTokens
         };
+
+        // Responses API uses 'instructions' for system message
+        if (!string.IsNullOrEmpty(prompt.System))
+            request["instructions"] = prompt.System;
+
+        // Build input - Responses API format
+        var input = new List<object>();
+        var content = new List<object> { new { type = "input_text", text = prompt.Text } };
+
+        if (prompt.Files != null)
+        {
+            foreach (var file in prompt.Files)
+            {
+                if (file.IsImage)
+                {
+                    content.Add(new
+                    {
+                        type = "input_image",
+                        image_url = file.DataUrl
+                    });
+                }
+            }
+        }
+
+        input.Add(new { role = "user", content });
+        request["input"] = input;
 
         // Only send temperature/top_p if not default - OpenAI-compatible API recommends altering one, not both
         if (llm is XChatBase xLlm)
@@ -239,10 +244,13 @@ public sealed class XProvider : IModelProvider
             if (xLlm.TopP < 1.0)
                 request["top_p"] = xLlm.TopP;
 
-            // WebSearch support
-            if (xLlm.WebSearch.Mode != ModeType.Never)
+            // WebSearch support - using Responses API Agent Tools
+            // NOTE: Responses API uses separate 'web_search' and 'x_search' tools
+            if (xLlm.WebSearch != null && xLlm.WebSearch.Mode != ModeType.Never)
             {
-                request["search_parameters"] = BuildSearchParameters(xLlm.WebSearch);
+                var tools = BuildAgentTools(xLlm.WebSearch);
+                if (tools.Count > 0)
+                    request["tools"] = tools;
             }
         }
 
@@ -337,113 +345,83 @@ public sealed class XProvider : IModelProvider
         return content;
     }
 
-    private static Dictionary<string, object> BuildSearchParameters(Search webSearch)
+    /// <summary>
+    /// Builds agent tools array for the Agent Tools API.
+    /// Uses 'live_search' type for /v1/chat/completions endpoint compatibility.
+    /// </summary>
+    private static List<object> BuildAgentTools(Search webSearch)
     {
-        var searchParams = new Dictionary<string, object>
+        var tools = new List<object>();
+
+        // Responses API uses separate web_search and x_search tools
+        var hasWebSource = webSearch.Sources?.Any(s => s.Type == SourceType.Web) ?? true;
+        var hasXSource = webSearch.Sources?.Any(s => s.Type == SourceType.X) ?? true;
+
+        // Build web_search tool
+        if (hasWebSource)
         {
-            ["mode"] = webSearch.Mode switch
+            var webSearchConfig = new Dictionary<string, object> { ["type"] = "web_search" };
+            
+            var webSource = webSearch.Sources?.OfType<WebSearchSource>().FirstOrDefault();
+            if (webSource != null)
             {
-                ModeType.Always => "on",
-                ModeType.Auto => "auto",
-                ModeType.Never => "off",
-                _ => "auto"
-            },
-            ["return_citations"] = webSearch.Citations
-        };
-
-        if (webSearch.FromDate.HasValue)
-            searchParams["from_date"] = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
-
-        if (webSearch.ToDate.HasValue)
-            searchParams["to_date"] = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
-
-        if (webSearch.MaxResults != 20)
-            searchParams["max_search_results"] = webSearch.MaxResults;
-
-        if (webSearch.Sources?.Length > 0)
-        {
-            var sources = webSearch.Sources.Select(BuildSourceConfiguration).ToList();
-            searchParams["sources"] = sources;
-        }
-
-        return searchParams;
-    }
-
-    private static Dictionary<string, object> BuildSourceConfiguration(ISearchSource searchSource)
-    {
-        var source = new Dictionary<string, object>
-        {
-            ["type"] = GetSourceTypeDescription(searchSource.Type)
-        };
-
-        switch (searchSource)
-        {
-            case WebSearchSource webSource:
-                if (!string.IsNullOrEmpty(webSource.Country))
-                    source["country"] = webSource.Country;
-                if (webSource.ExcludedWebsites?.Length > 0)
-                    source["excluded_websites"] = webSource.ExcludedWebsites.Take(5).ToArray();
                 if (webSource.AllowedWebsites?.Length > 0)
-                    source["allowed_websites"] = webSource.AllowedWebsites.Take(5).ToArray();
-                if (!webSource.SafeSearch)
-                    source["safe_search"] = false;
-                break;
-
-            case XSearchSource xSource:
-                if (xSource.IncludedXHandles?.Length > 0)
-                    source["included_x_handles"] = xSource.IncludedXHandles.Take(10).ToArray();
-                if (xSource.ExcludedXHandles?.Length > 0)
-                    source["excluded_x_handles"] = xSource.ExcludedXHandles.Take(10).ToArray();
-                if (xSource.PostFavoriteCount.HasValue)
-                    source["post_favorite_count"] = xSource.PostFavoriteCount.Value;
-                if (xSource.PostViewCount.HasValue)
-                    source["post_view_count"] = xSource.PostViewCount.Value;
-                break;
-
-            case NewsSearchSource newsSource:
-                if (!string.IsNullOrEmpty(newsSource.Country))
-                    source["country"] = newsSource.Country;
-                if (newsSource.ExcludedWebsites?.Length > 0)
-                    source["excluded_websites"] = newsSource.ExcludedWebsites.Take(5).ToArray();
-                if (!newsSource.SafeSearch)
-                    source["safe_search"] = false;
-                break;
-
-            case RssSearchSource rssSource:
-                if (rssSource.Links?.Length > 0)
-                    source["links"] = rssSource.Links.Take(1).ToArray();
-                break;
+                    webSearchConfig["allowed_domains"] = webSource.AllowedWebsites.Take(5).ToArray();
+                if (webSource.ExcludedWebsites?.Length > 0)
+                    webSearchConfig["excluded_domains"] = webSource.ExcludedWebsites.Take(5).ToArray();
+            }
+            
+            tools.Add(webSearchConfig);
         }
 
-        return source;
+        // Build x_search tool
+        if (hasXSource)
+        {
+            var xSearchConfig = new Dictionary<string, object> { ["type"] = "x_search" };
+            
+            var xSource = webSearch.Sources?.OfType<XSearchSource>().FirstOrDefault();
+            if (xSource != null)
+            {
+                if (xSource.IncludedXHandles?.Length > 0)
+                    xSearchConfig["allowed_x_handles"] = xSource.IncludedXHandles.Take(10).ToArray();
+                if (xSource.ExcludedXHandles?.Length > 0)
+                    xSearchConfig["excluded_x_handles"] = xSource.ExcludedXHandles.Take(10).ToArray();
+            }
+            
+            // Date filters (shared between web and x search)
+            if (webSearch.FromDate.HasValue)
+                xSearchConfig["from_date"] = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
+            if (webSearch.ToDate.HasValue)
+                xSearchConfig["to_date"] = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
+            
+            tools.Add(xSearchConfig);
+        }
+
+        return tools;
     }
 
-    private static string GetSourceTypeDescription(SourceType sourceType)
-    {
-        var field = typeof(SourceType).GetField(sourceType.ToString());
-        var attribute = field?.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
-            .Cast<System.ComponentModel.DescriptionAttribute>()
-            .FirstOrDefault();
-        return attribute?.Description ?? sourceType.ToString().ToLowerInvariant();
-    }
 }
 
 // Response models
+// Responses API format
 internal sealed class XResponse
 {
     public string? Id { get; set; }
-    public XChoice[]? Choices { get; set; }
+    public XOutput[]? Output { get; set; }
     public XUsage? Usage { get; set; }
+    public string? Status { get; set; }
 }
 
-internal sealed class XChoice
+internal sealed class XOutput
 {
-    public XMessage? Message { get; set; }
+    public string? Type { get; set; } // "message", "reasoning"
+    public XOutputContent[]? Content { get; set; }
 }
 
-internal sealed class XMessage
+internal sealed class XOutputContent
 {
-    public string? Content { get; set; }
+    public string? Type { get; set; } // "output_text", "summary_text"
+    public string? Text { get; set; }
 }
 
 internal sealed class XUsage
@@ -460,15 +438,5 @@ internal sealed class XTokenDetails
 
 internal sealed class StreamChunk
 {
-    public StreamChoice[]? Choices { get; set; }
-}
-
-internal sealed class StreamChoice
-{
-    public StreamDelta? Delta { get; set; }
-}
-
-internal sealed class StreamDelta
-{
-    public string? Content { get; set; }
+    public XOutput[]? Output { get; set; }
 }

@@ -72,7 +72,7 @@ public class XProviderTests
     }
 
     [Fact]
-    public async Task GenerateAsync_WithWebSearch_ShouldIncludeSearchParameters()
+    public async Task GenerateAsync_WithWebSearch_ShouldIncludeAgentTools()
     {
         // Arrange
         string? capturedRequest = null;
@@ -85,7 +85,6 @@ public class XProviderTests
             WebSearch = new Search
             {
                 Mode = ModeType.Always,
-                Citations = true,
                 MaxResults = 10
             }
         };
@@ -96,9 +95,10 @@ public class XProviderTests
 
         // Assert
         capturedRequest.Should().NotBeNull();
-        capturedRequest.Should().Contain("search_parameters");
+        capturedRequest.Should().Contain("tools");
+        capturedRequest.Should().Contain("\"type\":\"live_search\"");
         capturedRequest.Should().Contain("\"mode\":\"on\"");
-        capturedRequest.Should().Contain("return_citations");
+        capturedRequest.Should().Contain("max_search_results");
     }
 
     [Fact]
@@ -128,6 +128,8 @@ public class XProviderTests
 
         // Assert
         capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("tools");
+        capturedRequest.Should().Contain("\"type\":\"live_search\"");
         capturedRequest.Should().Contain("sources");
         capturedRequest.Should().Contain("\"type\":\"web\"");
         capturedRequest.Should().Contain("\"type\":\"x\"");
@@ -234,7 +236,7 @@ public class XProviderTests
     }
 
     [Fact]
-    public async Task GenerateAsync_WithWebSearchNever_ShouldNotIncludeSearchParameters()
+    public async Task GenerateAsync_WithWebSearchNever_ShouldNotIncludeAgentTools()
     {
         // Arrange
         string? capturedRequest = null;
@@ -253,7 +255,7 @@ public class XProviderTests
 
         // Assert
         capturedRequest.Should().NotBeNull();
-        capturedRequest.Should().NotContain("search_parameters");
+        capturedRequest.Should().NotContain("tools");
     }
 
     private XProvider CreateProvider()
