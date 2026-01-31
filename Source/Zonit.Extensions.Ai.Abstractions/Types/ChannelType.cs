@@ -10,5 +10,6 @@ public enum ChannelType
     Text = 1 << 0,
     Image = 1 << 1,
     Audio = 1 << 2,
-    Embedding = 1 << 3
+    Embedding = 1 << 3,
+    Video = 1 << 4
 }

@@ -62,6 +62,28 @@ public interface IAiProvider
 
     #endregion
 
+    #region Video Generation
+
+    /// <summary>
+    /// Generates a video from a text description.
+    /// Returns an Asset containing the generated video.
+    /// </summary>
+    Task<Result<Asset>> GenerateAsync(
+        IVideoLlm llm,
+        string description,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Generates a video from a video prompt.
+    /// Returns an Asset containing the generated video.
+    /// </summary>
+    Task<Result<Asset>> GenerateAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Embeddings
 
     /// <summary>
@@ -126,6 +148,11 @@ public interface IAiProvider
     /// Calculates cost for audio transcription.
     /// </summary>
     Price CalculateCost(IAudioLlm llm, int durationSeconds);
+
+    /// <summary>
+    /// Calculates cost for video generation.
+    /// </summary>
+    Price CalculateCost(IVideoLlm llm, int durationSeconds, int videoCount = 1);
 
     /// <summary>
     /// Estimates cost for a prompt before sending.

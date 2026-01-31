@@ -126,6 +126,15 @@ public sealed class FireworksProvider : IModelProvider
     }
 
     /// <inheritdoc />
+    public Task<Result<Asset>> GenerateVideoAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Fireworks does not support video generation");
+    }
+
+    /// <inheritdoc />
     public Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,

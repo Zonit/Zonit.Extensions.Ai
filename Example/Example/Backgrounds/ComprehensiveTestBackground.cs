@@ -73,6 +73,10 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             // Image generation tests
             ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage1 { Quality = GPTImage1.QualityType.Medium, Size = GPTImage1.SizeType.Square }, "OpenAI", ct)),
             ("OpenAI - Image Generation Mini", async ct => await TestImageGenerationMini(ct)),
+            ("X Grok - Image Generation (Imagine)", async ct => await TestGrokImageGeneration(ct)),
+
+            // Video generation tests
+            ("X Grok - Video Generation (Imagine)", async ct => await TestGrokVideoGeneration(ct)),
         };
 
         var passed = 0;
@@ -163,6 +167,58 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
         var outputPath = Path.Combine(Path.GetTempPath(), $"ai-generated-mini-{Guid.NewGuid()}.png");
         await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
         Console.WriteLine($"\n      [OK] Mini image (1536x1024 Landscape) saved to: {outputPath} ({result.Value.Size})");
+    }
+
+    /// <summary>
+    /// Test image generation with X Grok Imagine model.
+    /// </summary>
+    private async Task TestGrokImageGeneration(CancellationToken ct)
+    {
+        // GrokImagineImage has fixed 1024x1024 resolution, no quality/size options
+        IImageLlm model = new GrokImagineImage();
+
+        var result = await provider.GenerateAsync(model, "A cute cartoon robot waving hello", ct);
+
+        if (!result.Value.HasValue)
+            throw new Exception("Empty image response");
+
+        if (!result.Value.IsImage)
+            throw new Exception($"Generated file is not an image: {result.Value.MediaType}");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"grok-imagine-{Guid.NewGuid()}.png");
+        await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
+        Console.WriteLine($"\n      [OK] Grok Imagine image saved to: {outputPath} ({result.Value.Size})");
+    }
+
+    /// <summary>
+    /// Test video generation with X Grok Imagine Video model.
+    /// Uses minimal duration (1 second) to minimize costs.
+    /// </summary>
+    /// <remarks>
+    /// TEMPORARILY DISABLED: X.ai Video API is in beta and status polling endpoint returns 404.
+    /// Video creation POST works, but GET status check fails.
+    /// Re-enable when X.ai publishes stable video generation API.
+    /// </remarks>
+    private async Task TestGrokVideoGeneration(CancellationToken ct)
+    {
+        // X.ai Video API - testing with corrected endpoint /v1/videos/{request_id}
+        IVideoLlm model = new GrokImagineVideo 
+        { 
+            Resolution = GrokImagineVideo.ResolutionType.Resolution480p,
+            DurationSeconds = 1 
+        };
+
+        var result = await provider.GenerateAsync(model, "A colorful butterfly flying over a flower garden", ct);
+
+        if (!result.Value.HasValue)
+            throw new Exception("Empty video response");
+
+        if (!result.Value.IsVideo)
+            throw new Exception($"Generated file is not a video: {result.Value.MediaType}");
+
+        var outputPath = Path.Combine(Path.GetTempPath(), $"grok-imagine-video-{Guid.NewGuid()}.mp4");
+        await System.IO.File.WriteAllBytesAsync(outputPath, result.Value.Data, ct);
+        Console.WriteLine($"\n      [OK] Grok Imagine video (1s) saved to: {outputPath} ({result.Value.Size})");
     }
 
     private async Task TestStructuredOutput(ILlm model, string providerName, CancellationToken ct)

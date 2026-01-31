@@ -70,6 +70,34 @@ internal sealed class AiProvider : IAiProvider
 
     #endregion
 
+    #region Video Generation
+
+    /// <inheritdoc />
+    public async Task<Result<Asset>> GenerateAsync(
+        IVideoLlm llm,
+        string description,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Generating video with {Provider}/{Model}", provider.Name, llm.Name);
+
+        return await provider.GenerateVideoAsync(llm, new SimpleImagePrompt(description), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<Asset>> GenerateAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Generating video with {Provider}/{Model}", provider.Name, llm.Name);
+
+        return await provider.GenerateVideoAsync(llm, prompt, cancellationToken);
+    }
+
+    #endregion
+
     #region Embeddings
 
     /// <inheritdoc />
@@ -151,6 +179,13 @@ internal sealed class AiProvider : IAiProvider
     {
         var minutes = durationSeconds / 60.0m;
         return new Price(llm.PriceInput * minutes);
+    }
+
+    /// <inheritdoc />
+    public Price CalculateCost(IVideoLlm llm, int durationSeconds, int videoCount = 1)
+    {
+        // Use the model's built-in pricing calculation
+        return new Price(llm.GetVideoGenerationPrice() * videoCount);
     }
 
     /// <inheritdoc />

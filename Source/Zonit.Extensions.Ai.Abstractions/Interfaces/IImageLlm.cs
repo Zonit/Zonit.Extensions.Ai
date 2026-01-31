@@ -8,6 +8,7 @@ public interface IImageLlm : ILlm
 {
     /// <summary>
     /// Gets the quality value for API request (from EnumValue attribute).
+    /// Not all providers support quality parameter.
     /// </summary>
     string QualityValue { get; }
     
@@ -15,6 +16,12 @@ public interface IImageLlm : ILlm
     /// Gets the size value for API request (from EnumValue attribute).
     /// </summary>
     string SizeValue { get; }
+
+    /// <summary>
+    /// Gets the aspect ratio value for API request (e.g., "16:9", "4:3", "1:1").
+    /// Returns null if aspect ratio is not specified (uses provider default).
+    /// </summary>
+    string? AspectRatioValue => null;
     
     /// <summary>
     /// Calculates the price for generating a single image based on quality and size.

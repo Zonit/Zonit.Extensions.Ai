@@ -21,4 +21,5 @@ public enum EndpointsType
     Translation = 1 << 11,
     Moderation = 1 << 12,
     Completion = 1 << 13,
+    Video = 1 << 14,
 }

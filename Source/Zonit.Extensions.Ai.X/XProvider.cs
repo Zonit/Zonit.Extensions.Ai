@@ -120,12 +120,212 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<Asset>> GenerateImageAsync(
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<Asset> prompt,
         CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException("X does not support image generation");
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["prompt"] = prompt.Text,
+            ["n"] = 1,
+            ["response_format"] = "b64_json"
+        };
+
+        // X.ai supports aspect_ratio but NOT quality parameter
+        if (!string.IsNullOrEmpty(llm.AspectRatioValue))
+            request["aspect_ratio"] = llm.AspectRatioValue;
+
+        // If source image is provided, use it for image editing
+        // X.ai expects image_url in data URL format: data:image/jpeg;base64,...
+        var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
+        if (sourceImage is { HasValue: true } img)
+            request["image_url"] = img.DataUrl;
+
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        _logger.LogDebug("X image generation request: {Payload}", jsonPayload);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/images/generations", content, cancellationToken);
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("X image generation error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"X Image API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var imageResponse = JsonSerializer.Deserialize<XImageResponse>(responseJson, JsonOptions);
+
+        if (imageResponse?.Data == null || imageResponse.Data.Length == 0)
+            throw new InvalidOperationException("No image data in response");
+
+        var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json ?? "");
+        Asset generatedImage = new(imageBytes, "generated.png");
+
+        var imageCost = llm.GetImageGenerationPrice();
+
+        return new Result<Asset>
+        {
+            Value = generatedImage,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage
+                {
+                    OutputCost = imageCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<Asset>> GenerateVideoAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        // Check for source image or video in prompt.Files
+        var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
+        var sourceVideo = prompt.Files?.FirstOrDefault(f => f.IsVideo);
+
+        // Step 1: Create video generation/edit task
+        var createRequest = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["prompt"] = prompt.Text,
+            ["duration"] = llm.DurationSeconds,
+            ["resolution"] = llm.QualityValue,
+            ["aspect_ratio"] = llm.AspectRatioValue
+        };
+
+        // Video from Image: adds image parameter
+        // X.ai expects: {"image": {"url": "<data url or public url>"}}
+        if (sourceImage is { HasValue: true } img)
+            createRequest["image"] = new Dictionary<string, string> { ["url"] = img.DataUrl };
+
+        // Video Edit: adds video parameter (requires public URL, not base64)
+        // X.ai expects: {"video": {"url": "<public url>"}}
+        // Note: For video editing, use a public URL - base64 is not supported for video input
+        if (sourceVideo is { HasValue: true } vid)
+            createRequest["video"] = new Dictionary<string, string> { ["url"] = vid.DataUrl };
+
+        // Choose endpoint: /v1/videos/edits for video editing, /v1/videos/generations for all else
+        var endpoint = sourceVideo is { HasValue: true } ? "/v1/videos/edits" : "/v1/videos/generations";
+
+        var jsonPayload = JsonSerializer.Serialize(createRequest, JsonOptions);
+        _logger.LogDebug("X video generation request: {Payload}", jsonPayload);
+
+        using var createContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var createResponse = await _httpClient.PostAsync(endpoint, createContent, cancellationToken);
+
+        var createResponseJson = await createResponse.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!createResponse.IsSuccessStatusCode)
+        {
+            _logger.LogError("X video generation error: {Status} - {Response}", createResponse.StatusCode, createResponseJson);
+            throw new HttpRequestException($"X Video API failed: {createResponse.StatusCode}: {createResponseJson}");
+        }
+
+        _logger.LogDebug("X video generation response: {Response}", createResponseJson);
+        
+        var videoTask = JsonSerializer.Deserialize<XVideoTaskResponse>(createResponseJson, JsonOptions);
+        
+        // API may return 'id' or 'request_id'
+        var taskId = videoTask?.Id ?? videoTask?.RequestId;
+        
+        if (string.IsNullOrEmpty(taskId))
+            throw new InvalidOperationException($"No task ID in video generation response: {createResponseJson}");
+
+        // Step 2: Poll for completion
+        var maxWaitTime = TimeSpan.FromMinutes(10);
+        var pollInterval = TimeSpan.FromSeconds(3);
+        var elapsed = TimeSpan.Zero;
+
+        XVideoStatusResponse? statusResponse = null;
+        while (elapsed < maxWaitTime)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await Task.Delay(pollInterval, cancellationToken);
+            elapsed += pollInterval;
+
+            // X.ai video status endpoint: GET /v1/videos/{request_id}
+            using var statusResp = await _httpClient.GetAsync($"/v1/videos/{taskId}", cancellationToken);
+            var statusJson = await statusResp.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!statusResp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("X video status check failed: {Status} - {Response}", statusResp.StatusCode, statusJson);
+                continue;
+            }
+
+            statusResponse = JsonSerializer.Deserialize<XVideoStatusResponse>(statusJson, JsonOptions);
+
+            // Check status (API may return 'status' or 'state' field)
+            var currentStatus = statusResponse?.State ?? statusResponse?.Status;
+            
+            _logger.LogDebug("Video status response: status={Status}, hasVideoUrl={HasVideo}", 
+                currentStatus, statusResponse?.Video?.Url != null);
+            
+            // X.ai API returns video.url when generation is complete (no status field in final response)
+            if (!string.IsNullOrEmpty(statusResponse?.Video?.Url))
+                break;
+            
+            if (currentStatus == "completed" || currentStatus == "succeeded")
+                break;
+
+            if (currentStatus == "failed" || currentStatus == "error")
+                throw new InvalidOperationException($"Video generation failed: {statusResponse?.Error ?? "Unknown error"}");
+
+            _logger.LogDebug("Video generation in progress, elapsed: {Elapsed}s", elapsed.TotalSeconds);
+        }
+
+        stopwatch.Stop();
+
+        // Step 3: Download the video (X.ai returns 'video.url' in completed response)
+        var videoUrl = statusResponse?.Video?.Url ?? statusResponse?.Url ?? statusResponse?.Output?.Url ?? statusResponse?.VideoUrl;
+        if (string.IsNullOrEmpty(videoUrl))
+            throw new InvalidOperationException("No video URL in response");
+
+        using var videoResponse = await _httpClient.GetAsync(videoUrl, cancellationToken);
+        videoResponse.EnsureSuccessStatusCode();
+
+        var videoBytes = await videoResponse.Content.ReadAsByteArrayAsync(cancellationToken);
+        Asset generatedVideo = new(videoBytes, "generated.mp4");
+
+        var videoCost = llm.GetVideoGenerationPrice();
+
+        return new Result<Asset>
+        {
+            Value = generatedVideo,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                RequestId = taskId,
+                Usage = new TokenUsage
+                {
+                    OutputCost = videoCost
+                }
+            }
+        };
     }
 
     /// <inheritdoc />
@@ -439,4 +639,54 @@ internal sealed class XTokenDetails
 internal sealed class StreamChunk
 {
     public XOutput[]? Output { get; set; }
+}
+
+// Image generation response models
+internal sealed class XImageResponse
+{
+    public XImageData[]? Data { get; set; }
+}
+
+internal sealed class XImageData
+{
+    public string? B64Json { get; set; }
+    public string? Url { get; set; }
+    public string? RevisedPrompt { get; set; }
+}
+
+// Video generation response models
+internal sealed class XVideoTaskResponse
+{
+    public string? Id { get; set; }
+    public string? RequestId { get; set; }
+    public string? Status { get; set; }
+}
+
+internal sealed class XVideoStatusResponse
+{
+    public string? Id { get; set; }
+    public string? Status { get; set; }
+    public string? State { get; set; }
+    public string? Error { get; set; }
+    public string? Url { get; set; }
+    public string? VideoUrl { get; set; }
+    public XVideoOutput? Output { get; set; }
+    /// <summary>
+    /// X.ai returns video data in this nested object when generation is complete.
+    /// </summary>
+    public XVideoData? Video { get; set; }
+}
+
+/// <summary>
+/// X.ai video response data containing URL and metadata.
+/// </summary>
+internal sealed class XVideoData
+{
+    public string? Url { get; set; }
+    public int? Duration { get; set; }
+}
+
+internal sealed class XVideoOutput
+{
+    public string? Url { get; set; }
 }

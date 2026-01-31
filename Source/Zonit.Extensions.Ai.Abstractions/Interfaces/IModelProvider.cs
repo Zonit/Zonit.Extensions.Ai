@@ -42,6 +42,15 @@ public interface IModelProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Generates a video.
+    /// Returns an Asset containing the generated video.
+    /// </summary>
+    Task<Result<Asset>> GenerateVideoAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Generates embeddings.
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

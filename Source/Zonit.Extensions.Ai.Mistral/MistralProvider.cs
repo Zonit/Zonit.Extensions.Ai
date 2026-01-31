@@ -125,6 +125,15 @@ public sealed class MistralProvider : IModelProvider
     }
 
     /// <inheritdoc />
+    public Task<Result<Asset>> GenerateVideoAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Mistral does not support video generation");
+    }
+
+    /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<float[]>> EmbedAsync(
