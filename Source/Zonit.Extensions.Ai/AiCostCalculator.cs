@@ -15,20 +15,29 @@ public static class AiCostCalculator
     /// <param name="inputTokens">Number of input tokens.</param>
     /// <param name="cachedTokens">Number of cached tokens (cheaper).</param>
     /// <returns>Input cost as Price.</returns>
-    public static Price CalculateInputCost(ILlm llm, int inputTokens, int cachedTokens = 0)
+    public static Price CalculateInputCost(ILlm llm, int inputTokens, int cachedTokens = 0, int cacheWriteTokens = 0)
     {
         var inputPrice = llm.GetInputPrice(inputTokens);
 
-        // Prices are per 1M tokens
-        var inputCost = (inputTokens / 1_000_000m) * inputPrice;
+        if (llm is not ITextLlm textLlm)
+            return new Price((inputTokens / 1_000_000m) * inputPrice);
 
-        // Apply cached tokens discount if model supports it
-        if (cachedTokens > 0 && llm is ITextLlm textLlm && textLlm.PriceCachedInput.HasValue)
+        // Split input into: regular | cache reads | cache writes — each may have a different price.
+        var regularTokens = Math.Max(0, inputTokens - cachedTokens - cacheWriteTokens);
+        var inputCost = (regularTokens / 1_000_000m) * inputPrice;
+
+        // Cache reads: cheaper (e.g. 0.1× base price)
+        if (cachedTokens > 0)
         {
-            var cachedInputPrice = textLlm.PriceCachedInput.Value;
-            var cachedCost = (cachedTokens / 1_000_000m) * cachedInputPrice;
-            var nonCachedTokens = inputTokens - cachedTokens;
-            inputCost = (nonCachedTokens / 1_000_000m) * inputPrice + cachedCost;
+            var readPrice = textLlm.PriceCachedInput ?? inputPrice;
+            inputCost += (cachedTokens / 1_000_000m) * readPrice;
+        }
+
+        // Cache writes: more expensive (e.g. 1.25× base price for Anthropic 5-min TTL)
+        if (cacheWriteTokens > 0)
+        {
+            var writePrice = textLlm.PriceCachedInputWrite ?? inputPrice;
+            inputCost += (cacheWriteTokens / 1_000_000m) * writePrice;
         }
 
         return new Price(inputCost);
@@ -55,7 +64,7 @@ public static class AiCostCalculator
     /// <returns>Total cost as Price.</returns>
     public static Price CalculateCost(ILlm llm, TokenUsage usage)
     {
-        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens);
+        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
         var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
         return inputCost + outputCost;
     }
@@ -68,7 +77,7 @@ public static class AiCostCalculator
     /// <returns>Tuple of (InputCost, OutputCost).</returns>
     public static (Price InputCost, Price OutputCost) CalculateCosts(ILlm llm, TokenUsage usage)
     {
-        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens);
+        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
         var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
         return (inputCost, outputCost);
     }

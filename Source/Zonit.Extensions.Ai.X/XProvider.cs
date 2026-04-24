@@ -89,12 +89,19 @@ public sealed class XProvider : IModelProvider
 
         var result = ParseResponse<TResponse>(textContent);
 
-        var inputTokens = xResponse.Usage?.PromptTokens ?? 0;
-        var outputTokens = xResponse.Usage?.CompletionTokens ?? 0;
+        // Responses API (POST /v1/responses) returns input_tokens/output_tokens.
+        // Chat Completions API (and GET /v1/responses/{id}) returns prompt_tokens/completion_tokens.
+        // We read both to stay compatible with either shape.
+        var inputTokens = xResponse.Usage?.InputTokens ?? xResponse.Usage?.PromptTokens ?? 0;
+        var outputTokens = xResponse.Usage?.OutputTokens ?? xResponse.Usage?.CompletionTokens ?? 0;
+        var cachedTokens = xResponse.Usage?.InputTokensDetails?.CachedTokens
+            ?? xResponse.Usage?.PromptTokensDetails?.CachedTokens
+            ?? 0;
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
-            OutputTokens = outputTokens
+            OutputTokens = outputTokens,
+            CachedTokens = cachedTokens
         });
 
         return new Result<TResponse>
@@ -111,7 +118,10 @@ public sealed class XProvider : IModelProvider
                 {
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
-                    ReasoningTokens = xResponse.Usage?.CompletionTokensDetails?.ReasoningTokens ?? 0,
+                    CachedTokens = cachedTokens,
+                    ReasoningTokens = xResponse.Usage?.OutputTokensDetails?.ReasoningTokens
+                        ?? xResponse.Usage?.CompletionTokensDetails?.ReasoningTokens
+                        ?? 0,
                     InputCost = inputCost,
                     OutputCost = outputCost
                 }
@@ -242,12 +252,12 @@ public sealed class XProvider : IModelProvider
         }
 
         _logger.LogDebug("X video generation response: {Response}", createResponseJson);
-        
+
         var videoTask = JsonSerializer.Deserialize<XVideoTaskResponse>(createResponseJson, JsonOptions);
-        
+
         // API may return 'id' or 'request_id'
         var taskId = videoTask?.Id ?? videoTask?.RequestId;
-        
+
         if (string.IsNullOrEmpty(taskId))
             throw new InvalidOperationException($"No task ID in video generation response: {createResponseJson}");
 
@@ -278,14 +288,14 @@ public sealed class XProvider : IModelProvider
 
             // Check status (API may return 'status' or 'state' field)
             var currentStatus = statusResponse?.State ?? statusResponse?.Status;
-            
-            _logger.LogDebug("Video status response: status={Status}, hasVideoUrl={HasVideo}", 
+
+            _logger.LogDebug("Video status response: status={Status}, hasVideoUrl={HasVideo}",
                 currentStatus, statusResponse?.Video?.Url != null);
-            
+
             // X.ai API returns video.url when generation is complete (no status field in final response)
             if (!string.IsNullOrEmpty(statusResponse?.Video?.Url))
                 break;
-            
+
             if (currentStatus == "completed" || currentStatus == "succeeded")
                 break;
 
@@ -561,7 +571,7 @@ public sealed class XProvider : IModelProvider
         if (hasWebSource)
         {
             var webSearchConfig = new Dictionary<string, object> { ["type"] = "web_search" };
-            
+
             var webSource = webSearch.Sources?.OfType<WebSearchSource>().FirstOrDefault();
             if (webSource != null)
             {
@@ -570,7 +580,7 @@ public sealed class XProvider : IModelProvider
                 if (webSource.ExcludedWebsites?.Length > 0)
                     webSearchConfig["excluded_domains"] = webSource.ExcludedWebsites.Take(5).ToArray();
             }
-            
+
             tools.Add(webSearchConfig);
         }
 
@@ -578,7 +588,7 @@ public sealed class XProvider : IModelProvider
         if (hasXSource)
         {
             var xSearchConfig = new Dictionary<string, object> { ["type"] = "x_search" };
-            
+
             var xSource = webSearch.Sources?.OfType<XSearchSource>().FirstOrDefault();
             if (xSource != null)
             {
@@ -587,13 +597,13 @@ public sealed class XProvider : IModelProvider
                 if (xSource.ExcludedXHandles?.Length > 0)
                     xSearchConfig["excluded_x_handles"] = xSource.ExcludedXHandles.Take(10).ToArray();
             }
-            
+
             // Date filters (shared between web and x search)
             if (webSearch.FromDate.HasValue)
                 xSearchConfig["from_date"] = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
             if (webSearch.ToDate.HasValue)
                 xSearchConfig["to_date"] = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
-            
+
             tools.Add(xSearchConfig);
         }
 
@@ -626,9 +636,32 @@ internal sealed class XOutputContent
 
 internal sealed class XUsage
 {
-    public int PromptTokens { get; set; }
-    public int CompletionTokens { get; set; }
+    // Responses API (POST /v1/responses) shape
+    public int? InputTokens { get; set; }
+    public int? OutputTokens { get; set; }
+    public XInputTokensDetails? InputTokensDetails { get; set; }
+    public XOutputTokensDetails? OutputTokensDetails { get; set; }
+
+    // Chat Completions API / GET /v1/responses/{id} shape
+    public int? PromptTokens { get; set; }
+    public int? CompletionTokens { get; set; }
+    public XPromptTokensDetails? PromptTokensDetails { get; set; }
     public XTokenDetails? CompletionTokensDetails { get; set; }
+}
+
+internal sealed class XInputTokensDetails
+{
+    public int CachedTokens { get; set; }
+}
+
+internal sealed class XOutputTokensDetails
+{
+    public int ReasoningTokens { get; set; }
+}
+
+internal sealed class XPromptTokensDetails
+{
+    public int CachedTokens { get; set; }
 }
 
 internal sealed class XTokenDetails

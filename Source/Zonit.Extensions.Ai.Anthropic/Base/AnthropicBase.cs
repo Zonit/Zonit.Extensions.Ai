@@ -19,6 +19,9 @@ public abstract class AnthropicBase : LlmBase, ITextLlm
     public virtual decimal? PriceCachedInput => PriceCachedRead;
 
     /// <inheritdoc />
+    public virtual decimal? PriceCachedInputWrite => PriceCachedWrite;
+
+    /// <inheritdoc />
     public virtual double Temperature { get; set; } = 1.0;
 
     /// <inheritdoc />

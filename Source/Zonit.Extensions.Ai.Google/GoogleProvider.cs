@@ -91,10 +91,14 @@ public sealed class GoogleProvider : IModelProvider
 
         var inputTokens = geminiResponse.UsageMetadata?.PromptTokenCount ?? 0;
         var outputTokens = geminiResponse.UsageMetadata?.CandidatesTokenCount ?? 0;
+        var reasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0;
+
+        // Gemini thinking tokens are billed at the output token rate but are NOT
+        // included in CandidatesTokenCount — add them to cost calculation separately.
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
-            OutputTokens = outputTokens
+            OutputTokens = outputTokens + reasoningTokens
         });
 
         return new Result<TResponse>
@@ -110,7 +114,7 @@ public sealed class GoogleProvider : IModelProvider
                 {
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
-                    ReasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0,
+                    ReasoningTokens = reasoningTokens,
                     InputCost = inputCost,
                     OutputCost = outputCost
                 }

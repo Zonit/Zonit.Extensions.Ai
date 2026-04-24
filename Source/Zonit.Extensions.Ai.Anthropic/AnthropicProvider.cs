@@ -88,12 +88,15 @@ public sealed class AnthropicProvider : IModelProvider
 
         var inputTokens = anthropicResponse.Usage?.InputTokens ?? 0;
         var outputTokens = anthropicResponse.Usage?.OutputTokens ?? 0;
-        var cachedTokens = anthropicResponse.Usage?.CacheReadInputTokens ?? 0;
+        var cachedReadTokens = anthropicResponse.Usage?.CacheReadInputTokens ?? 0;
+        var cacheWriteTokens = anthropicResponse.Usage?.CacheCreationInputTokens ?? 0;
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
-            CachedTokens = cachedTokens
+            CachedTokens = cachedReadTokens,
+            CacheWriteTokens = cacheWriteTokens
         });
 
         return new Result<TResponse>
@@ -110,7 +113,8 @@ public sealed class AnthropicProvider : IModelProvider
                 {
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
-                    CachedTokens = cachedTokens,
+                    CachedTokens = cachedReadTokens,
+                    CacheWriteTokens = cacheWriteTokens,
                     InputCost = inputCost,
                     OutputCost = outputCost
                 }

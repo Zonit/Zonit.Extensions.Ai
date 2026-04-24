@@ -23,13 +23,20 @@ public sealed class TokenUsage
     public int TotalTokens => InputTokens + OutputTokens;
 
     /// <summary>
-    /// Cached input tokens (if supported by provider).
-    /// Cached tokens are typically cheaper.
+    /// Cached input tokens read from cache (if supported by provider).
+    /// Cached tokens are typically cheaper than regular input tokens.
     /// </summary>
     public int CachedTokens { get; init; }
 
     /// <summary>
-    /// Reasoning/thinking tokens (for reasoning models like o1, o3).
+    /// Tokens written to cache (Anthropic prompt caching).
+    /// Cache writes are more expensive than regular input tokens (1.25x for 5-min TTL).
+    /// </summary>
+    public int CacheWriteTokens { get; init; }
+
+    /// <summary>
+    /// Reasoning/thinking tokens (for reasoning models like o1, o3, Gemini thinking).
+    /// Already included in OutputTokens; stored separately for informational purposes.
     /// </summary>
     public int ReasoningTokens { get; init; }
 

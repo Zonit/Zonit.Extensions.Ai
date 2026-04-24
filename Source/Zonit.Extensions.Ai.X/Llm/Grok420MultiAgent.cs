@@ -1,22 +1,25 @@
 namespace Zonit.Extensions.Ai.X;
 
 /// <summary>
-/// Grok 4.1 Fast Reasoning - Fast model with full reasoning capabilities.
-/// Reasoning is always enabled (cannot be disabled).
+/// Grok 4.20 Multi-Agent - Multi-agent variant of Grok 4.20 with parallel agent coordination.
 /// </summary>
-public class Grok41FastReasoning : XReasoningBase
+/// <remarks>
+/// Pricing: $2.00/$6.00 per 1M tokens.
+/// Higher context pricing applies above 200K tokens.
+/// </remarks>
+public class Grok420MultiAgent : XReasoningBase
 {
     /// <inheritdoc />
-    public override string Name => "grok-4-1-fast-reasoning";
+    public override string Name => "grok-4.20-multi-agent-beta-0309";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 0.20m;
+    public override decimal PriceInput => 2.00m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedInputValue => 0.05m;
+    public override decimal PriceCachedInputValue => 0.20m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 0.50m;
+    public override decimal PriceOutput => 6.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 2_000_000;
@@ -36,7 +39,7 @@ public class Grok41FastReasoning : XReasoningBase
         ToolsType.CodeExecution;
 
     /// <inheritdoc />
-    public override EndpointsType SupportedEndpoints => EndpointsType.Chat;
+    public override EndpointsType SupportedEndpoints => EndpointsType.Chat | EndpointsType.Response;
 
     /// <inheritdoc />
     public override FeaturesType SupportedFeatures =>
@@ -45,27 +48,15 @@ public class Grok41FastReasoning : XReasoningBase
         FeaturesType.StructuredOutputs |
         FeaturesType.Reasoning;
 
-    /// <summary>
-    /// Extended context pricing for input.
-    /// </summary>
+    /// <inheritdoc />
     public override decimal GetInputPrice(long tokenCount)
     {
-        if (tokenCount <= 128_000)
-            return PriceInput;
-        if (tokenCount <= 512_000)
-            return PriceInput * 2;
-        return PriceInput * 4;
+        return tokenCount > 200_000 ? PriceInput * 2 : PriceInput;
     }
 
-    /// <summary>
-    /// Extended context pricing for output.
-    /// </summary>
+    /// <inheritdoc />
     public override decimal GetOutputPrice(long tokenCount)
     {
-        if (tokenCount <= 128_000)
-            return PriceOutput;
-        if (tokenCount <= 512_000)
-            return PriceOutput * 2;
-        return PriceOutput * 4;
+        return tokenCount > 200_000 ? PriceOutput * 2 : PriceOutput;
     }
 }

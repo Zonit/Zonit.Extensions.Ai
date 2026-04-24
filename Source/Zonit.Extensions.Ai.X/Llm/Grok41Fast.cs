@@ -12,13 +12,13 @@ public class Grok41Fast : XReasoningBase
 
     /// <inheritdoc />
     /// <remarks>Base price per 1M input tokens.</remarks>
-    public override decimal PriceInput => 0.50m;
+    public override decimal PriceInput => 0.20m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedInputValue => 0.125m;
+    public override decimal PriceCachedInputValue => 0.05m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 2.00m;
+    public override decimal PriceOutput => 0.50m;
 
     /// <inheritdoc />
     /// <remarks>2M context window!</remarks>
@@ -56,9 +56,9 @@ public class Grok41Fast : XReasoningBase
 
     /// <summary>
     /// Extended context pricing:
-    /// - Base: $0.50/1M (0-128k)
-    /// - 128k-512k: 2x price ($1.00/1M)
-    /// - 512k-2M: 4x price ($2.00/1M)
+    /// - Base: $0.20/1M (0-128k)
+    /// - 128k-512k: 2x price ($0.40/1M)
+    /// - 512k-2M: 4x price ($0.80/1M)
     /// </summary>
     public override decimal GetInputPrice(long tokenCount)
     {
@@ -71,9 +71,9 @@ public class Grok41Fast : XReasoningBase
 
     /// <summary>
     /// Extended context pricing for output:
-    /// - Base: $2.00/1M (0-128k)
-    /// - 128k-512k: 2x price ($4.00/1M)
-    /// - 512k-2M: 4x price ($8.00/1M)
+    /// - Base: $0.50/1M (0-128k)
+    /// - 128k-512k: 2x price ($1.00/1M)
+    /// - 512k-2M: 4x price ($2.00/1M)
     /// </summary>
     public override decimal GetOutputPrice(long tokenCount)
     {
