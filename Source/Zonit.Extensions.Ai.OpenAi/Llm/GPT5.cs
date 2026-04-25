@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-5 - Most capable model with advanced reasoning capabilities.
 /// </summary>
-public class GPT5 : OpenAiReasoningBase
+public class GPT5 : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5-2025-08-07";

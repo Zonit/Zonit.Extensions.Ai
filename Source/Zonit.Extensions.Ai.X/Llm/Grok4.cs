@@ -5,7 +5,7 @@ namespace Zonit.Extensions.Ai.X;
 /// NOTE: Grok 4 does NOT support reasoning_effort parameter (it's always "on").
 /// For reasoning with configurable effort, use Grok 3.
 /// </summary>
-public class Grok4 : XReasoningBase
+public class Grok4 : XReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "grok-4-0709";

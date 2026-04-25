@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// O3 Mini - A small model alternative to O3.
 /// Cost-efficient reasoning model.
 /// </summary>
-public class O3Mini : OpenAiReasoningBase
+public class O3Mini : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o3-mini";

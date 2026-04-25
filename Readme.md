@@ -98,6 +98,7 @@ dotnet add package Zonit.Extensions.Ai.Yi
 - **Clean architecture** - SOLID principles, each provider self-contained with own Options and DI
 - **Best practices** - `BindConfiguration` + `PostConfigure` pattern for configuration
 - **Separation of concerns** - Provider-specific options separated from global configuration
+- **AI Agent (RFC)** - Typed `ToolBase<TInput, TOutput>` tools, external MCP clients, parallel tool-calls, streaming, full audit trail via `ResultAgent<T>` — see [`Docs/Agent-Proposal.md`](./Docs/Agent-Proposal.md)
 
 ---
 
@@ -801,6 +802,166 @@ var legacyResult = await aiClient.GenerateAsync(
     prompt
 );
 ```
+
+---
+
+## AI Agent (Preview / RFC)
+
+> Status: **draft / RFC** — design docs only, implementation planned.
+> Full specification: [`Docs/Agent-Proposal.md`](./Docs/Agent-Proposal.md) ·
+> Examples: [`Docs/Agent-Examples.md`](./Docs/Agent-Examples.md) ·
+> External MCP: [`Docs/Agent-Mcp.md`](./Docs/Agent-Mcp.md) ·
+> Deferred ideas: [`Docs/Agent-Deferred-Decisions.md`](./Docs/Agent-Deferred-Decisions.md)
+
+The agent feature extends `IAiProvider.GenerateAsync` with new, **explicit**
+overloads taking an `IAgentLlm` model, custom tools and external MCP servers.
+Existing non-agent calls keep their current behavior unchanged — no hidden
+breaking changes.
+
+### Tools — typed like prompts
+
+```csharp
+public class SaveToDatabaseTool(IMyDb db)
+    : ToolBase<SaveToDatabaseTool.Input, SaveToDatabaseTool.Output>
+{
+    public override string Name => "save_to_database";
+    public override string Description => "Saves a record and returns the new id.";
+
+    public override async Task<Output> ExecuteAsync(Input input, CancellationToken ct)
+    {
+        var id = await db.SaveAsync(input.Key, input.Value, ct);
+        return new Output { Id = id };
+    }
+
+    public class Input  { public required string Key { get; init; }
+                          public required string Value { get; init; } }
+    public class Output { public Guid Id { get; set; } }
+}
+```
+
+Tools are auto-registered via a source generator — one call registers all
+`ToolBase<,>` classes discovered in your project.
+
+### External MCP — HTTP client only (we are not a host)
+
+```csharp
+var mcp = new Mcp(name: "github", url: "https://mcp.github.example.com/sse", token: bearerToken);
+```
+
+Microsoft has its own MCP hosting stack; we intentionally stay on the client
+side, consuming remote MCP servers over HTTP/SSE.
+
+### Usage — a single call
+
+```csharp
+// Program.cs
+builder.Services.AddAi();          // auto-registers every ToolBase<,> via [ModuleInitializer]
+builder.Services.AddAiOpenAi();
+
+// Invocation
+var result = await provider.GenerateAsync(
+    new GPT5(),                                         // IAgentLlm
+    new SimplePrompt<Report>("Research X and persist."),
+    mcps: [new Mcp("github", "https://mcp.github.example.com/sse", token)]);
+
+// Full audit trail:
+foreach (var call in result.ToolCalls)
+    Console.WriteLine($"[{call.Iteration}] {call.Name} ({call.Duration.TotalMilliseconds:F0} ms)");
+
+Console.WriteLine($"Iterations: {result.Iterations}, total cost: {result.TotalCost}");
+```
+
+### Key design points
+
+- **Capability marker** `IAgentLlm : ILlm` — agent overloads only compile for
+  models that actually support tool-calling.
+- **`ResultAgent<T> : Result<T>`** — adds `Iterations`, `ToolCalls`
+  (with inputs/outputs/errors/timings/MCP origin), `TotalUsage`, `TotalCost`.
+  Dump it to a DB for audit or feed it to a verifier model.
+- **Parallel tool execution** — Claude and GPT-5 return multiple tool calls
+  in a single turn; the library always executes them in parallel (limit
+  configurable via `Ai:Agent:MaxParallelToolCalls`, default 16).
+- **Exceptions in tools are OK** — the library catches them and passes the
+  error to the model, which can retry or fall back (Claude handles this well).
+- **Streaming** — `StreamAgentAsync` emits a sealed `AgentEvent` hierarchy
+  (text delta, tool call start/finish, completion).
+- **Core does the loop** — providers only implement a small
+  `IAgentProviderAdapter` (~100 LOC for OpenAI/Claude/Gemini/...).
+
+### Streaming
+
+Watch what the agent is doing in real time — useful for long-running runs,
+UI progress indicators and live telemetry:
+
+```csharp
+await foreach (var evt in ai.StreamAgentAsync(new Claude41Opus(), prompt, tools: new ITool[] { new WeatherTool() }))
+{
+    switch (evt)
+    {
+        case AgentIterationStartedEvent i:
+            Console.WriteLine($"[it {i.Iteration}] start");
+            break;
+        case AgentToolCallStartedEvent s:
+            Console.WriteLine($"  → calling {s.ToolName}");
+            break;
+        case AgentToolCallCompletedEvent d:
+            Console.WriteLine($"  ✓ {d.Invocation.Name} in {d.Invocation.Duration.TotalMilliseconds:F0} ms");
+            break;
+        case AgentCompletedEvent<MyResponse> done:
+            Console.WriteLine($"done: {done.Result.Value} ({done.Result.Iterations} iterations)");
+            break;
+        case AgentFailedEvent fail:
+            Console.WriteLine($"FAILED after {fail.Iteration} iter: {fail.Error.Message}");
+            break;
+    }
+}
+```
+
+### MCP (Model Context Protocol)
+
+External tool servers can be plugged in as first-class tool providers. The
+HTTP/SSE MCP client is built into `Zonit.Extensions.Ai` — no extra package
+needed. Just register descriptors:
+
+```csharp
+services.AddAi();                                              // MCP client included
+services.AddAiMcp(new Mcp(
+    name: "github",
+    url:  "https://mcp.example.com/sse",
+    token: "ghp_xxx",                                          // optional bearer token
+    allowedTools: new[] { "read_file", "create_issue" }));     // optional whitelist
+```
+
+Every `tools/list` entry is exposed to the model as `"{server}.{tool}"`
+(e.g. `github.read_file`). The audit trail in `ResultAgent.ToolCalls`
+distinguishes MCP calls via `ToolInvocation.McpServer`.
+
+**Default tools / MCP** registered globally are merged into every agent call.
+Per-call `tools:` and `mcps:` arguments are <b>additive</b> — they extend
+the defaults, never replace them. Use
+`new AgentOptions { DefaultTools = false }` or `DefaultMcp = false` to
+opt out of defaults for a single invocation.
+
+### Configuration (globals)
+
+```json
+{
+  "Ai": {
+    "Agent": {
+      "MaxIterations": 100,
+      "MaxParallelToolCalls": 16,
+      "ToolCallTimeout": "00:02:00",
+      "OnToolException": "ReturnErrorToModel"
+    }
+  }
+}
+```
+
+### Out of scope (deferred)
+
+See [`Docs/Agent-Deferred-Decisions.md`](./Docs/Agent-Deferred-Decisions.md):
+auto-tools for non-agent `GenerateAsync` (breaking change), hosting our own
+MCP server, stdio MCP transport, multi-turn agent sessions.
 
 ---
 

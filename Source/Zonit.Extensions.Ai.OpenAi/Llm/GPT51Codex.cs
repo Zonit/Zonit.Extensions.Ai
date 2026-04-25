@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-5.1 Codex - Optimized for agentic coding in Codex.
 /// </summary>
-public class GPT51Codex : OpenAiReasoningBase
+public class GPT51Codex : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.1-codex";

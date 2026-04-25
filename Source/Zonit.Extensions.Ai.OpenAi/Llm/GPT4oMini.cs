@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4o Mini - Fast, affordable small model for focused tasks.
 /// </summary>
-public class GPT4oMini : OpenAiChatBase
+public class GPT4oMini : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-4o-mini";

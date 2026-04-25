@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-4o - Fast, intelligent, flexible GPT model.
 /// Great balance of speed and intelligence.
 /// </summary>
-public class GPT4o : OpenAiChatBase
+public class GPT4o : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-4o";

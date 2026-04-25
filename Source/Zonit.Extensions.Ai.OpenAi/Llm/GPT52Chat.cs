@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.2 Chat - GPT-5.2 model used in ChatGPT.
 /// The best model for coding and agentic tasks.
 /// </summary>
-public class GPT52Chat : OpenAiReasoningBase
+public class GPT52Chat : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.2-chat-latest";

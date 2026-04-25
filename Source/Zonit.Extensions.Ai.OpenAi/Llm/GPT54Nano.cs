@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.4 Nano - Fastest, most cost-efficient GPT-5.4 variant.
 /// Optimized for simple, high-volume tasks with 400K context window.
 /// </summary>
-public class GPT54Nano : OpenAiReasoningBase
+public class GPT54Nano : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.4-nano";

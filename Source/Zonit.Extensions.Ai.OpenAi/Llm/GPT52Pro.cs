@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.2-pro - Version of GPT-5.2 that produces smarter and more precise responses.
 /// Uses more compute for higher quality outputs.
 /// </summary>
-public class GPT52Pro : OpenAiReasoningBase
+public class GPT52Pro : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.2-pro";

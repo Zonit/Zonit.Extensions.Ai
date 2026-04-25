@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// O4 Mini - Faster and more cost-effective reasoning model.
 /// </summary>
-public class O4Mini : OpenAiReasoningBase
+public class O4Mini : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o4-mini-2025-04-16";

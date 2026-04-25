@@ -97,6 +97,15 @@ public static class OpenAiServiceCollectionExtensions
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<OpenAiProvider>();
 
+        // Agent adapter — uses a dedicated typed HttpClient with the same resilience policies
+        // but a separate connection pool from the generate API client.
+        // AddHttpClient<T>() registers T as Transient and provides it with the typed HttpClient;
+        // we then expose the same instance via IAgentProviderAdapter for the runner.
+        services.AddHttpClient<OpenAiAgentAdapter>()
+            .AddAiResilienceHandler();
+        services.AddTransient<IAgentProviderAdapter>(
+            sp => sp.GetRequiredService<OpenAiAgentAdapter>());
+
         return services;
     }
 }

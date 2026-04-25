@@ -23,5 +23,26 @@
   
   <ItemGroup>
     <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <!--
+      Source generator is wired as a Roslyn analyzer so every consumer of
+      Zonit.Extensions.Ai automatically benefits from AddAiTools() auto-registration
+      without having to reference the generator package explicitly.
+      ReferenceOutputAssembly=false keeps the generator off the runtime binary surface.
+    -->
+    <ProjectReference Include="..\Zonit.Extensions.Ai.SourceGenerators\Zonit.Extensions.Ai.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    Ship the source-generator DLL inside the Zonit.Extensions.Ai NuGet package
+    under `analyzers/dotnet/cs`, mirroring the pattern used by
+    Microsoft.Extensions.Logging.Generators, etc.
+  -->
+  <ItemGroup>
+    <None Include="..\Zonit.Extensions.Ai.SourceGenerators\bin\$(Configuration)\netstandard2.0\Zonit.Extensions.Ai.SourceGenerators.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
   </ItemGroup>
 </Project>

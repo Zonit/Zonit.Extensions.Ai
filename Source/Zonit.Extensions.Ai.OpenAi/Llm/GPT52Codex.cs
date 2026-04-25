@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-5.2 Codex - Most intelligent coding model optimized for long-horizon, agentic coding tasks.
 /// </summary>
-public class GPT52Codex : OpenAiReasoningBase
+public class GPT52Codex : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.2-codex";

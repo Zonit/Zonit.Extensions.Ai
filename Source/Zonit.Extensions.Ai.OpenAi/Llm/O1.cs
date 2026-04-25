@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// O1 - Previous full O-series reasoning model.
 /// </summary>
-public class O1 : OpenAiReasoningBase
+public class O1 : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o1";

@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4.1 Mini - Faster and more cost-effective GPT-4.1 variant.
 /// </summary>
-public class GPT41Mini : OpenAiChatBase
+public class GPT41Mini : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-4.1-mini-2025-04-14";

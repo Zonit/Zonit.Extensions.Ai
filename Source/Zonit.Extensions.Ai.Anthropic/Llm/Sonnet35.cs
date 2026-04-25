@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude 3.5 Sonnet - Previous generation balanced model.
 /// Cost-effective option with good performance.
 /// </summary>
-public class Sonnet35 : AnthropicBase
+public class Sonnet35 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-3-5-sonnet-20241022";

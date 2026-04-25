@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Anthropic;
 
 namespace Zonit.Extensions;
@@ -83,6 +84,12 @@ public static class AnthropicServiceCollectionExtensions
 
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<AnthropicProvider>();
+
+        // Agent adapter — dedicated typed HttpClient with the same resilience policies.
+        services.AddHttpClient<AnthropicAgentAdapter>()
+            .AddAiResilienceHandler();
+        services.AddTransient<IAgentProviderAdapter>(
+            sp => sp.GetRequiredService<AnthropicAgentAdapter>());
 
         return services;
     }

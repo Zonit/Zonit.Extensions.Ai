@@ -30,6 +30,68 @@ public sealed class AiOptions
     /// Resilience configuration for all providers (retry, timeout, circuit breaker).
     /// </summary>
     public AiResilienceOptions Resilience { get; set; } = new();
+
+    /// <summary>
+    /// Global defaults for the agent loop (iterations, parallel tool execution,
+    /// exception handling). Bound from the <c>"Ai:Agent"</c> configuration section.
+    /// </summary>
+    public AiAgentOptions Agent { get; set; } = new();
+}
+
+/// <summary>
+/// Global defaults for agent invocations. Per-call overrides are available on
+/// <see cref="Zonit.Extensions.Ai.AgentOptions"/>.
+/// </summary>
+/// <remarks>
+/// Precedence (highest first): per-call <c>AgentOptions</c> → these globals →
+/// the model's <see cref="Zonit.Extensions.Ai.IAgentLlm.DefaultMaxIterations"/>.
+/// <para>
+/// Example appsettings.json:
+/// <code>
+/// {
+///   "Ai": {
+///     "Agent": {
+///       "MaxIterations": 100,
+///       "MaxParallelToolCalls": 16,
+///       "ToolCallTimeout": "00:02:00",
+///       "OnToolException": "ReturnErrorToModel"
+///     }
+///   }
+/// }
+/// </code>
+/// </para>
+/// </remarks>
+public sealed class AiAgentOptions
+{
+    /// <summary>
+    /// Default maximum number of agent iterations. Large but safe ceiling —
+    /// agents legitimately perform many tool calls.
+    /// Default: 100.
+    /// </summary>
+    public int MaxIterations { get; set; } = 100;
+
+    /// <summary>
+    /// Maximum number of tool calls executed in parallel within a single
+    /// agent iteration. Claude, GPT-5 and Gemini routinely emit multiple
+    /// <c>tool_use</c> blocks in one turn; all must be executed and returned
+    /// as a single batch.
+    /// Default: 16. Use <see cref="int.MaxValue"/> for unlimited (explicit opt-in).
+    /// </summary>
+    public int MaxParallelToolCalls { get; set; } = 16;
+
+    /// <summary>
+    /// Default timeout for a single tool invocation. The runner cancels the
+    /// tool and returns a timeout error to the model when exceeded.
+    /// Default: 2 minutes.
+    /// </summary>
+    public TimeSpan ToolCallTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Behavior when a tool throws an exception.
+    /// Default: <see cref="Zonit.Extensions.Ai.ToolExceptionPolicy.ReturnErrorToModel"/>.
+    /// </summary>
+    public Zonit.Extensions.Ai.ToolExceptionPolicy OnToolException { get; set; }
+        = Zonit.Extensions.Ai.ToolExceptionPolicy.ReturnErrorToModel;
 }
 
 /// <summary>

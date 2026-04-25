@@ -55,6 +55,26 @@ public static class AiServiceCollectionExtensions
         // Register core AI provider (TryAdd prevents duplicates)
         services.TryAddSingleton<IAiProvider, AiProvider>();
 
+        // Agent runtime — runner + always-empty registries so the runner can
+        // resolve them even if the application never registers any tools/MCP.
+        services.TryAddSingleton<AgentRunner>();
+        services.TryAddScoped<IToolRegistry, ToolRegistry>();
+        services.TryAddSingleton<IMcpRegistry, McpRegistry>();
+
+        // MCP HTTP/SSE client — built into core. Named HttpClient + factory.
+        services.AddHttpClient(McpToolFactory.HttpClientName);
+        services.TryAddSingleton<IMcpToolFactory, McpToolFactory>();
+
+        // Auto-register every ToolBase<,> the source generator announced via
+        // ToolDiscovery (one [ModuleInitializer] per consumer assembly).
+        // This replaces the old explicit AddAiTools() call.
+        foreach (var toolType in ToolDiscovery.RegisteredTypes)
+        {
+            services.TryAddScoped(toolType);
+            services.TryAddEnumerable(
+                ServiceDescriptor.Scoped(typeof(ITool), toolType));
+        }
+
         // Bind configuration from appsettings.json
         services.AddOptions<AiOptions>()
             .BindConfiguration(AiOptions.SectionName);

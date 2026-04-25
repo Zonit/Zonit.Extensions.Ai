@@ -6,7 +6,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// To enable reasoning, explicitly set the Reason property.
 /// GPT-5 models do NOT support temperature, top_p, or logprobs parameters.
 /// </summary>
-public class GPT51 : OpenAiReasoningBase
+public class GPT51 : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.1-2025-11-13";

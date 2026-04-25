@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4.1 Nano - Smallest and most cost-effective GPT-4.1 variant.
 /// </summary>
-public class GPT41Nano : OpenAiChatBase
+public class GPT41Nano : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-4.1-nano-2025-04-14";

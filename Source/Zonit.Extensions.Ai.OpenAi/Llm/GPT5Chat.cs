@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-5 Chat - GPT-5 model used in ChatGPT.
 /// </summary>
-public class GPT5Chat : OpenAiReasoningBase
+public class GPT5Chat : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5-chat-latest";

@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude 3.5 Haiku - Fast and cost-effective legacy model.
 /// Good for simple tasks and high-volume applications.
 /// </summary>
-public class Haiku35 : AnthropicBase
+public class Haiku35 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-3-5-haiku-20241022";

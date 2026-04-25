@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.4 Pro - Most powerful GPT-5.4 variant for the most demanding tasks.
 /// Produces smarter and more precise responses at premium pricing.
 /// </summary>
-public class GPT54Pro : OpenAiReasoningBase
+public class GPT54Pro : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.4-pro";

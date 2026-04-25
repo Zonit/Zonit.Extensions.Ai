@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.2 - The best model for coding and agentic tasks across industries.
 /// Latest and most capable OpenAI model.
 /// </summary>
-public class GPT52 : OpenAiReasoningBase
+public class GPT52 : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.2";

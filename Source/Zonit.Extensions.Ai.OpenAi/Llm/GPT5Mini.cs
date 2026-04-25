@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5-mini - A faster, cost-efficient version of GPT-5 for well-defined tasks.
 /// Good balance between performance and cost.
 /// </summary>
-public class GPT5Mini : OpenAiReasoningBase
+public class GPT5Mini : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5-mini";

@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Claude 4 Opus - Most capable Claude model.
 /// </summary>
-public class Opus4 : AnthropicBase
+public class Opus4 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-opus-4-20250514";

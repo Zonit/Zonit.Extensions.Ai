@@ -9,7 +9,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// 1M token context window at standard pricing (no surcharge for long context).
 /// Uses a new tokenizer vs previous models — may use up to 35% more tokens for fixed text.
 /// </remarks>
-public class Opus47 : AnthropicBase
+public class Opus47 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-opus-4-7";

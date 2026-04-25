@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4.1 - Latest GPT-4 model with excellent instruction following.
 /// </summary>
-public class GPT41 : OpenAiChatBase
+public class GPT41 : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-4.1-2025-04-14";

@@ -8,7 +8,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <remarks>
 /// 1M token context window at standard pricing (no surcharge for long context).
 /// </remarks>
-public class Sonnet46 : AnthropicBase
+public class Sonnet46 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-sonnet-4-6";

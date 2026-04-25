@@ -6,7 +6,13 @@ namespace Zonit.Extensions.Ai;
 /// Result of an AI operation containing the generated value and metadata.
 /// </summary>
 /// <typeparam name="T">The result value type.</typeparam>
-public sealed class Result<T>
+/// <remarks>
+/// The class is intentionally not <c>sealed</c> so that specialized results —
+/// notably <c>ResultAgent&lt;T&gt;</c> for agent invocations — can extend it
+/// with additional diagnostic information while remaining assignable to
+/// <see cref="Result{T}"/>.
+/// </remarks>
+public class Result<T>
 {
     /// <summary>
     /// The generated value (strongly typed).

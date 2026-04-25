@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Claude 4 Sonnet - Balanced performance and cost.
 /// </summary>
-public class Sonnet4 : AnthropicBase
+public class Sonnet4 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-sonnet-4-20250514";

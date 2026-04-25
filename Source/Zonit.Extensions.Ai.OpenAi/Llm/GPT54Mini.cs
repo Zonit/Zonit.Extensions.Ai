@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.4 Mini - Faster, more efficient GPT-5.4 variant for high-volume workloads.
 /// Brings GPT-5.4-class capabilities at lower cost and latency.
 /// </summary>
-public class GPT54Mini : OpenAiReasoningBase
+public class GPT54Mini : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.4-mini";

@@ -7,7 +7,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <remarks>
 /// 1M token context window at standard pricing.
 /// </remarks>
-public class Opus46 : AnthropicBase
+public class Opus46 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-opus-4-6";

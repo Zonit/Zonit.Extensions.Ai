@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// O3 Deep Research - OpenAI's most advanced research model.
 /// </summary>
-public class O3DeepResearch : OpenAiReasoningBase
+public class O3DeepResearch : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o3-deep-research";

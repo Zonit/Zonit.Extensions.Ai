@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude Sonnet 4.5 - Our smart model for complex agents and coding.
 /// Best balance of intelligence, speed, and cost for most use cases.
 /// </summary>
-public class Sonnet45 : AnthropicBase
+public class Sonnet45 : AnthropicBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-sonnet-4-5-20250929";

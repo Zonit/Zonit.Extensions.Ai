@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// o3-pro - Version of o3 with more compute for better responses.
 /// Premium reasoning model with highest accuracy.
 /// </summary>
-public class O3Pro : OpenAiReasoningBase
+public class O3Pro : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o3-pro";

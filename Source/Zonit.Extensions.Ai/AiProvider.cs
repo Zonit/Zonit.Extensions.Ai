@@ -9,11 +9,16 @@ namespace Zonit.Extensions.Ai;
 internal sealed class AiProvider : IAiProvider
 {
     private readonly IEnumerable<IModelProvider> _providers;
+    private readonly AgentRunner _agentRunner;
     private readonly ILogger<AiProvider> _logger;
 
-    public AiProvider(IEnumerable<IModelProvider> providers, ILogger<AiProvider> logger)
+    public AiProvider(
+        IEnumerable<IModelProvider> providers,
+        AgentRunner agentRunner,
+        ILogger<AiProvider> logger)
     {
         _providers = providers;
+        _agentRunner = agentRunner;
         _logger = logger;
     }
 
@@ -143,6 +148,48 @@ internal sealed class AiProvider : IAiProvider
         _logger.LogDebug("Streaming with {Provider}/{Model}", provider.Name, llm.Name);
 
         return provider.StreamAsync<string>(llm, new SimplePrompt<string>(prompt), cancellationToken);
+    }
+
+    #endregion
+
+    #region Agent
+
+    /// <inheritdoc />
+    public Task<ResultAgent<TResponse>> GenerateAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Agent run with {Model}", llm.Name);
+        return _agentRunner.RunAsync(llm, prompt, tools, mcps, options, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<ResultAgent<string>> GenerateAsync(
+        IAgentLlm llm,
+        string prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        return GenerateAsync(llm, new SimplePrompt<string>(prompt), tools, mcps, options, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<AgentEvent> StreamAgentAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Agent stream with {Model}", llm.Name);
+        return _agentRunner.StreamAsync(llm, prompt, tools, mcps, options, cancellationToken);
     }
 
     #endregion

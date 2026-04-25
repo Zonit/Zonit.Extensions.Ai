@@ -127,6 +127,74 @@ public interface IAiProvider
 
     #endregion
 
+    #region Agent
+
+    /// <summary>
+    /// Runs an agent loop: drives the model, executes tool calls on our side,
+    /// feeds results back, until the model produces a final structured answer.
+    /// </summary>
+    /// <typeparam name="TResponse">Final response type (parsed from structured output).</typeparam>
+    /// <param name="llm">Agent-capable LLM.</param>
+    /// <param name="prompt">Initial user prompt.</param>
+    /// <param name="tools">
+    /// Explicit tool list for this invocation. When <c>null</c>, all tools registered
+    /// via <c>AddAiTool&lt;T&gt;()</c> are used.
+    /// </param>
+    /// <param name="mcps">
+    /// Explicit MCP server list for this invocation. When <c>null</c>, servers
+    /// registered via <c>AddAiMcp(...)</c> are used.
+    /// </param>
+    /// <param name="options">Per-call overrides (iterations, timeout, cost cap, allow-list, <c>OnToolCall</c>).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    Task<ResultAgent<TResponse>> GenerateAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Agent-mode overload for plain-text output (no structured response type).
+    /// </summary>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    Task<ResultAgent<string>> GenerateAsync(
+        IAgentLlm llm,
+        string prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams an agent run as a sequence of <see cref="AgentEvent"/>s.
+    /// </summary>
+    /// <remarks>
+    /// Event order per iteration:
+    /// <list type="number">
+    ///   <item><description><see cref="AgentIterationStartedEvent"/></description></item>
+    ///   <item><description><see cref="AgentTurnCompletedEvent"/> (after the model responds)</description></item>
+    ///   <item><description><see cref="AgentToolCallStartedEvent"/> / <see cref="AgentToolCallCompletedEvent"/> (one pair per tool call, fan-out in parallel)</description></item>
+    /// </list>
+    /// The stream always terminates with either
+    /// <see cref="AgentFinalTextEvent"/> + <see cref="AgentCompletedEvent{TResponse}"/>
+    /// (success) or <see cref="AgentFailedEvent"/> (failure).
+    /// </remarks>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    IAsyncEnumerable<AgentEvent> StreamAgentAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Cost Calculation
 
     /// <summary>
