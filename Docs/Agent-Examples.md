@@ -430,7 +430,7 @@ var resultIsolated = await provider.GenerateAsync(
 ## 10. Streaming agenta (feedback pkt 9)
 
 ```csharp
-await foreach (var ev in provider.StreamAgentAsync(new GPT5(), prompt))
+await foreach (var ev in provider.GenerateStreamAsync(new GPT5(), prompt))
 {
     switch (ev)
     {

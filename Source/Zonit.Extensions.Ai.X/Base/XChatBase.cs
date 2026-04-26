@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.X;
 /// <summary>
 /// Base class for X/Grok chat models.
 /// </summary>
-public abstract class XChatBase : XBase, ITextLlm
+public abstract class XChatBase : XBase, ITextLlm, IAgentLlm
 {
     /// <summary>
     /// Price per 1M cached input tokens.

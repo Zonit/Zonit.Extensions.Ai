@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.X;
 
 namespace Zonit.Extensions;
@@ -77,6 +78,12 @@ public static class XServiceCollectionExtensions
             .AddAiResilienceHandler();
 
         services.TryAddModelProvider<XProvider>();
+
+        // Agent adapter — separate typed HttpClient with the same resilience policies.
+        services.AddHttpClient<XAgentAdapter>()
+            .AddAiResilienceHandler();
+        services.AddTransient<IAgentProviderAdapter>(
+            sp => sp.GetRequiredService<XAgentAdapter>());
 
         return services;
     }

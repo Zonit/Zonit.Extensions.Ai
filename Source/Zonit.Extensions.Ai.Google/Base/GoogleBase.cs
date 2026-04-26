@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Base class for all Google Gemini models.
 /// </summary>
-public abstract class GoogleBase : LlmBase, ITextLlm
+public abstract class GoogleBase : LlmBase, ITextLlm, IAgentLlm
 {
     /// <inheritdoc />
     public virtual decimal? PriceCachedInput => null;

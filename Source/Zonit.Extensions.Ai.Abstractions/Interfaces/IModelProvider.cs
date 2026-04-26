@@ -71,6 +71,38 @@ public interface IModelProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Multi-turn chat completion: <paramref name="prompt"/> supplies the system
+    /// instruction (its rendered <c>Text</c>) and <paramref name="chat"/> carries
+    /// the User/Assistant/Tool history.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation falls back to the single-shot path by collapsing
+    /// <paramref name="chat"/> into a synthetic prompt — providers that handle
+    /// chat natively (Anthropic Messages, OpenAI Responses) override this.
+    /// </remarks>
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+        => GenerateAsync(llm, ChatFallback.GlueToPrompt(prompt, chat), cancellationToken);
+
+    /// <summary>
+    /// Streaming multi-turn chat. Default falls back to single-shot streaming
+    /// over a glued prompt — providers with native chat streaming override this.
+    /// </summary>
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+        => StreamAsync(llm, ChatFallback.GlueToPrompt<string>(new ChatFallback.PromptShim(prompt), chat), cancellationToken);
+
+    /// <summary>
     /// Transcribes audio.
     /// </summary>
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

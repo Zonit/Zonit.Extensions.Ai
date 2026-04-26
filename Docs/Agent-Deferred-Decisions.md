@@ -236,7 +236,7 @@ MCP bez restartu (hot-reload przez `IOptionsMonitor<>`).
 
 ## D10. Streaming strukturalnych odpowiedzi (JSON)
 
-**Rozważany pomysł:** `StreamAgentAsync<TResponse>` emituje progresywny
+**Rozważany pomysł:** `GenerateStreamAsync<TResponse>` emituje progresywny
 delta w JSON (np. pierwsze pola struktury pojawiają się zanim całość jest
 gotowa).
 

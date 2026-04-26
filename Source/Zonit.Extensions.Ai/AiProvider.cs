@@ -47,6 +47,81 @@ internal sealed class AiProvider : IAiProvider
 
     #endregion
 
+    #region Chat
+
+    /// <inheritdoc />
+    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        ArgumentNullException.ThrowIfNull(chat);
+
+        // Tool-driven chat → delegate to the agent runner with seeded history.
+        // Without tools/mcps/options it's a single-shot chat call routed to the provider.
+        if (tools is not null || mcps is not null || options is not null)
+        {
+            if (llm is not IAgentLlm agentLlm)
+                throw new InvalidOperationException(
+                    $"Chat with tools or MCP requires an IAgentLlm-capable model. " +
+                    $"'{llm.GetType().Name}' is not agent-capable in this provider; " +
+                    $"omit tools/mcps/options for a plain chat completion.");
+
+            _logger.LogDebug("Chat (agent) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
+            // ResultAgent<T> : Result<T> — assignable directly. Iterations / ToolCalls
+            // / TotalUsage / TotalCost remain accessible via a downcast if the caller
+            // wants the full agent trace.
+            return await _agentRunner
+                .RunAsync(agentLlm, prompt, tools, mcps, options, cancellationToken, chat)
+                .ConfigureAwait(false);
+        }
+
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Chat with {Provider}/{Model} ({Turns} messages)", provider.Name, llm.Name, chat.Count);
+        return await provider.ChatAsync(llm, prompt, chat, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result<string>> ChatAsync(
+        ILlm llm,
+        string systemPrompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+        => ChatAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat, tools, mcps, options, cancellationToken);
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(prompt);
+        ArgumentNullException.ThrowIfNull(chat);
+
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Chat stream with {Provider}/{Model} ({Turns} messages)", provider.Name, llm.Name, chat.Count);
+        return provider.ChatStreamAsync(llm, prompt, chat, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        string systemPrompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+        => ChatStreamAsync(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat, cancellationToken);
+
+    #endregion
+
     #region Image Generation
 
     /// <inheritdoc />
@@ -180,7 +255,7 @@ internal sealed class AiProvider : IAiProvider
     }
 
     /// <inheritdoc />
-    public IAsyncEnumerable<AgentEvent> StreamAgentAsync<TResponse>(
+    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -190,6 +265,20 @@ internal sealed class AiProvider : IAiProvider
     {
         _logger.LogDebug("Agent stream with {Model}", llm.Name);
         return _agentRunner.StreamAsync(llm, prompt, tools, mcps, options, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogDebug("Agent stream (chat) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
+        return _agentRunner.StreamAsync(llm, prompt, tools, mcps, options, cancellationToken, chat);
     }
 
     #endregion

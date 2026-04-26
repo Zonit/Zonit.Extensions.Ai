@@ -128,6 +128,82 @@ public sealed class OpenAiProvider : IModelProvider
     /// <inheritdoc />
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+
+        _logger.LogDebug("OpenAI chat request: {Payload}", jsonPayload);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("OpenAI chat error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, JsonOptions)!;
+
+        if (openAiResponse.Status != "completed")
+            throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
+
+        var textContent = openAiResponse.Output?
+            .FirstOrDefault(o => o.Type == "message")?
+            .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+
+        if (string.IsNullOrEmpty(textContent))
+            throw new InvalidOperationException("No text in OpenAI response");
+
+        var result = ParseResponse<TResponse>(textContent);
+
+        var inputTokens = openAiResponse.Usage?.InputTokens ?? 0;
+        var outputTokens = openAiResponse.Usage?.OutputTokens ?? 0;
+        var cachedTokens = openAiResponse.Usage?.InputTokensDetails?.CachedTokens ?? 0;
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            CachedTokens = cachedTokens
+        });
+
+        return new Result<TResponse>
+        {
+            Value = result,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                RequestId = openAiResponse.Id,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    CachedTokens = cachedTokens,
+                    ReasoningTokens = openAiResponse.Usage?.OutputTokensDetails?.ReasoningTokens ?? 0,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<Asset> prompt,
@@ -253,6 +329,42 @@ public sealed class OpenAiProvider : IModelProvider
         var request = BuildRequest(llm, prompt, typeof(TResponse), streaming: true);
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            if (data == "[DONE]") break;
+
+            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            if (chunk?.Delta?.Text != null)
+                yield return chunk.Delta.Text;
+        }
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
+        request["stream"] = true;
+
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -526,6 +638,146 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         return tool;
+    }
+
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    private Dictionary<string, object> BuildChatRequest<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        Type responseType)
+    {
+        var request = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["max_output_tokens"] = llm.MaxTokens
+        };
+
+        // System message: rendered Prompt.Text in chat mode IS the system instruction
+        // (semantic flip vs single-shot GenerateAsync where prompt.System is system).
+        if (!string.IsNullOrEmpty(prompt.Text))
+            request["instructions"] = prompt.Text;
+
+        // Build Responses API input array from chat history.
+        var input = new List<object>();
+        var sessionFilesAttached = false;
+
+        foreach (var msg in chat)
+        {
+            switch (msg)
+            {
+                case User u:
+                {
+                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    // Session-level files from the system Prompt: attach to the FIRST user turn only.
+                    if (!sessionFilesAttached && prompt.Files != null)
+                    {
+                        AppendFiles(userContent, prompt.Files);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files != null) AppendFiles(userContent, u.Files);
+                    input.Add(new { role = "user", content = userContent });
+                    break;
+                }
+                case Assistant a:
+                    input.Add(new
+                    {
+                        role = "assistant",
+                        content = new object[] { new { type = "output_text", text = a.Text } }
+                    });
+                    break;
+                case Tool t:
+                    // Responses API: function_call_output with the originating call_id.
+                    input.Add(new
+                    {
+                        type = "function_call_output",
+                        call_id = t.ToolCallId,
+                        output = t.ResultJson
+                    });
+                    break;
+            }
+        }
+
+        // Empty chat → still need at least one user input so the model has something to reply to.
+        if (input.Count == 0)
+        {
+            input.Add(new
+            {
+                role = "user",
+                content = new object[] { new { type = "input_text", text = string.Empty } }
+            });
+        }
+
+        request["input"] = input;
+
+        // Structured output schema (Responses API: text.format).
+        if (responseType != typeof(string))
+        {
+            var schema = JsonSchemaGenerator.Generate(responseType);
+            request["text"] = new Dictionary<string, object>
+            {
+                ["format"] = new Dictionary<string, object>
+                {
+                    ["type"] = "json_schema",
+                    ["name"] = "response",
+                    ["description"] = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
+                    ["schema"] = schema,
+                    ["strict"] = true
+                }
+            };
+        }
+
+        if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
+            request["store"] = true;
+
+        if (llm is OpenAiChatBase textLlm)
+        {
+            if (textLlm.Temperature < 1.0) request["temperature"] = textLlm.Temperature;
+            if (textLlm.TopP < 1.0) request["top_p"] = textLlm.TopP;
+        }
+        else if (llm is OpenAiReasoningBase reasoningLlm)
+        {
+            var reasoning = new Dictionary<string, object>();
+            if (reasoningLlm.Reason.HasValue)
+                reasoning["effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            if (reasoningLlm.ReasonSummary.HasValue)
+                reasoning["summary"] = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
+            if (reasoning.Count > 0) request["reasoning"] = reasoning;
+
+            if (reasoningLlm.Verbosity.HasValue)
+            {
+                if (!request.ContainsKey("text"))
+                    request["text"] = new Dictionary<string, object>();
+                if (request["text"] is Dictionary<string, object> textConfig)
+                    textConfig["verbosity"] = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
+            }
+        }
+
+        if (llm.Tools != null && llm.Tools.Length > 0)
+            request["tools"] = llm.Tools.Select(BuildToolRequest).ToList();
+
+        return request;
+    }
+
+    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files)
+        {
+            if (file.IsImage)
+            {
+                content.Add(new { type = "input_image", image_url = file.DataUrl });
+            }
+            else if (file.IsDocument)
+            {
+                content.Add(new
+                {
+                    type = "input_file",
+                    file_data = file.DataUrl,
+                    filename = file.OriginalName.Value
+                });
+            }
+        }
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

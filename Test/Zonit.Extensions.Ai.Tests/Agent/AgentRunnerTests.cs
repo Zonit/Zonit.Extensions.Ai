@@ -287,14 +287,14 @@ public class AgentRunnerTests
     }
 
     [Fact]
-    public async Task StreamAgentAsync_ShouldEmitOrderedEventsEndingWithCompleted()
+    public async Task GenerateStreamAsync_ShouldEmitOrderedEventsEndingWithCompleted()
     {
         var (provider, adapter) = BuildProvider();
         adapter.Turns.Enqueue(ToolCallTurn(("echo", """{"message":"hi"}""", "c1")));
         adapter.Turns.Enqueue(FinalTurn("stream done"));
 
         var events = new List<AgentEvent>();
-        await foreach (var evt in provider.StreamAgentAsync(
+        await foreach (var evt in provider.GenerateStreamAsync(
             new FakeModel(),
             new TestPrompt(),
             tools: new ITool[] { new EchoTool() }))
@@ -314,14 +314,14 @@ public class AgentRunnerTests
     }
 
     [Fact]
-    public async Task StreamAgentAsync_OnIterationLimit_ShouldEmitFailedEvent()
+    public async Task GenerateStreamAsync_OnIterationLimit_ShouldEmitFailedEvent()
     {
         var (provider, adapter) = BuildProvider();
         for (var i = 0; i < 5; i++)
             adapter.Turns.Enqueue(ToolCallTurn(("echo", """{"message":"x"}""", $"c{i}")));
 
         var events = new List<AgentEvent>();
-        await foreach (var evt in provider.StreamAgentAsync(
+        await foreach (var evt in provider.GenerateStreamAsync(
             new FakeModel(),
             new TestPrompt(),
             tools: new ITool[] { new EchoTool() },

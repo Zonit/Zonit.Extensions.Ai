@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Google;
 
 namespace Zonit.Extensions;
@@ -83,6 +84,12 @@ public static class GoogleServiceCollectionExtensions
 
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<GoogleProvider>();
+
+        // Agent adapter — separate typed HttpClient with the same resilience policies.
+        services.AddHttpClient<GoogleAgentAdapter>()
+            .AddAiResilienceHandler();
+        services.AddTransient<IAgentProviderAdapter>(
+            sp => sp.GetRequiredService<GoogleAgentAdapter>());
 
         return services;
     }

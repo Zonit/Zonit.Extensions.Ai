@@ -49,7 +49,12 @@ internal sealed class AnthropicAgentSession : IAgentSession
 
         if (_turnIndex == 1)
         {
-            AppendInitialUserMessage();
+            // Seed any pre-existing chat[] history first (from IAiProvider.ChatAsync),
+            // then either continue with the prompt's user message OR — if the chat
+            // already ended on a User turn — let it be the initial user message.
+            var seeded = AppendInitialChatHistory();
+            if (!seeded)
+                AppendInitialUserMessage();
         }
         else
         {
@@ -126,6 +131,98 @@ internal sealed class AnthropicAgentSession : IAgentSession
 
         userContent.Add(new { type = "text", text });
         _messages.Add(new { role = "user", content = userContent });
+    }
+
+    /// <summary>
+    /// Materializes <see cref="AgentSessionContext.InitialChat"/> into the Anthropic
+    /// message history. Returns <c>true</c> when the seeded history already ends
+    /// on a <see cref="User"/> turn — meaning the model can reply immediately
+    /// without us appending the prompt's own initial user message.
+    /// </summary>
+    private bool AppendInitialChatHistory()
+    {
+        var chat = _context.InitialChat;
+        if (chat is null || chat.Count == 0) return false;
+
+        // Anthropic requires the conversation to start with user — drop any leading assistant turns.
+        var i = 0;
+        while (i < chat.Count && chat[i] is Assistant) i++;
+
+        var sessionFilesAttached = false;
+        var promptFiles = _context.Prompt.Files;
+
+        for (; i < chat.Count; i++)
+        {
+            switch (chat[i])
+            {
+                case User u:
+                {
+                    var userContent = new List<object>();
+                    if (!sessionFilesAttached && promptFiles is not null)
+                    {
+                        AppendFiles(userContent, promptFiles);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files is not null) AppendFiles(userContent, u.Files);
+                    userContent.Add(new { type = "text", text = u.Text });
+                    _messages.Add(new { role = "user", content = userContent });
+                    break;
+                }
+                case Assistant a:
+                    _messages.Add(new
+                    {
+                        role = "assistant",
+                        content = new object[] { new { type = "text", text = a.Text } },
+                    });
+                    break;
+                case Tool t:
+                    _messages.Add(new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new
+                            {
+                                type = "tool_result",
+                                tool_use_id = t.ToolCallId,
+                                content = t.ResultJson,
+                                is_error = t.IsError ? true : (bool?)null,
+                            },
+                        },
+                    });
+                    break;
+            }
+        }
+
+        // Did we end on a user turn (or tool_result, which is also user-role)?
+        if (_messages.Count == 0) return false;
+        return IsUserMessage(_messages[^1]);
+    }
+
+    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files.Where(f => f.IsImage))
+        {
+            content.Add(new
+            {
+                type = "image",
+                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 },
+            });
+        }
+        foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
+        {
+            content.Add(new
+            {
+                type = "document",
+                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 },
+            });
+        }
+    }
+
+    private static bool IsUserMessage(object message)
+    {
+        var roleProp = message.GetType().GetProperty("role");
+        return roleProp?.GetValue(message) as string == "user";
     }
 
     private void AppendToolResultsMessage(IReadOnlyList<ToolResult> toolResults)

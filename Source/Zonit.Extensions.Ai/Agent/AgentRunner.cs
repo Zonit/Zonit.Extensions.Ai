@@ -61,9 +61,10 @@ internal sealed class AgentRunner
         IReadOnlyList<ITool>? callerTools,
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IReadOnlyList<ChatMessage>? initialChat = null)
     {
-        await foreach (var evt in StreamAsync(llm, prompt, callerTools, callerMcps, options, cancellationToken)
+        await foreach (var evt in StreamAsync(llm, prompt, callerTools, callerMcps, options, cancellationToken, initialChat)
                            .ConfigureAwait(false))
         {
             switch (evt)
@@ -91,7 +92,8 @@ internal sealed class AgentRunner
         IReadOnlyList<ITool>? callerTools,
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        IReadOnlyList<ChatMessage>? initialChat = null)
     {
         var globalAgent = _aiOptions.Value.Agent ?? new AiAgentOptions();
         // Precedence: per-call option → model's DefaultMaxIterations (if < global) → global cap.
@@ -130,6 +132,7 @@ internal sealed class AgentRunner
             Prompt = prompt,
             ResponseType = typeof(TResponse) == typeof(string) ? null : typeof(TResponse),
             Tools = resolvedTools,
+            InitialChat = initialChat,
         };
 
         await using var session = adapter.BeginSession(context);
@@ -208,7 +211,9 @@ internal sealed class AgentRunner
                 yield break;
             }
 
-            totalUsage = Sum(totalUsage, turn.Usage);
+            // turn is guaranteed non-null here: turnFailure was null, so RunTurnAsync returned successfully.
+            System.Diagnostics.Debug.Assert(turn is not null);
+            totalUsage = Sum(totalUsage, turn!.Usage);
             totalCost = totalCost + turn.Usage.InputCost + turn.Usage.OutputCost;
             lastUsage = turn.Usage;
             lastDuration = turn.Duration;

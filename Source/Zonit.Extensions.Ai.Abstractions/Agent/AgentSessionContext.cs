@@ -26,4 +26,12 @@ public sealed class AgentSessionContext
     /// All tools (custom + MCP-exposed) the model may call in this session.
     /// </summary>
     public required IReadOnlyList<ITool> Tools { get; init; }
+
+    /// <summary>
+    /// Optional pre-existing chat history (User/Assistant/Tool messages) seeded into
+    /// the agent session before the first turn. Provided by <c>IAiProvider.ChatAsync</c>
+    /// when the caller starts the agent run mid-conversation. <c>null</c> when the
+    /// agent starts from scratch (classic <c>GenerateAsync</c> flow).
+    /// </summary>
+    public IReadOnlyList<ChatMessage>? InitialChat { get; init; }
 }

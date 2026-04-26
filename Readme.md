@@ -416,6 +416,117 @@ The model interface determines the operation:
 
 ---
 
+## Multi-turn Chat
+
+`ChatAsync` is the multi-turn counterpart to `GenerateAsync`. The conversation
+timeline lives in a `ChatMessage[]` (records `User`, `Assistant`, `Tool`); the
+`IPrompt` you pass supplies the **system instruction** (its rendered `Text`
+becomes the system message — semantic flip vs single-shot `GenerateAsync`,
+where `Text` is the user message).
+
+### Plain chat (no tools)
+
+```csharp
+var chat = new ChatMessage[]
+{
+    new User("Why does my deployment hang?"),
+    new Assistant("Could be a missing source-gen override."),
+    new User("Yes — getting CS0534 in .NET 10."),
+};
+
+var result = await ai.ChatAsync(
+    llm:   new Claude45Sonnet(),
+    prompt: new HelpdeskPrompt { Domain = "Zonit.Ai" },
+    chat:  chat);
+
+Console.WriteLine(result.Value);
+```
+
+Implemented natively (multi-turn message arrays end-to-end) for **OpenAI,
+Anthropic, X (Grok), Google (Gemini)**. Other providers fall back to a
+synthetic transcript — the call still works, but the model sees a flat
+prompt instead of a structured message list.
+
+### Chat with tools and MCP
+
+Pass `tools` and/or `mcps` to enable tool-calling. The call routes through
+the agent runner (so the model can `tool_call` → you execute → result is fed
+back) and returns a `ResultAgent<T>` with `ToolCalls`, `TotalUsage` and
+`TotalCost`. Requires an `IAgentLlm` (chat models implement this; embedding
+or audio-only models do not, and won't compile).
+
+```csharp
+var result = await ai.ChatAsync(
+    llm:   new GPT5(),
+    prompt: new HelpdeskPrompt { Domain = "Zonit.Ai" },
+    chat:  priorMessages,
+    tools: new ITool[] { new MyTool() },
+    mcps:  new[] { new Mcp(new Uri("https://my-mcp-server")) },
+    options: new AgentOptions { MaxIterations = 12 });
+
+// Downcast to inspect tool activity:
+if (result is ResultAgent<HelpdeskAnswer> agent)
+{
+    foreach (var call in agent.ToolCalls)
+        Console.WriteLine($"{call.ToolName} ({call.DurationMs} ms)");
+}
+```
+
+### Live streaming (token-by-token, no tools)
+
+`ChatStreamAsync` streams the assistant's reply token-by-token. Streaming
+**without** tools — see the next section for streaming with tools.
+
+```csharp
+await foreach (var token in ai.ChatStreamAsync(
+    llm:   new Claude45Sonnet(),
+    prompt: new HelpdeskPrompt { Domain = "Zonit.Ai" },
+    chat:  priorMessages))
+{
+    Console.Write(token);
+}
+```
+
+### Live agent streaming (tools + chat history)
+
+`GenerateStreamAsync` is the streaming counterpart to the agent overload of
+`GenerateAsync`. It emits a structured `AgentEvent` stream and supports
+tools, MCP, and an optional seed `chat` to resume an existing conversation
+(parallel tool fan-out is preserved):
+
+```csharp
+await foreach (var evt in ai.GenerateStreamAsync(
+    llm:   new GPT5(),
+    prompt: new HelpdeskPrompt { Domain = "Zonit.Ai" },
+    chat:  priorMessages,
+    tools: new ITool[] { new MyTool() }))
+{
+    switch (evt)
+    {
+        case AgentToolCallStartedEvent s:    ui.ShowToolBadge(s.ToolName, s.CallId); break;
+        case AgentToolCallCompletedEvent d:  ui.MarkToolDone(d.Invocation); break;
+        case AgentFinalTextEvent f:          ui.Finalize(f.Text); break;
+        case AgentFailedEvent x:             ui.Error(x.Error); break;
+    }
+}
+```
+
+### Chat API summary
+
+| Method | Returns | Tools? | Streaming? |
+| :--- | :--- | :---: | :---: |
+| `ChatAsync(llm, prompt, chat)` | `Result<T>` | — | — |
+| `ChatAsync(llm, prompt, chat, tools, mcps, options)` | `ResultAgent<T>` | ✓ | — |
+| `ChatStreamAsync(llm, prompt, chat)` | `IAsyncEnumerable<string>` | — | tokens |
+| `GenerateStreamAsync(llm, prompt, ...)` | `IAsyncEnumerable<AgentEvent>` | ✓ | events |
+| `GenerateStreamAsync(llm, prompt, chat, ...)` | `IAsyncEnumerable<AgentEvent>` | ✓ | events |
+
+Plain-text overloads are available on every entry point — pass a `string`
+system prompt instead of an `IPrompt<T>` when you don't need a typed
+response.
+
+---
+
 ## Supported Models
 
 ### OpenAI
@@ -883,7 +994,7 @@ Console.WriteLine($"Iterations: {result.Iterations}, total cost: {result.TotalCo
   configurable via `Ai:Agent:MaxParallelToolCalls`, default 16).
 - **Exceptions in tools are OK** — the library catches them and passes the
   error to the model, which can retry or fall back (Claude handles this well).
-- **Streaming** — `StreamAgentAsync` emits a sealed `AgentEvent` hierarchy
+- **Streaming** — `GenerateStreamAsync` emits a sealed `AgentEvent` hierarchy
   (text delta, tool call start/finish, completion).
 - **Core does the loop** — providers only implement a small
   `IAgentProviderAdapter` (~100 LOC for OpenAI/Claude/Gemini/...).
@@ -894,7 +1005,7 @@ Watch what the agent is doing in real time — useful for long-running runs,
 UI progress indicators and live telemetry:
 
 ```csharp
-await foreach (var evt in ai.StreamAgentAsync(new Claude41Opus(), prompt, tools: new ITool[] { new WeatherTool() }))
+await foreach (var evt in ai.GenerateStreamAsync(new Claude41Opus(), prompt, tools: new ITool[] { new WeatherTool() }))
 {
     switch (evt)
     {

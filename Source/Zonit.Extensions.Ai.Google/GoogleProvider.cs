@@ -219,6 +219,113 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        _logger.LogDebug("Google chat request: {Payload}", jsonPayload);
+
+        var endpoint = $"/v1beta/models/{llm.Name}:generateContent?key={_options.ApiKey}";
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
+
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Google chat error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"Google API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseJson, JsonOptions)!;
+
+        var textContent = geminiResponse.Candidates?.FirstOrDefault()?
+            .Content?.Parts?.FirstOrDefault()?.Text;
+
+        if (string.IsNullOrEmpty(textContent))
+            throw new InvalidOperationException("No text in Google response");
+
+        var result = ParseResponse<TResponse>(textContent);
+
+        var inputTokens = geminiResponse.UsageMetadata?.PromptTokenCount ?? 0;
+        var outputTokens = geminiResponse.UsageMetadata?.CandidatesTokenCount ?? 0;
+        var reasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0;
+
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens + reasoningTokens
+        });
+
+        return new Result<TResponse>
+        {
+            Value = result,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    ReasoningTokens = reasoningTokens,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+
+        var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.ApiKey}";
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, endpoint) { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            var chunk = JsonSerializer.Deserialize<GeminiResponse>(data, JsonOptions);
+            var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
+            if (text != null)
+                yield return text;
+        }
+    }
+
+    /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         Asset audioFile,
@@ -311,6 +418,128 @@ public sealed class GoogleProvider : IModelProvider
         }
 
         return request;
+    }
+
+    [RequiresUnreferencedCode("JSON serialization and schema generation might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and schema generation might require types that cannot be statically analyzed and might need runtime code generation.")]
+    private Dictionary<string, object> BuildChatRequest<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
+    {
+        // Gemini uses a flat 'contents' array of { role, parts } where role is "user"
+        // or "model" (no system role — system instruction is a separate top-level field).
+        var contents = new List<object>();
+        var sessionFilesAttached = false;
+
+        foreach (var msg in chat)
+        {
+            switch (msg)
+            {
+                case User u:
+                {
+                    var parts = new List<object>();
+                    if (!sessionFilesAttached && prompt.Files != null)
+                    {
+                        AppendInlineFiles(parts, prompt.Files);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files != null) AppendInlineFiles(parts, u.Files);
+                    parts.Add(new { text = u.Text });
+                    contents.Add(new { role = "user", parts });
+                    break;
+                }
+                case Assistant a:
+                    contents.Add(new
+                    {
+                        role = "model",
+                        parts = new object[] { new { text = a.Text } },
+                    });
+                    break;
+                case Tool t:
+                    // Gemini expects function responses as parts.functionResponse.
+                    contents.Add(new
+                    {
+                        role = "user",
+                        parts = new object[]
+                        {
+                            new
+                            {
+                                functionResponse = new
+                                {
+                                    name = t.Name,
+                                    response = JsonSerializer.Deserialize<JsonElement>(t.ResultJson),
+                                },
+                            },
+                        },
+                    });
+                    break;
+            }
+        }
+
+        if (contents.Count == 0)
+            contents.Add(new { role = "user", parts = new object[] { new { text = string.Empty } } });
+
+        var request = new Dictionary<string, object>
+        {
+            ["contents"] = contents,
+        };
+
+        var config = new Dictionary<string, object>
+        {
+            ["maxOutputTokens"] = llm.MaxTokens,
+        };
+
+        if (llm is GoogleBase googleLlm)
+        {
+            if (googleLlm.Temperature < 1.0) config["temperature"] = googleLlm.Temperature;
+            if (googleLlm.TopP < 1.0) config["topP"] = googleLlm.TopP;
+        }
+
+        if (responseType != typeof(string))
+        {
+            config["responseMimeType"] = "application/json";
+            config["responseSchema"] = JsonSchemaGenerator.Generate(responseType);
+        }
+
+        request["generationConfig"] = config;
+
+        // System instruction: in chat mode prompt.Text IS the system instruction
+        // (semantic flip vs single-shot GenerateAsync where prompt.System is system).
+        if (!string.IsNullOrEmpty(prompt.Text))
+            request["systemInstruction"] = new { parts = new[] { new { text = prompt.Text } } };
+
+        // Tools: function declarations.
+        if (llm.Tools is { Length: > 0 } native)
+        {
+            var declarations = new List<object>();
+            foreach (var t in native.OfType<FunctionTool>())
+            {
+                declarations.Add(new
+                {
+                    name = t.Name,
+                    description = t.Description,
+                    parameters = t.Parameters,
+                });
+            }
+            if (declarations.Count > 0)
+                request["tools"] = new[] { new { functionDeclarations = declarations } };
+        }
+
+        return request;
+    }
+
+    private static void AppendInlineFiles(List<object> parts, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files.Where(f => f.IsImage))
+        {
+            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+        }
+        foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
+        {
+            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+        }
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

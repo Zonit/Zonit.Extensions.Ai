@@ -386,6 +386,118 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        _logger.LogDebug("X chat request: {Payload}", jsonPayload);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("X chat error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"X API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var xResponse = JsonSerializer.Deserialize<XResponse>(responseJson, JsonOptions)!;
+
+        var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
+            ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+
+        if (string.IsNullOrEmpty(textContent))
+            throw new InvalidOperationException("No text in X response");
+
+        var result = ParseResponse<TResponse>(textContent);
+
+        var inputTokens = xResponse.Usage?.InputTokens ?? xResponse.Usage?.PromptTokens ?? 0;
+        var outputTokens = xResponse.Usage?.OutputTokens ?? xResponse.Usage?.CompletionTokens ?? 0;
+        var cachedTokens = xResponse.Usage?.InputTokensDetails?.CachedTokens
+            ?? xResponse.Usage?.PromptTokensDetails?.CachedTokens
+            ?? 0;
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            CachedTokens = cachedTokens
+        });
+
+        return new Result<TResponse>
+        {
+            Value = result,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                RequestId = xResponse.Id,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    CachedTokens = cachedTokens,
+                    ReasoningTokens = xResponse.Usage?.OutputTokensDetails?.ReasoningTokens
+                        ?? xResponse.Usage?.CompletionTokensDetails?.ReasoningTokens
+                        ?? 0,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
+        request["stream"] = true;
+
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            if (data == "[DONE]") break;
+
+            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
+            if (text != null)
+                yield return text;
+        }
+    }
+
+    /// <inheritdoc />
     public Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         Asset audioFile,
@@ -486,6 +598,133 @@ public sealed class XProvider : IModelProvider
         }
 
         return request;
+    }
+
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    private Dictionary<string, object> BuildChatRequest<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        Type responseType)
+    {
+        var request = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["max_output_tokens"] = llm.MaxTokens,
+        };
+
+        if (!string.IsNullOrEmpty(prompt.Text))
+            request["instructions"] = prompt.Text;
+
+        var input = new List<object>();
+        var sessionFilesAttached = false;
+
+        foreach (var msg in chat)
+        {
+            switch (msg)
+            {
+                case User u:
+                {
+                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    if (!sessionFilesAttached && prompt.Files != null)
+                    {
+                        AppendFiles(userContent, prompt.Files);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files != null) AppendFiles(userContent, u.Files);
+                    input.Add(new { role = "user", content = userContent });
+                    break;
+                }
+                case Assistant a:
+                    input.Add(new
+                    {
+                        role = "assistant",
+                        content = new object[] { new { type = "output_text", text = a.Text } }
+                    });
+                    break;
+                case Tool t:
+                    input.Add(new
+                    {
+                        type = "function_call_output",
+                        call_id = t.ToolCallId,
+                        output = t.ResultJson
+                    });
+                    break;
+            }
+        }
+
+        if (input.Count == 0)
+        {
+            input.Add(new
+            {
+                role = "user",
+                content = new object[] { new { type = "input_text", text = string.Empty } }
+            });
+        }
+
+        request["input"] = input;
+
+        if (llm is XChatBase xLlm)
+        {
+            if (xLlm.Temperature < 1.0) request["temperature"] = xLlm.Temperature;
+            if (xLlm.TopP < 1.0) request["top_p"] = xLlm.TopP;
+
+            // X-native WebSearch (Search settings) propagated as Responses API tools.
+            if (xLlm.WebSearch != null && xLlm.WebSearch.Mode != ModeType.Never)
+            {
+                var tools = BuildAgentTools(xLlm.WebSearch);
+                if (tools.Count > 0)
+                    request["tools"] = tools;
+            }
+        }
+
+        if (llm is XReasoningBase { Reason: not null } reasoningLlm)
+            request["reasoning_effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+
+        // Structured output (X uses response_format, not text.format).
+        if (responseType != typeof(string))
+        {
+            request["response_format"] = new
+            {
+                type = "json_schema",
+                json_schema = new
+                {
+                    name = "response",
+                    schema = JsonSchemaGenerator.Generate(responseType),
+                    strict = true,
+                },
+            };
+        }
+
+        // Attached function tools from llm.Tools (in addition to web/x_search added above).
+        if (llm.Tools is { Length: > 0 } native)
+        {
+            var tools = request.TryGetValue("tools", out var existing) && existing is List<object> existingList
+                ? existingList
+                : new List<object>();
+            foreach (var t in native.OfType<FunctionTool>())
+            {
+                tools.Add(new
+                {
+                    type = "function",
+                    name = t.Name,
+                    description = t.Description,
+                    parameters = t.Parameters,
+                    strict = t.Strict,
+                });
+            }
+            if (tools.Count > 0)
+                request["tools"] = tools;
+        }
+
+        return request;
+    }
+
+    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files.Where(f => f.IsImage))
+            content.Add(new { type = "input_image", image_url = file.DataUrl });
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

@@ -14,6 +14,7 @@ public static class AiCostCalculator
     /// <param name="llm">The language model used.</param>
     /// <param name="inputTokens">Number of input tokens.</param>
     /// <param name="cachedTokens">Number of cached tokens (cheaper).</param>
+    /// <param name="cacheWriteTokens">Number of cache-write tokens (typically more expensive than regular input).</param>
     /// <returns>Input cost as Price.</returns>
     public static Price CalculateInputCost(ILlm llm, int inputTokens, int cachedTokens = 0, int cacheWriteTokens = 0)
     {

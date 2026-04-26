@@ -40,6 +40,82 @@ public interface IAiProvider
 
     #endregion
 
+    #region Chat
+
+    /// <summary>
+    /// Multi-turn chat completion. The <paramref name="prompt"/> supplies the
+    /// system instruction (its rendered <c>Text</c> is the system message);
+    /// the conversation timeline lives in <paramref name="chat"/> as a sequence
+    /// of <see cref="User"/>, <see cref="Assistant"/>, and <see cref="Tool"/>
+    /// records.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Semantic difference vs <c>GenerateAsync(llm, prompt)</c>: in chat mode
+    /// <c>prompt.Text</c> becomes the <b>system</b> message (not the user
+    /// message). In single-shot <c>GenerateAsync</c>, <c>prompt.Text</c> is the
+    /// user message and <c>prompt.System</c> the optional system message.
+    /// </para>
+    /// <para>
+    /// Files on <c>prompt.Files</c> are forwarded as session-level attachments;
+    /// per-turn files on <see cref="User.Files"/> are forwarded with that turn.
+    /// Both can be supplied.
+    /// </para>
+    /// </remarks>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Plain-text overload. <paramref name="systemPrompt"/> is the system instruction (may be empty).
+    /// </summary>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    Task<Result<string>> ChatAsync(
+        ILlm llm,
+        string systemPrompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Live (streaming) chat: emits the assistant's reply token-by-token.
+    /// </summary>
+    /// <remarks>
+    /// Streaming with tool execution is intentionally <b>not supported</b> on this
+    /// API — pass <see cref="ChatAsync{TResponse}"/> with tools for tool-driven
+    /// runs (and use <c>GenerateStreamAsync</c> for fine-grained agent events).
+    /// </remarks>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Plain-text overload of <see cref="ChatStreamAsync(ILlm, IPrompt, IReadOnlyList{ChatMessage}, CancellationToken)"/>.
+    /// </summary>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        string systemPrompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Image Generation
 
     /// <summary>
@@ -185,9 +261,33 @@ public interface IAiProvider
     /// </remarks>
     [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
     [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    IAsyncEnumerable<AgentEvent> StreamAgentAsync<TResponse>(
+    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
+        IReadOnlyList<ITool>? tools = null,
+        IReadOnlyList<Mcp>? mcps = null,
+        AgentOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Streams an agent run that resumes from an existing <paramref name="chat"/>
+    /// transcript. The model sees the prior conversation as session state, then
+    /// continues with full tool-calling capability — events are emitted exactly
+    /// as for the no-chat overload.
+    /// </summary>
+    /// <remarks>
+    /// This is the streaming counterpart of <c>ChatAsync</c> with tools — useful
+    /// for live UI: subscribe to <see cref="AgentFinalTextEvent"/> for the final
+    /// text and to <see cref="AgentToolCallStartedEvent"/> /
+    /// <see cref="AgentToolCallCompletedEvent"/> for tool activity (with parallel
+    /// fan-out preserved).
+    /// </remarks>
+    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
+    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+        IAgentLlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,

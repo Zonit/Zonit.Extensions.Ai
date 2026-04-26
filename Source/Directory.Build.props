@@ -1,7 +1,7 @@
 <Project>
   <!-- Common NuGet Package Metadata for all Zonit.Extensions.Ai packages -->
   <PropertyGroup>
-    <Version>1.21.0</Version>
+    <Version>1.50.0</Version>
     <Authors>Zonit</Authors>
     <Company>Zonit</Company>
     <Product>Zonit.Extensions.Ai</Product>

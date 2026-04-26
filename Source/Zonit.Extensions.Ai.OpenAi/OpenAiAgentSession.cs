@@ -91,20 +91,30 @@ internal sealed class OpenAiAgentSession : IAgentSession
             request["instructions"] = prompt.System!;
 
         var input = new List<object>();
-        var userContent = new List<object> { new { type = "input_text", text = prompt.Text } };
+        var seededFromChat = SeedInitialChatInto(input, prompt.Files);
 
-        if (prompt.Files is not null)
+        // If the chat history didn't already end on a user turn, append the prompt's
+        // own initial user message (this is the classic GenerateAsync flow, plus a
+        // fall-through for chat[] sequences that ended on Assistant/Tool messages
+        // — though for OpenAI Responses API a Tool result *is* a valid last input).
+        if (!seededFromChat)
         {
-            foreach (var file in prompt.Files)
+            var userContent = new List<object> { new { type = "input_text", text = prompt.Text } };
+
+            if (prompt.Files is not null)
             {
-                if (file.IsImage)
-                    userContent.Add(new { type = "input_image", image_url = file.DataUrl });
-                else if (file.IsDocument)
-                    userContent.Add(new { type = "input_file", file_data = file.DataUrl, filename = file.OriginalName.Value });
+                foreach (var file in prompt.Files)
+                {
+                    if (file.IsImage)
+                        userContent.Add(new { type = "input_image", image_url = file.DataUrl });
+                    else if (file.IsDocument)
+                        userContent.Add(new { type = "input_file", file_data = file.DataUrl, filename = file.OriginalName.Value });
+                }
             }
+
+            input.Add(new { role = "user", content = userContent });
         }
 
-        input.Add(new { role = "user", content = userContent });
         request["input"] = input;
 
         // Structured output schema.
@@ -199,6 +209,71 @@ internal sealed class OpenAiAgentSession : IAgentSession
             ["previous_response_id"] = _previousResponseId,
             ["input"] = input,
         };
+    }
+
+    /// <summary>
+    /// Seeds <see cref="AgentSessionContext.InitialChat"/> into the Responses-API
+    /// <c>input</c> array. Returns <c>true</c> if the seeded history ends with a
+    /// user-role message (or a tool result) so the caller does not need to append
+    /// the prompt's own initial user turn.
+    /// </summary>
+    private bool SeedInitialChatInto(List<object> input, IReadOnlyList<Asset>? promptFiles)
+    {
+        var chat = _context.InitialChat;
+        if (chat is null || chat.Count == 0) return false;
+
+        var sessionFilesAttached = false;
+        var endsOnUserOrTool = false;
+
+        foreach (var msg in chat)
+        {
+            switch (msg)
+            {
+                case User u:
+                {
+                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    if (!sessionFilesAttached && promptFiles is not null)
+                    {
+                        AppendFiles(userContent, promptFiles);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files is not null) AppendFiles(userContent, u.Files);
+                    input.Add(new { role = "user", content = userContent });
+                    endsOnUserOrTool = true;
+                    break;
+                }
+                case Assistant a:
+                    input.Add(new
+                    {
+                        role = "assistant",
+                        content = new object[] { new { type = "output_text", text = a.Text } },
+                    });
+                    endsOnUserOrTool = false;
+                    break;
+                case Tool t:
+                    input.Add(new
+                    {
+                        type = "function_call_output",
+                        call_id = t.ToolCallId,
+                        output = t.ResultJson,
+                    });
+                    endsOnUserOrTool = true;
+                    break;
+            }
+        }
+
+        return endsOnUserOrTool;
+    }
+
+    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files)
+        {
+            if (file.IsImage)
+                content.Add(new { type = "input_image", image_url = file.DataUrl });
+            else if (file.IsDocument)
+                content.Add(new { type = "input_file", file_data = file.DataUrl, filename = file.OriginalName.Value });
+        }
     }
 
     private static object BuildNativeTool(IToolBase tool) => tool switch

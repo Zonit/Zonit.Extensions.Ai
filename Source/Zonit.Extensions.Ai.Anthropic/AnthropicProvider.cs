@@ -123,6 +123,80 @@ public sealed class AnthropicProvider : IModelProvider
     }
 
     /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+
+        _logger.LogDebug("Anthropic chat request: {Payload}", jsonPayload);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/messages", content, cancellationToken);
+
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Anthropic chat error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"Anthropic API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var anthropicResponse = JsonSerializer.Deserialize<AnthropicResponse>(responseJson, JsonOptions)!;
+
+        var textContent = anthropicResponse.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+
+        if (string.IsNullOrEmpty(textContent))
+            throw new InvalidOperationException("No text in Anthropic response");
+
+        var result = ParseResponse<TResponse>(textContent);
+
+        var inputTokens = anthropicResponse.Usage?.InputTokens ?? 0;
+        var outputTokens = anthropicResponse.Usage?.OutputTokens ?? 0;
+        var cachedReadTokens = anthropicResponse.Usage?.CacheReadInputTokens ?? 0;
+        var cacheWriteTokens = anthropicResponse.Usage?.CacheCreationInputTokens ?? 0;
+
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens,
+            CachedTokens = cachedReadTokens,
+            CacheWriteTokens = cacheWriteTokens
+        });
+
+        return new Result<TResponse>
+        {
+            Value = result,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = prompt.GetType().Name.Replace("Prompt", ""),
+                Duration = stopwatch.Elapsed,
+                RequestId = anthropicResponse.Id,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    CachedTokens = cachedReadTokens,
+                    CacheWriteTokens = cacheWriteTokens,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
     public Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<Asset> prompt,
@@ -162,6 +236,43 @@ public sealed class AnthropicProvider : IModelProvider
 
         var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
 
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/messages") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            var chunk = JsonSerializer.Deserialize<StreamEvent>(data, JsonOptions);
+
+            if (chunk?.Type == "content_block_delta" && chunk.Delta?.Text != null)
+                yield return chunk.Delta.Text;
+        }
+    }
+
+    /// <inheritdoc />
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    public async IAsyncEnumerable<string> ChatStreamAsync(
+        ILlm llm,
+        IPrompt prompt,
+        IReadOnlyList<ChatMessage> chat,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        // Reuse BuildChatRequest for free-form (string) output and flip on streaming.
+        // We adapt the non-generic IPrompt to IPrompt<string> via the shim helper.
+        var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
+        request["stream"] = true;
+
+        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/messages") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -350,6 +461,211 @@ Remember: Your response must start with the opening curly brace and be a valid J
         }
 
         return request;
+    }
+
+    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
+    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
+    private Dictionary<string, object> BuildChatRequest<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        Type responseType)
+    {
+        var maxTokens = llm.MaxTokens;
+        if (llm is AnthropicBase thinkingLlm && thinkingLlm.ThinkingBudget.HasValue)
+        {
+            var requiredMinTokens = thinkingLlm.ThinkingBudget.Value + 1024;
+            if (maxTokens < requiredMinTokens) maxTokens = requiredMinTokens;
+        }
+
+        var request = new Dictionary<string, object>
+        {
+            ["model"] = llm.Name,
+            ["max_tokens"] = maxTokens
+        };
+
+        // System message: in chat mode the rendered Prompt.Text IS the system
+        // instruction (semantic flip vs single-shot GenerateAsync where Text =
+        // user message). For structured output append the JSON schema clause.
+        var systemPrompt = prompt.Text ?? string.Empty;
+        string? userJsonReminder = null;
+        if (responseType != typeof(string))
+        {
+            var schema = JsonSchemaGenerator.Generate(responseType);
+            var schemaJson = schema.ToString();
+            var jsonInstruction = $@"
+
+CRITICAL JSON OUTPUT REQUIREMENTS:
+1. You MUST respond with a SINGLE JSON OBJECT (starting with a curly brace)
+2. Do NOT respond with a JSON array []
+3. Do NOT wrap response in markdown code blocks
+4. Do NOT add any explanation or text before/after the JSON
+5. The JSON object MUST match this exact schema:
+
+{schemaJson}
+
+Remember: Your response must start with the opening curly brace and be a valid JSON object matching the schema above.
+";
+            systemPrompt = string.IsNullOrEmpty(systemPrompt) ? jsonInstruction.Trim() : systemPrompt + jsonInstruction;
+            userJsonReminder = "\n\nRespond with a JSON object matching the schema. Start your response with {";
+        }
+
+        if (!string.IsNullOrEmpty(systemPrompt))
+            request["system"] = systemPrompt;
+
+        // Build messages from chat history. Anthropic requires the conversation
+        // to alternate user/assistant and to start with user — we coalesce
+        // adjacent messages of the same role and drop a leading assistant turn.
+        var messages = new List<object>();
+        var idx = 0;
+        // Drop leading assistant messages — Anthropic requires user-first.
+        while (idx < chat.Count && chat[idx] is Assistant) idx++;
+
+        // Session-level files from the system Prompt are attached to the FIRST
+        // user message (sensible default; per-message User.Files override per turn).
+        var sessionFilesAttached = false;
+
+        for (; idx < chat.Count; idx++)
+        {
+            switch (chat[idx])
+            {
+                case User u:
+                {
+                    var userContent = new List<object>();
+                    // Attach session-level files only on the first user message.
+                    if (!sessionFilesAttached && prompt.Files != null)
+                    {
+                        AppendFiles(userContent, prompt.Files);
+                        sessionFilesAttached = true;
+                    }
+                    if (u.Files != null) AppendFiles(userContent, u.Files);
+                    userContent.Add(new { type = "text", text = u.Text });
+                    messages.Add(new { role = "user", content = userContent });
+                    break;
+                }
+                case Assistant a:
+                    messages.Add(new { role = "assistant", content = new object[] { new { type = "text", text = a.Text } } });
+                    break;
+                case Tool t:
+                    // Tool results are user-role tool_result blocks per Anthropic spec.
+                    messages.Add(new
+                    {
+                        role = "user",
+                        content = new object[]
+                        {
+                            new
+                            {
+                                type = "tool_result",
+                                tool_use_id = t.ToolCallId,
+                                content = t.ResultJson,
+                                is_error = t.IsError
+                            }
+                        }
+                    });
+                    break;
+            }
+        }
+
+        // If history ended on an assistant message (or was empty after trimming),
+        // append a placeholder user turn — Anthropic requires the last message
+        // to be user before it will produce an assistant reply. The reminder
+        // also doubles as the JSON-output nudge for structured responses.
+        if (messages.Count == 0 || IsAssistantMessage(messages[^1]))
+        {
+            var fallbackText = userJsonReminder?.TrimStart() ?? "Continue.";
+            messages.Add(new { role = "user", content = new object[] { new { type = "text", text = fallbackText } } });
+            userJsonReminder = null; // already consumed
+        }
+        else if (!string.IsNullOrEmpty(userJsonReminder))
+        {
+            // Append the JSON nudge to the last user message's text block.
+            var last = messages[^1];
+            // The last message is anonymous-typed; rebuild with the appended reminder.
+            messages[^1] = AppendTextToUserMessage(last, userJsonReminder!);
+        }
+
+        // Prefill technique: assistant starts with "{" for structured outputs.
+        if (responseType != typeof(string))
+            messages.Add(new { role = "assistant", content = "{" });
+
+        request["messages"] = messages;
+
+        if (llm is AnthropicBase anthropicLlm)
+        {
+            if (anthropicLlm.TopP < 1.0) request["top_p"] = anthropicLlm.TopP;
+            else if (anthropicLlm.Temperature < 1.0) request["temperature"] = anthropicLlm.Temperature;
+
+            if (anthropicLlm.ThinkingBudget.HasValue)
+            {
+                request["thinking"] = new { type = "enabled", budget_tokens = anthropicLlm.ThinkingBudget.Value };
+            }
+        }
+
+        if (llm.Tools != null && llm.Tools.Length > 0)
+        {
+            request["tools"] = llm.Tools.OfType<FunctionTool>().Select(f => new
+            {
+                name = f.Name,
+                description = f.Description,
+                input_schema = f.Parameters
+            }).ToList();
+        }
+
+        return request;
+    }
+
+    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    {
+        foreach (var file in files.Where(f => f.IsImage))
+        {
+            content.Add(new
+            {
+                type = "image",
+                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 }
+            });
+        }
+        foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
+        {
+            content.Add(new
+            {
+                type = "document",
+                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 }
+            });
+        }
+    }
+
+    private static bool IsAssistantMessage(object message)
+    {
+        // Reflective check on the anonymous { role, content } shape.
+        var roleProp = message.GetType().GetProperty("role");
+        return roleProp?.GetValue(message) as string == "assistant";
+    }
+
+    private static object AppendTextToUserMessage(object message, string extra)
+    {
+        // Re-emit the message with `extra` appended to its first text block.
+        var contentProp = message.GetType().GetProperty("content");
+        if (contentProp?.GetValue(message) is not IEnumerable<object> blocks)
+            return message;
+
+        var newBlocks = new List<object>();
+        var appended = false;
+        foreach (var block in blocks)
+        {
+            if (!appended)
+            {
+                var textProp = block.GetType().GetProperty("text");
+                if (textProp?.GetValue(block) is string text)
+                {
+                    newBlocks.Add(new { type = "text", text = text + extra });
+                    appended = true;
+                    continue;
+                }
+            }
+            newBlocks.Add(block);
+        }
+        if (!appended) newBlocks.Add(new { type = "text", text = extra });
+        return new { role = "user", content = newBlocks };
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]

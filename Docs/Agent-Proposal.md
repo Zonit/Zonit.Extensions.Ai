@@ -71,7 +71,7 @@ Dwie żelazne zasady:
 - `AgentRunner` (core) + `IAgentProviderAdapter` (per-provider).
 - `IToolRegistry` + source generator `AiToolRegistrationGenerator` — auto
   rejestracja `ToolBase<,>` w DI (jedno `AddAiTools()`).
-- Streaming: `StreamAgentAsync` → `IAsyncEnumerable<AgentEvent>`.
+- Streaming: `GenerateStreamAsync` (formerly `StreamAgentAsync`) → `IAsyncEnumerable<AgentEvent>`.
 
 **Odrzucone (patrz [`Agent-Deferred-Decisions.md`](./Agent-Deferred-Decisions.md)):**
 
@@ -512,7 +512,7 @@ public interface IAgentProviderAdapter
         AgentSession session,
         CancellationToken cancellationToken);
 
-    /// Opcjonalnie — strumieniowa wersja tury (dla StreamAgentAsync).
+    /// Opcjonalnie — strumieniowa wersja tury (dla GenerateStreamAsync).
     /// null = provider nie wspiera streamingu agenta.
     IAsyncEnumerable<AgentTurnChunk>? StreamAsync(
         AgentSession session,
@@ -557,7 +557,7 @@ Tyle. Pętla, MCP, równoległość, limity, wyjątki, trace — wszystko w core
 ## 13. Streaming agenta (feedback pkt 9)
 
 ```csharp
-IAsyncEnumerable<AgentEvent> StreamAgentAsync<TResponse>(
+IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
     IAgentLlm agent,
     IPrompt<TResponse> prompt,
     IEnumerable<ITool>? tools = null,
@@ -623,7 +623,7 @@ to nie obchodzi. Runner widzi wyłącznie `function_call` dla naszych tooli.
 | 4 | `AnthropicAgentAdapter` — Messages API (tool_use / tool_result, multi-block) | `Zonit.Extensions.Ai.Anthropic` |
 | 5 | Klient MCP (HTTP/SSE) + `McpTool` + auto `tools/list` po connect | **wbudowany w core w 1.21** (uprzednio osobny pakiet) |
 | 6 | `GoogleAgentAdapter`, `XAgentAdapter`, `MistralAgentAdapter`, `DeepSeekAgentAdapter` | odpowiednie pakiety |
-| 7 | `StreamAgentAsync` (fallback w core, natywne w OpenAI/Anthropic) | core + providery |
+| 7 | `GenerateStreamAsync` (fallback w core, natywne w OpenAI/Anthropic) | core + providery |
 | 8 | Observability: `ActivitySource` `Zonit.Ai.Agent`, metryki (iterations, duration, errors) | core |
 
 Każda faza jest osobno mergowalna. Żadna nie zmienia zachowania istniejącego

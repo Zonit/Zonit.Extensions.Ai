@@ -3,7 +3,8 @@ using Zonit.Extensions;
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
-/// Base record for events emitted by <see cref="IAiProvider.StreamAgentAsync{TResponse}"/>.
+/// Base record for events emitted by the agent streaming API
+/// (<c>IAiProvider.GenerateStreamAsync</c>).
 /// Consumers should pattern-match on the concrete subtype.
 /// </summary>
 public abstract record AgentEvent
