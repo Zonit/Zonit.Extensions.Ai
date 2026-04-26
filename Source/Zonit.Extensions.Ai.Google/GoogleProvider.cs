@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,8 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Google Gemini provider implementation.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("google")]
 public sealed class GoogleProvider : IModelProvider
 {
@@ -28,7 +31,11 @@ public sealed class GoogleProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            GoogleJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public GoogleProvider(
@@ -50,9 +57,7 @@ public sealed class GoogleProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is GoogleBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -60,7 +65,7 @@ public sealed class GoogleProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiRequest);
 
         _logger.LogDebug("Google request: {Payload}", jsonPayload);
 
@@ -79,7 +84,7 @@ public sealed class GoogleProvider : IModelProvider
             throw new HttpRequestException($"Google API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseJson, JsonOptions)!;
+        var geminiResponse = JsonSerializer.Deserialize(responseJson, GoogleJsonContext.Default.GeminiResponse)!;
 
         var textContent = geminiResponse.Candidates?.FirstOrDefault()?
             .Content?.Parts?.FirstOrDefault()?.Text;
@@ -141,8 +146,6 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
@@ -150,14 +153,17 @@ public sealed class GoogleProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new
+        var request = new GeminiEmbedRequest
         {
-            model = $"models/{llm.Name}",
-            content = new { parts = new[] { new { text = input } } }
+            Model = $"models/{llm.Name}",
+            Content = new GeminiEmbedContent
+            {
+                Parts = new List<GeminiPartItem> { new() { Text = input } }
+            }
         };
 
         var endpoint = $"/v1beta/models/{llm.Name}:embedContent?key={_options.ApiKey}";
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiEmbedRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync(endpoint, content, cancellationToken);
@@ -166,7 +172,7 @@ public sealed class GoogleProvider : IModelProvider
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var embeddingResponse = JsonSerializer.Deserialize<EmbeddingResponse>(responseJson, JsonOptions);
+        var embeddingResponse = JsonSerializer.Deserialize(responseJson, GoogleJsonContext.Default.EmbeddingResponse);
 
         return new Result<float[]>
         {
@@ -183,15 +189,13 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiRequest);
 
         var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.ApiKey}";
 
@@ -210,7 +214,7 @@ public sealed class GoogleProvider : IModelProvider
             if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
 
             var data = line[6..];
-            var chunk = JsonSerializer.Deserialize<GeminiResponse>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, GoogleJsonContext.Default.GeminiResponse);
 
             var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
             if (text != null)
@@ -219,9 +223,7 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+    public async Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -230,7 +232,7 @@ public sealed class GoogleProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiRequest);
         _logger.LogDebug("Google chat request: {Payload}", jsonPayload);
 
         var endpoint = $"/v1beta/models/{llm.Name}:generateContent?key={_options.ApiKey}";
@@ -248,7 +250,7 @@ public sealed class GoogleProvider : IModelProvider
             throw new HttpRequestException($"Google API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var geminiResponse = JsonSerializer.Deserialize<GeminiResponse>(responseJson, JsonOptions)!;
+        var geminiResponse = JsonSerializer.Deserialize(responseJson, GoogleJsonContext.Default.GeminiResponse)!;
 
         var textContent = geminiResponse.Candidates?.FirstOrDefault()?
             .Content?.Parts?.FirstOrDefault()?.Text;
@@ -290,8 +292,6 @@ public sealed class GoogleProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
@@ -299,7 +299,7 @@ public sealed class GoogleProvider : IModelProvider
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiRequest);
 
         var endpoint = $"/v1beta/models/{llm.Name}:streamGenerateContent?alt=sse&key={_options.ApiKey}";
 
@@ -318,7 +318,7 @@ public sealed class GoogleProvider : IModelProvider
             if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
 
             var data = line[6..];
-            var chunk = JsonSerializer.Deserialize<GeminiResponse>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, GoogleJsonContext.Default.GeminiResponse);
             var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
             if (text != null)
                 yield return text;
@@ -341,96 +341,80 @@ public sealed class GoogleProvider : IModelProvider
         _httpClient.BaseAddress = new Uri(baseUrl);
     }
 
-    [RequiresUnreferencedCode("JSON serialization and schema generation might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and schema generation might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static GeminiRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var parts = new List<object> { new { text = prompt.Text } };
+        var parts = new List<GeminiPartItem> { new() { Text = prompt.Text } };
 
         if (prompt.Files != null)
         {
-            // Images support - use MediaType detected from binary signature
             foreach (var file in prompt.Files.Where(f => f.IsImage))
             {
-                parts.Insert(0, new
+                parts.Insert(0, new GeminiPartItem
                 {
-                    inlineData = new
-                    {
-                        mimeType = file.MediaType.Value,
-                        data = file.Base64
-                    }
+                    InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 }
                 });
             }
 
-            // PDF document support (Gemini supports PDFs natively)
             foreach (var file in prompt.Files.Where(f => f.IsDocument))
             {
                 if (file.MediaType == Asset.MimeType.ApplicationPdf)
                 {
-                    parts.Insert(0, new
+                    parts.Insert(0, new GeminiPartItem
                     {
-                        inlineData = new
-                        {
-                            mimeType = file.MediaType.Value,
-                            data = file.Base64
-                        }
+                        InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 }
                     });
                 }
             }
         }
 
-        var request = new Dictionary<string, object>
+        var request = new GeminiRequest
         {
-            ["contents"] = new[] { new { parts } }
+            Contents = new List<GeminiRequestContent> { new() { Parts = parts } }
         };
 
-        // Generation config
-        var config = new Dictionary<string, object>
-        {
-            ["maxOutputTokens"] = llm.MaxTokens
-        };
+        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
 
-        // Only send temperature/topP if not default - Google accepts both but cleaner to send only non-defaults
         if (llm is GoogleBase googleLlm)
         {
             if (googleLlm.Temperature < 1.0)
-                config["temperature"] = googleLlm.Temperature;
+                config.Temperature = googleLlm.Temperature;
             if (googleLlm.TopP < 1.0)
-                config["topP"] = googleLlm.TopP;
+                config.TopP = googleLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            config["responseMimeType"] = "application/json";
-            config["responseSchema"] = JsonSchemaGenerator.Generate(responseType);
+            config.ResponseMimeType = "application/json";
+            config.ResponseSchema = JsonSchemaGenerator.Generate(responseType);
         }
 
-        request["generationConfig"] = config;
+        request.GenerationConfig = config;
 
-        // System instruction
         if (!string.IsNullOrEmpty(prompt.System))
         {
-            request["systemInstruction"] = new { parts = new[] { new { text = prompt.System } } };
+            request.SystemInstruction = new GeminiSystemInstruction
+            {
+                Parts = new List<GeminiPartItem> { new() { Text = prompt.System } }
+            };
         }
 
         return request;
     }
 
-    [RequiresUnreferencedCode("JSON serialization and schema generation might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and schema generation might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildChatRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static GeminiRequest BuildChatRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        // Gemini uses a flat 'contents' array of { role, parts } where role is "user"
-        // or "model" (no system role — system instruction is a separate top-level field).
-        var contents = new List<object>();
+        var contents = new List<GeminiRequestContent>();
         var sessionFilesAttached = false;
 
         foreach (var msg in chat)
@@ -439,106 +423,106 @@ public sealed class GoogleProvider : IModelProvider
             {
                 case User u:
                 {
-                    var parts = new List<object>();
+                    var parts = new List<GeminiPartItem>();
                     if (!sessionFilesAttached && prompt.Files != null)
                     {
                         AppendInlineFiles(parts, prompt.Files);
                         sessionFilesAttached = true;
                     }
                     if (u.Files != null) AppendInlineFiles(parts, u.Files);
-                    parts.Add(new { text = u.Text });
-                    contents.Add(new { role = "user", parts });
+                    parts.Add(new GeminiPartItem { Text = u.Text });
+                    contents.Add(new GeminiRequestContent { Role = "user", Parts = parts });
                     break;
                 }
                 case Assistant a:
-                    contents.Add(new
+                    contents.Add(new GeminiRequestContent
                     {
-                        role = "model",
-                        parts = new object[] { new { text = a.Text } },
+                        Role = "model",
+                        Parts = new List<GeminiPartItem> { new() { Text = a.Text } }
                     });
                     break;
                 case Tool t:
-                    // Gemini expects function responses as parts.functionResponse.
-                    contents.Add(new
+                    contents.Add(new GeminiRequestContent
                     {
-                        role = "user",
-                        parts = new object[]
+                        Role = "user",
+                        Parts = new List<GeminiPartItem>
                         {
-                            new
+                            new()
                             {
-                                functionResponse = new
+                                FunctionResponse = new GeminiFunctionResponse
                                 {
-                                    name = t.Name,
-                                    response = JsonSerializer.Deserialize<JsonElement>(t.ResultJson),
-                                },
-                            },
-                        },
+                                    Name = t.Name,
+                                    Response = JsonSerializer.Deserialize(t.ResultJson, GoogleJsonContext.Default.JsonElement)
+                                }
+                            }
+                        }
                     });
                     break;
             }
         }
 
         if (contents.Count == 0)
-            contents.Add(new { role = "user", parts = new object[] { new { text = string.Empty } } });
-
-        var request = new Dictionary<string, object>
         {
-            ["contents"] = contents,
-        };
+            contents.Add(new GeminiRequestContent
+            {
+                Role = "user",
+                Parts = new List<GeminiPartItem> { new() { Text = string.Empty } }
+            });
+        }
 
-        var config = new Dictionary<string, object>
-        {
-            ["maxOutputTokens"] = llm.MaxTokens,
-        };
+        var request = new GeminiRequest { Contents = contents };
+        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
 
         if (llm is GoogleBase googleLlm)
         {
-            if (googleLlm.Temperature < 1.0) config["temperature"] = googleLlm.Temperature;
-            if (googleLlm.TopP < 1.0) config["topP"] = googleLlm.TopP;
+            if (googleLlm.Temperature < 1.0) config.Temperature = googleLlm.Temperature;
+            if (googleLlm.TopP < 1.0) config.TopP = googleLlm.TopP;
         }
 
         if (responseType != typeof(string))
         {
-            config["responseMimeType"] = "application/json";
-            config["responseSchema"] = JsonSchemaGenerator.Generate(responseType);
+            config.ResponseMimeType = "application/json";
+            config.ResponseSchema = JsonSchemaGenerator.Generate(responseType);
         }
 
-        request["generationConfig"] = config;
+        request.GenerationConfig = config;
 
-        // System instruction: in chat mode prompt.Text IS the system instruction
-        // (semantic flip vs single-shot GenerateAsync where prompt.System is system).
         if (!string.IsNullOrEmpty(prompt.Text))
-            request["systemInstruction"] = new { parts = new[] { new { text = prompt.Text } } };
+        {
+            request.SystemInstruction = new GeminiSystemInstruction
+            {
+                Parts = new List<GeminiPartItem> { new() { Text = prompt.Text } }
+            };
+        }
 
-        // Tools: function declarations.
         if (llm.Tools is { Length: > 0 } native)
         {
-            var declarations = new List<object>();
+            var declarations = new List<GeminiFunctionDeclaration>();
             foreach (var t in native.OfType<FunctionTool>())
             {
-                declarations.Add(new
+                declarations.Add(new GeminiFunctionDeclaration
                 {
-                    name = t.Name,
-                    description = t.Description,
-                    parameters = t.Parameters,
+                    Name = t.Name,
+                    Description = t.Description,
+                    Parameters = t.Parameters
                 });
             }
             if (declarations.Count > 0)
-                request["tools"] = new[] { new { functionDeclarations = declarations } };
+                request.Tools = new List<GeminiToolGroup> { new() { FunctionDeclarations = declarations } };
         }
 
         return request;
     }
 
-    private static void AppendInlineFiles(List<object> parts, IReadOnlyList<Asset> files)
+    private static void AppendInlineFiles(List<GeminiPartItem> parts, IReadOnlyList<Asset> files)
     {
         foreach (var file in files.Where(f => f.IsImage))
         {
-            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+            parts.Add(new GeminiPartItem { InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 } });
         }
         foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
         {
-            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+            parts.Add(new GeminiPartItem { InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 } });
         }
     }
 
@@ -647,4 +631,82 @@ internal sealed class EmbeddingResponse
 internal sealed class EmbeddingData
 {
     public float[]? Values { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class GeminiRequest
+{
+    public List<GeminiRequestContent> Contents { get; set; } = new();
+    public GeminiGenerationConfig? GenerationConfig { get; set; }
+    public GeminiSystemInstruction? SystemInstruction { get; set; }
+    public List<GeminiToolGroup>? Tools { get; set; }
+}
+
+internal sealed class GeminiRequestContent
+{
+    public string? Role { get; set; }
+    public List<GeminiPartItem> Parts { get; set; } = new();
+}
+
+internal sealed class GeminiPartItem
+{
+    public string? Text { get; set; }
+    public GeminiInlineData? InlineData { get; set; }
+    public GeminiFunctionResponse? FunctionResponse { get; set; }
+    public GeminiFunctionCall? FunctionCall { get; set; }
+}
+
+internal sealed class GeminiFunctionCall
+{
+    public string Name { get; set; } = "";
+    public JsonElement Args { get; set; }
+}
+
+internal sealed class GeminiInlineData
+{
+    public string MimeType { get; set; } = "";
+    public string Data { get; set; } = "";
+}
+
+internal sealed class GeminiFunctionResponse
+{
+    public string Name { get; set; } = "";
+    public JsonElement Response { get; set; }
+}
+
+internal sealed class GeminiGenerationConfig
+{
+    public int? MaxOutputTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public string? ResponseMimeType { get; set; }
+    public JsonElement? ResponseSchema { get; set; }
+}
+
+internal sealed class GeminiSystemInstruction
+{
+    public List<GeminiPartItem> Parts { get; set; } = new();
+}
+
+internal sealed class GeminiToolGroup
+{
+    public List<GeminiFunctionDeclaration>? FunctionDeclarations { get; set; }
+}
+
+internal sealed class GeminiFunctionDeclaration
+{
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public JsonElement Parameters { get; set; }
+}
+
+internal sealed class GeminiEmbedRequest
+{
+    public string Model { get; set; } = "";
+    public GeminiEmbedContent Content { get; set; } = new();
+}
+
+internal sealed class GeminiEmbedContent
+{
+    public List<GeminiPartItem> Parts { get; set; } = new();
 }

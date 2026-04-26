@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// OpenAI provider implementation.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("openai")]
 public sealed class OpenAiProvider : IModelProvider
 {
@@ -29,7 +32,14 @@ public sealed class OpenAiProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // AOT path first: provider DTOs -> user response types -> reflection
+        // fallback (for dynamically-shaped payloads such as
+        // Dictionary<string, object> requests).
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            OpenAiJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public OpenAiProvider(
@@ -51,9 +61,7 @@ public sealed class OpenAiProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is OpenAiBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +69,7 @@ public sealed class OpenAiProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
 
         _logger.LogDebug("OpenAI request: {Payload}", jsonPayload);
 
@@ -78,7 +86,7 @@ public sealed class OpenAiProvider : IModelProvider
             throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, JsonOptions)!;
+        var openAiResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.OpenAiResponse)!;
 
         if (openAiResponse.Status != "completed")
             throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
@@ -126,9 +134,7 @@ public sealed class OpenAiProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+    public async Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -137,7 +143,7 @@ public sealed class OpenAiProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
 
         _logger.LogDebug("OpenAI chat request: {Payload}", jsonPayload);
 
@@ -154,7 +160,7 @@ public sealed class OpenAiProvider : IModelProvider
             throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var openAiResponse = JsonSerializer.Deserialize<OpenAiResponse>(responseJson, JsonOptions)!;
+        var openAiResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.OpenAiResponse)!;
 
         if (openAiResponse.Status != "completed")
             throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
@@ -202,8 +208,6 @@ public sealed class OpenAiProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<Asset> prompt,
@@ -211,16 +215,18 @@ public sealed class OpenAiProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new
+        var request = new OpenAiImageRequest
         {
-            model = llm.Name,
-            prompt = prompt.Text,
-            n = 1,
-            size = llm.SizeValue,
-            quality = llm.QualityValue
+            Model = llm.Name,
+            Prompt = prompt.Text,
+            N = 1,
+            Size = llm.SizeValue,
+            Quality = llm.QualityValue
         };
 
-        using var response = await _httpClient.PostAsJsonAsync("/v1/images/generations", request, cancellationToken);
+        var imagePayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiImageRequest);
+        using var imageContent = new StringContent(imagePayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/images/generations", imageContent, cancellationToken);
         stopwatch.Stop();
 
         if (!response.IsSuccessStatusCode)
@@ -231,7 +237,7 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var imageResponse = JsonSerializer.Deserialize<ImageResponse>(responseJson, JsonOptions);
+        var imageResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.ImageResponse);
 
         if (imageResponse?.Data == null || imageResponse.Data.Length == 0)
             throw new InvalidOperationException("No image data");
@@ -270,8 +276,6 @@ public sealed class OpenAiProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
@@ -279,20 +283,22 @@ public sealed class OpenAiProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new
+        var request = new OpenAiEmbedRequest
         {
-            model = llm.Name,
-            input,
-            dimensions = llm.Dimensions
+            Model = llm.Name,
+            Input = input,
+            Dimensions = llm.Dimensions
         };
 
-        using var response = await _httpClient.PostAsJsonAsync("/v1/embeddings", request, cancellationToken);
+        var embedPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiEmbedRequest);
+        using var embedContent = new StringContent(embedPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/embeddings", embedContent, cancellationToken);
         stopwatch.Stop();
 
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var embeddingResponse = JsonSerializer.Deserialize<EmbeddingResponse>(responseJson, JsonOptions);
+        var embeddingResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.EmbeddingResponse);
 
         if (embeddingResponse?.Data == null || embeddingResponse.Data.Length == 0)
             throw new InvalidOperationException("No embedding data");
@@ -319,15 +325,13 @@ public sealed class OpenAiProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse), streaming: true);
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
@@ -346,15 +350,13 @@ public sealed class OpenAiProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, OpenAiJsonContext.Default.StreamChunk);
             if (chunk?.Delta?.Text != null)
                 yield return chunk.Delta.Text;
         }
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
@@ -362,9 +364,9 @@ public sealed class OpenAiProvider : IModelProvider
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -382,15 +384,13 @@ public sealed class OpenAiProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, OpenAiJsonContext.Default.StreamChunk);
             if (chunk?.Delta?.Text != null)
                 yield return chunk.Delta.Text;
         }
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         Asset audioFile,
@@ -411,7 +411,8 @@ public sealed class OpenAiProvider : IModelProvider
 
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<TranscriptionResponse>(cancellationToken: cancellationToken);
+        var transcriptionJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var result = JsonSerializer.Deserialize(transcriptionJson, OpenAiJsonContext.Default.TranscriptionResponse);
 
         return new Result<string>
         {
@@ -444,223 +445,178 @@ public sealed class OpenAiProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type; FileSearchTool.Filters may use reflection.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type; FileSearchTool.Filters may use reflection.")]
+    private static OpenAiResponsesRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType,
         bool streaming = false)
     {
-        var request = new Dictionary<string, object>
+        var request = new OpenAiResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens
         };
 
-        // Responses API uses 'instructions' for system message, not in input
         if (!string.IsNullOrEmpty(prompt.System))
-            request["instructions"] = prompt.System;
+            request.Instructions = prompt.System;
 
-        // Build input - Responses API format
-        var input = new List<object>();
-        var content = new List<object> { new { type = "input_text", text = prompt.Text } };
+        var content = new List<OpenAiContentPart>
+        {
+            new() { Type = "input_text", Text = prompt.Text }
+        };
 
         if (prompt.Files != null)
         {
             foreach (var file in prompt.Files)
             {
-                // Use DataUrl which already contains MediaType detected from binary signature
                 if (file.IsImage)
-                {
-                    // Handle images using input_image type
-                    content.Add(new
-                    {
-                        type = "input_image",
-                        image_url = file.DataUrl
-                    });
-                }
+                    content.Add(new OpenAiContentPart { Type = "input_image", ImageUrl = file.DataUrl });
                 else if (file.IsDocument)
-                {
-                    // Handle documents (PDFs, text files) using input_file type
-                    content.Add(new
-                    {
-                        type = "input_file",
-                        file_data = file.DataUrl,
-                        filename = file.OriginalName.Value
-                    });
-                }
+                    content.Add(new OpenAiContentPart { Type = "input_file", FileData = file.DataUrl, Filename = file.OriginalName.Value });
             }
         }
 
-        input.Add(new { role = "user", content });
-        request["input"] = input;
+        request.Input.Add(new OpenAiInputItem { Role = "user", Content = content });
 
-        // Structured output schema - Responses API uses text.format
         if (responseType != typeof(string))
         {
-            var schema = JsonSchemaGenerator.Generate(responseType);
-            request["text"] = new Dictionary<string, object>
+            request.Text = new OpenAiTextConfig
             {
-                ["format"] = new Dictionary<string, object>
+                Format = new OpenAiTextFormat
                 {
-                    ["type"] = "json_schema",
-                    ["name"] = "response",
-                    ["description"] = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
-                    ["schema"] = schema,
-                    ["strict"] = true
+                    Type = "json_schema",
+                    Name = "response",
+                    Description = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
                 }
             };
         }
 
         if (streaming)
-            request["stream"] = true;
+            request.Stream = true;
 
-        // Store logs if enabled
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
-        {
-            request["store"] = true;
-        }
+            request.Store = true;
 
-        // Model-specific settings - Responses API format
-        // Only send temperature/top_p if not default (1.0) - OpenAI recommends altering one, not both
         if (llm is OpenAiChatBase textLlm)
         {
             if (textLlm.Temperature < 1.0)
-                request["temperature"] = textLlm.Temperature;
+                request.Temperature = textLlm.Temperature;
             if (textLlm.TopP < 1.0)
-                request["top_p"] = textLlm.TopP;
+                request.TopP = textLlm.TopP;
         }
         else if (llm is OpenAiReasoningBase reasoningLlm)
         {
-            // Responses API uses reasoning.effort instead of reasoning_effort
-            var reasoning = new Dictionary<string, object>();
+            var reasoning = new OpenAiReasoningConfig();
+            var hasReasoning = false;
 
             if (reasoningLlm.Reason.HasValue)
-                reasoning["effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            {
+                reasoning.Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+                hasReasoning = true;
+            }
 
             if (reasoningLlm.ReasonSummary.HasValue)
-                reasoning["summary"] = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
+            {
+                reasoning.Summary = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
+                hasReasoning = true;
+            }
 
-            if (reasoning.Count > 0)
-                request["reasoning"] = reasoning;
+            if (hasReasoning)
+                request.Reasoning = reasoning;
 
-            // Verbosity for GPT-5 models (output verbosity control)
             if (reasoningLlm.Verbosity.HasValue)
             {
-                if (!request.ContainsKey("text"))
-                {
-                    request["text"] = new Dictionary<string, object>();
-                }
-
-                if (request["text"] is Dictionary<string, object> textConfig)
-                {
-                    textConfig["verbosity"] = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
-                }
+                request.Text ??= new OpenAiTextConfig();
+                request.Text.Verbosity = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
             }
         }
 
-        // Tools - Responses API format (different from Chat Completions)
         if (llm.Tools != null && llm.Tools.Length > 0)
-        {
-            request["tools"] = llm.Tools.Select(BuildToolRequest).ToList();
-        }
+            request.Tools = llm.Tools.Select(BuildToolItem).ToList();
 
         return request;
     }
 
-    private static object BuildToolRequest(IToolBase tool) => tool switch
+    [RequiresUnreferencedCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    [RequiresDynamicCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    private static OpenAiToolItem BuildToolItem(IToolBase tool) => tool switch
     {
-        // Responses API: function tools have different structure
-        FunctionTool f => new
+        FunctionTool f => new OpenAiToolItem
         {
-            type = "function",
-            name = f.Name,
-            description = f.Description,
-            parameters = f.Parameters,
-            strict = f.Strict
+            Type = "function",
+            Name = f.Name,
+            Description = f.Description,
+            Parameters = f.Parameters,
+            Strict = f.Strict
         },
-        // Responses API: web_search (not web_search_preview)
-        WebSearchTool w => new
+        WebSearchTool w => new OpenAiToolItem
         {
-            type = "web_search",
-            search_context_size = w.ContextSize.ToString().ToLowerInvariant()
+            Type = "web_search",
+            SearchContextSize = w.ContextSize.ToString().ToLowerInvariant()
         },
-        CodeInterpreterTool => new { type = "code_interpreter" },
-        FileSearchTool fs => BuildFileSearchToolRequest(fs),
-        _ => new { type = "unknown" }
+        CodeInterpreterTool => new OpenAiToolItem { Type = "code_interpreter" },
+        FileSearchTool fs => BuildFileSearchToolItem(fs),
+        _ => new OpenAiToolItem { Type = "unknown" }
     };
 
-    private static object BuildFileSearchToolRequest(FileSearchTool fs)
+    [RequiresUnreferencedCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    [RequiresDynamicCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    private static OpenAiToolItem BuildFileSearchToolItem(FileSearchTool fs)
     {
-        var tool = new Dictionary<string, object>
-        {
-            ["type"] = "file_search"
-        };
+        var tool = new OpenAiToolItem { Type = "file_search" };
 
-        // Add vector store IDs if provided
         if (!string.IsNullOrEmpty(fs.VectorId))
-        {
-            tool["vector_store_ids"] = new[] { fs.VectorId };
-        }
+            tool.VectorStoreIds = new List<string> { fs.VectorId };
 
-        // Add max_num_results if provided
         if (fs.MaxNumResults.HasValue)
-        {
-            tool["max_num_results"] = fs.MaxNumResults.Value;
-        }
+            tool.MaxNumResults = fs.MaxNumResults.Value;
 
-        // Add ranking options if provided
         if (fs.RankingOptions != null)
         {
-            var rankingOptions = new Dictionary<string, object>();
-
+            var ranking = new OpenAiRankingOptions();
+            var hasRanking = false;
             if (!string.IsNullOrEmpty(fs.RankingOptions.Ranker))
             {
-                rankingOptions["ranker"] = fs.RankingOptions.Ranker;
+                ranking.Ranker = fs.RankingOptions.Ranker;
+                hasRanking = true;
             }
-
             if (fs.RankingOptions.ScoreThreshold.HasValue)
             {
-                rankingOptions["score_threshold"] = fs.RankingOptions.ScoreThreshold.Value;
+                ranking.ScoreThreshold = fs.RankingOptions.ScoreThreshold.Value;
+                hasRanking = true;
             }
-
-            if (rankingOptions.Count > 0)
-            {
-                tool["ranking_options"] = rankingOptions;
-            }
+            if (hasRanking)
+                tool.RankingOptions = ranking;
         }
 
-        // Add filters if provided
         if (fs.Filters != null)
-        {
-            tool["filters"] = fs.Filters;
-        }
+            tool.Filters = JsonSerializer.SerializeToElement(fs.Filters);
 
         return tool;
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildChatRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type; FileSearchTool.Filters may use reflection.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type; FileSearchTool.Filters may use reflection.")]
+    private static OpenAiResponsesRequest BuildChatRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var request = new Dictionary<string, object>
+        var request = new OpenAiResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens
         };
 
-        // System message: rendered Prompt.Text in chat mode IS the system instruction
-        // (semantic flip vs single-shot GenerateAsync where prompt.System is system).
         if (!string.IsNullOrEmpty(prompt.Text))
-            request["instructions"] = prompt.Text;
+            request.Instructions = prompt.Text;
 
-        // Build Responses API input array from chat history.
-        var input = new List<object>();
+        var input = new List<OpenAiInputItem>();
         var sessionFilesAttached = false;
 
         foreach (var msg in chat)
@@ -669,114 +625,108 @@ public sealed class OpenAiProvider : IModelProvider
             {
                 case User u:
                 {
-                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
-                    // Session-level files from the system Prompt: attach to the FIRST user turn only.
+                    var userContent = new List<OpenAiContentPart>
+                    {
+                        new() { Type = "input_text", Text = u.Text }
+                    };
                     if (!sessionFilesAttached && prompt.Files != null)
                     {
                         AppendFiles(userContent, prompt.Files);
                         sessionFilesAttached = true;
                     }
                     if (u.Files != null) AppendFiles(userContent, u.Files);
-                    input.Add(new { role = "user", content = userContent });
+                    input.Add(new OpenAiInputItem { Role = "user", Content = userContent });
                     break;
                 }
                 case Assistant a:
-                    input.Add(new
+                    input.Add(new OpenAiInputItem
                     {
-                        role = "assistant",
-                        content = new object[] { new { type = "output_text", text = a.Text } }
+                        Role = "assistant",
+                        Content = new List<OpenAiContentPart> { new() { Type = "output_text", Text = a.Text } }
                     });
                     break;
                 case Tool t:
-                    // Responses API: function_call_output with the originating call_id.
-                    input.Add(new
+                    input.Add(new OpenAiInputItem
                     {
-                        type = "function_call_output",
-                        call_id = t.ToolCallId,
-                        output = t.ResultJson
+                        Type = "function_call_output",
+                        CallId = t.ToolCallId,
+                        Output = t.ResultJson
                     });
                     break;
             }
         }
 
-        // Empty chat → still need at least one user input so the model has something to reply to.
         if (input.Count == 0)
         {
-            input.Add(new
+            input.Add(new OpenAiInputItem
             {
-                role = "user",
-                content = new object[] { new { type = "input_text", text = string.Empty } }
+                Role = "user",
+                Content = new List<OpenAiContentPart> { new() { Type = "input_text", Text = string.Empty } }
             });
         }
 
-        request["input"] = input;
+        request.Input = input;
 
-        // Structured output schema (Responses API: text.format).
         if (responseType != typeof(string))
         {
-            var schema = JsonSchemaGenerator.Generate(responseType);
-            request["text"] = new Dictionary<string, object>
+            request.Text = new OpenAiTextConfig
             {
-                ["format"] = new Dictionary<string, object>
+                Format = new OpenAiTextFormat
                 {
-                    ["type"] = "json_schema",
-                    ["name"] = "response",
-                    ["description"] = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
-                    ["schema"] = schema,
-                    ["strict"] = true
+                    Type = "json_schema",
+                    Name = "response",
+                    Description = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
                 }
             };
         }
 
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
-            request["store"] = true;
+            request.Store = true;
 
         if (llm is OpenAiChatBase textLlm)
         {
-            if (textLlm.Temperature < 1.0) request["temperature"] = textLlm.Temperature;
-            if (textLlm.TopP < 1.0) request["top_p"] = textLlm.TopP;
+            if (textLlm.Temperature < 1.0) request.Temperature = textLlm.Temperature;
+            if (textLlm.TopP < 1.0) request.TopP = textLlm.TopP;
         }
         else if (llm is OpenAiReasoningBase reasoningLlm)
         {
-            var reasoning = new Dictionary<string, object>();
+            var reasoning = new OpenAiReasoningConfig();
+            var hasReasoning = false;
             if (reasoningLlm.Reason.HasValue)
-                reasoning["effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            {
+                reasoning.Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+                hasReasoning = true;
+            }
             if (reasoningLlm.ReasonSummary.HasValue)
-                reasoning["summary"] = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
-            if (reasoning.Count > 0) request["reasoning"] = reasoning;
+            {
+                reasoning.Summary = reasoningLlm.ReasonSummary.Value.ToString().ToLowerInvariant();
+                hasReasoning = true;
+            }
+            if (hasReasoning) request.Reasoning = reasoning;
 
             if (reasoningLlm.Verbosity.HasValue)
             {
-                if (!request.ContainsKey("text"))
-                    request["text"] = new Dictionary<string, object>();
-                if (request["text"] is Dictionary<string, object> textConfig)
-                    textConfig["verbosity"] = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
+                request.Text ??= new OpenAiTextConfig();
+                request.Text.Verbosity = reasoningLlm.Verbosity.Value.ToString().ToLowerInvariant();
             }
         }
 
         if (llm.Tools != null && llm.Tools.Length > 0)
-            request["tools"] = llm.Tools.Select(BuildToolRequest).ToList();
+            request.Tools = llm.Tools.Select(BuildToolItem).ToList();
 
         return request;
     }
 
-    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    private static void AppendFiles(List<OpenAiContentPart> content, IReadOnlyList<Asset> files)
     {
         foreach (var file in files)
         {
             if (file.IsImage)
-            {
-                content.Add(new { type = "input_image", image_url = file.DataUrl });
-            }
+                content.Add(new OpenAiContentPart { Type = "input_image", ImageUrl = file.DataUrl });
             else if (file.IsDocument)
-            {
-                content.Add(new
-                {
-                    type = "input_file",
-                    file_data = file.DataUrl,
-                    filename = file.OriginalName.Value
-                });
-            }
+                content.Add(new OpenAiContentPart { Type = "input_file", FileData = file.DataUrl, Filename = file.OriginalName.Value });
         }
     }
 
@@ -876,4 +826,96 @@ internal sealed class StreamDelta
 internal sealed class TranscriptionResponse
 {
     public string? Text { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class OpenAiResponsesRequest
+{
+    public string Model { get; set; } = "";
+    public int? MaxOutputTokens { get; set; }
+    public string? Instructions { get; set; }
+    public string? PreviousResponseId { get; set; }
+    public List<OpenAiInputItem> Input { get; set; } = new();
+    public OpenAiTextConfig? Text { get; set; }
+    public bool? Stream { get; set; }
+    public bool? Store { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public OpenAiReasoningConfig? Reasoning { get; set; }
+    public List<OpenAiToolItem>? Tools { get; set; }
+}
+
+internal sealed class OpenAiInputItem
+{
+    public string? Role { get; set; }
+    public List<OpenAiContentPart>? Content { get; set; }
+    public string? Type { get; set; }
+    public string? CallId { get; set; }
+    public string? Output { get; set; }
+}
+
+internal sealed class OpenAiContentPart
+{
+    public string Type { get; set; } = "";
+    public string? Text { get; set; }
+    public string? ImageUrl { get; set; }
+    public string? FileData { get; set; }
+    public string? Filename { get; set; }
+}
+
+internal sealed class OpenAiTextConfig
+{
+    public OpenAiTextFormat? Format { get; set; }
+    public string? Verbosity { get; set; }
+}
+
+internal sealed class OpenAiTextFormat
+{
+    public string Type { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string? Description { get; set; }
+    public JsonElement Schema { get; set; }
+    public bool Strict { get; set; }
+}
+
+internal sealed class OpenAiReasoningConfig
+{
+    public string? Effort { get; set; }
+    public string? Summary { get; set; }
+}
+
+internal sealed class OpenAiToolItem
+{
+    public string Type { get; set; } = "";
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public JsonElement? Parameters { get; set; }
+    public bool? Strict { get; set; }
+    public string? SearchContextSize { get; set; }
+    public List<string>? VectorStoreIds { get; set; }
+    public int? MaxNumResults { get; set; }
+    public OpenAiRankingOptions? RankingOptions { get; set; }
+    public JsonElement? Filters { get; set; }
+}
+
+internal sealed class OpenAiRankingOptions
+{
+    public string? Ranker { get; set; }
+    public double? ScoreThreshold { get; set; }
+}
+
+internal sealed class OpenAiImageRequest
+{
+    public string Model { get; set; } = "";
+    public string Prompt { get; set; } = "";
+    public int N { get; set; }
+    public string? Size { get; set; }
+    public string? Quality { get; set; }
+}
+
+internal sealed class OpenAiEmbedRequest
+{
+    public string Model { get; set; } = "";
+    public string Input { get; set; } = "";
+    public int? Dimensions { get; set; }
 }

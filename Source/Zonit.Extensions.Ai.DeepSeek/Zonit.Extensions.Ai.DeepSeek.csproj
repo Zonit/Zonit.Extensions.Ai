@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>Zonit.Extensions.Ai.DeepSeek</PackageId>
     <Title>Zonit.Extensions.Ai.DeepSeek</Title>
     <Description>DeepSeek AI provider for Zonit.Extensions.Ai. Includes DeepSeek V3, R1, and Coder models.</Description>

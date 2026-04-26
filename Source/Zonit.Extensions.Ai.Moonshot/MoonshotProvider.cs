@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Moonshot;
 /// Moonshot AI provider implementation (Kimi).
 /// Provides access to Moonshot's Kimi models.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("moonshot")]
 public sealed class MoonshotProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class MoonshotProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            MoonshotJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public MoonshotProvider(
@@ -51,9 +58,7 @@ public sealed class MoonshotProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is MoonshotBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class MoonshotProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, MoonshotJsonContext.Default.MoonshotChatRequest);
 
         _logger.LogDebug("Moonshot request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class MoonshotProvider : IModelProvider
             throw new HttpRequestException($"Moonshot API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var moonshotResponse = JsonSerializer.Deserialize<MoonshotResponse>(responseJson, JsonOptions)!;
+        var moonshotResponse = JsonSerializer.Deserialize(responseJson, MoonshotJsonContext.Default.MoonshotResponse)!;
 
         var textContent = moonshotResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -144,17 +149,15 @@ public sealed class MoonshotProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, MoonshotJsonContext.Default.MoonshotChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = content };
@@ -173,7 +176,7 @@ public sealed class MoonshotProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<MoonshotStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, MoonshotJsonContext.Default.MoonshotStreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -203,40 +206,35 @@ public sealed class MoonshotProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    private static MoonshotChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<MoonshotRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new MoonshotRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new MoonshotRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new MoonshotChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
         };
 
         if (llm is MoonshotBase moonshotLlm)
         {
             if (moonshotLlm.Temperature < 1.0)
-                request["temperature"] = moonshotLlm.Temperature;
+                request.Temperature = moonshotLlm.Temperature;
             if (moonshotLlm.TopP < 1.0)
-                request["top_p"] = moonshotLlm.TopP;
+                request.TopP = moonshotLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
-        {
-            request["response_format"] = new { type = "json_object" };
-        }
+            request.ResponseFormat = new MoonshotResponseFormat { Type = "json_object" };
 
         return request;
     }
@@ -338,4 +336,27 @@ internal sealed class MoonshotStreamChoice
 internal sealed class MoonshotStreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class MoonshotChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<MoonshotRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public MoonshotResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class MoonshotRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class MoonshotResponseFormat
+{
+    public string Type { get; set; } = "";
 }

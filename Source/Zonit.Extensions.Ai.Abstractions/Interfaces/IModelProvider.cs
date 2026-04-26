@@ -25,9 +25,7 @@ public interface IModelProvider
     /// <summary>
     /// Generates a structured response.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    Task<Result<TResponse>> GenerateAsync<TResponse>(
+    Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
@@ -53,8 +51,6 @@ public interface IModelProvider
     /// <summary>
     /// Generates embeddings.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
@@ -63,9 +59,7 @@ public interface IModelProvider
     /// <summary>
     /// Streams text response.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    IAsyncEnumerable<string> StreamAsync<TResponse>(
+    IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
@@ -80,9 +74,7 @@ public interface IModelProvider
     /// <paramref name="chat"/> into a synthetic prompt — providers that handle
     /// chat natively (Anthropic Messages, OpenAI Responses) override this.
     /// </remarks>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    Task<Result<TResponse>> ChatAsync<TResponse>(
+    Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -93,8 +85,6 @@ public interface IModelProvider
     /// Streaming multi-turn chat. Default falls back to single-shot streaming
     /// over a glued prompt — providers with native chat streaming override this.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
@@ -105,8 +95,6 @@ public interface IModelProvider
     /// <summary>
     /// Transcribes audio.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         Asset audioFile,

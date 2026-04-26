@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Alibaba;
 /// Alibaba Cloud (DashScope) provider implementation.
 /// Provides access to Qwen models.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("alibaba")]
 public sealed class AlibabaProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class AlibabaProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AlibabaJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public AlibabaProvider(
@@ -51,9 +58,7 @@ public sealed class AlibabaProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is AlibabaBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class AlibabaProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, AlibabaJsonContext.Default.AlibabaChatRequest);
 
         _logger.LogDebug("Alibaba request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class AlibabaProvider : IModelProvider
             throw new HttpRequestException($"Alibaba API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var alibabaResponse = JsonSerializer.Deserialize<AlibabaResponse>(responseJson, JsonOptions)!;
+        var alibabaResponse = JsonSerializer.Deserialize(responseJson, AlibabaJsonContext.Default.AlibabaResponse)!;
 
         var textContent = alibabaResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -144,17 +149,15 @@ public sealed class AlibabaProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, AlibabaJsonContext.Default.AlibabaChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/compatible-mode/v1/chat/completions") { Content = content };
@@ -173,7 +176,7 @@ public sealed class AlibabaProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<AlibabaStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, AlibabaJsonContext.Default.AlibabaStreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -203,46 +206,45 @@ public sealed class AlibabaProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static AlibabaChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<AlibabaRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new AlibabaRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new AlibabaRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new AlibabaChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
         };
 
         if (llm is AlibabaBase alibabaLlm)
         {
             if (alibabaLlm.Temperature < 1.0)
-                request["temperature"] = alibabaLlm.Temperature;
+                request.Temperature = alibabaLlm.Temperature;
             if (alibabaLlm.TopP < 1.0)
-                request["top_p"] = alibabaLlm.TopP;
+                request.TopP = alibabaLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new AlibabaResponseFormat
             {
-                type = "json_schema",
-                json_schema = new
+                Type = "json_schema",
+                JsonSchema = new AlibabaJsonSchemaSpec
                 {
-                    name = "response",
-                    schema = JsonSchemaGenerator.Generate(responseType),
-                    strict = true
+                    Name = "response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
                 }
             };
         }
@@ -347,4 +349,35 @@ internal sealed class AlibabaStreamChoice
 internal sealed class AlibabaStreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class AlibabaChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<AlibabaRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public AlibabaResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class AlibabaRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class AlibabaResponseFormat
+{
+    public string Type { get; set; } = "";
+    public AlibabaJsonSchemaSpec? JsonSchema { get; set; }
+}
+
+internal sealed class AlibabaJsonSchemaSpec
+{
+    public string Name { get; set; } = "";
+    public JsonElement Schema { get; set; }
+    public bool Strict { get; set; }
 }

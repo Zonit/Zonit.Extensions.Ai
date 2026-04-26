@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Zonit.Extensions;
 
@@ -17,8 +14,8 @@ namespace Zonit.Extensions.Ai.X;
 /// <c>previous_response_id</c> threading — X does not yet support server-side
 /// state, so we send the full message history every turn).
 /// </summary>
-[RequiresUnreferencedCode("JSON serialization requires types that cannot be statically analyzed.")]
-[RequiresDynamicCode("JSON serialization requires runtime code generation.")]
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 internal sealed class XAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
@@ -26,16 +23,8 @@ internal sealed class XAgentSession : IAgentSession
     private readonly ILogger _logger;
 
     // Full input array (X has no previous_response_id chaining).
-    private readonly List<object> _input = new();
+    private readonly List<XInputItem> _input = new();
     private int _turnIndex;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public XAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
     {
@@ -44,6 +33,8 @@ internal sealed class XAgentSession : IAgentSession
         _logger = logger;
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     public async Task<AgentTurn> RunTurnAsync(
         IReadOnlyList<ToolResult>? toolResults,
         CancellationToken cancellationToken)
@@ -64,7 +55,7 @@ internal sealed class XAgentSession : IAgentSession
         }
 
         var request = BuildRequest();
-        var payload = JsonSerializer.Serialize(request, JsonOptions);
+        var payload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
         _logger.LogDebug("X agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -97,31 +88,34 @@ internal sealed class XAgentSession : IAgentSession
             {
                 case User u:
                 {
-                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    var userContent = new List<XContentPart>
+                    {
+                        new() { Type = "input_text", Text = u.Text }
+                    };
                     if (!sessionFilesAttached && promptFiles is not null)
                     {
                         AppendFiles(userContent, promptFiles);
                         sessionFilesAttached = true;
                     }
                     if (u.Files is not null) AppendFiles(userContent, u.Files);
-                    _input.Add(new { role = "user", content = userContent });
+                    _input.Add(new XInputItem { Role = "user", Content = userContent });
                     endsOnUserOrTool = true;
                     break;
                 }
                 case Assistant a:
-                    _input.Add(new
+                    _input.Add(new XInputItem
                     {
-                        role = "assistant",
-                        content = new object[] { new { type = "output_text", text = a.Text } },
+                        Role = "assistant",
+                        Content = new List<XContentPart> { new() { Type = "output_text", Text = a.Text } },
                     });
                     endsOnUserOrTool = false;
                     break;
                 case Tool t:
-                    _input.Add(new
+                    _input.Add(new XInputItem
                     {
-                        type = "function_call_output",
-                        call_id = t.ToolCallId,
-                        output = t.ResultJson,
+                        Type = "function_call_output",
+                        CallId = t.ToolCallId,
+                        Output = t.ResultJson,
                     });
                     endsOnUserOrTool = true;
                     break;
@@ -134,74 +128,77 @@ internal sealed class XAgentSession : IAgentSession
     private void AppendInitialUserMessage()
     {
         var prompt = _context.Prompt;
-        var userContent = new List<object> { new { type = "input_text", text = prompt.Text } };
+        var userContent = new List<XContentPart>
+        {
+            new() { Type = "input_text", Text = prompt.Text }
+        };
 
         if (prompt.Files is not null) AppendFiles(userContent, prompt.Files);
 
-        _input.Add(new { role = "user", content = userContent });
+        _input.Add(new XInputItem { Role = "user", Content = userContent });
     }
 
     private void AppendToolResults(IReadOnlyList<ToolResult> toolResults)
     {
         foreach (var r in toolResults)
         {
-            _input.Add(new
+            _input.Add(new XInputItem
             {
-                type = "function_call_output",
-                call_id = r.CallId,
-                output = r.Output.GetRawText(),
+                Type = "function_call_output",
+                CallId = r.CallId,
+                Output = r.Output.GetRawText(),
             });
         }
     }
 
-    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    private static void AppendFiles(List<XContentPart> content, IReadOnlyList<Asset> files)
     {
         // X currently supports image inputs only via Responses API.
         foreach (var file in files.Where(f => f.IsImage))
-            content.Add(new { type = "input_image", image_url = file.DataUrl });
+            content.Add(new XContentPart { Type = "input_image", ImageUrl = file.DataUrl });
     }
 
-    private Dictionary<string, object> BuildRequest()
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private XResponsesRequest BuildRequest()
     {
         var llm = _context.Llm;
         var prompt = _context.Prompt;
 
-        var request = new Dictionary<string, object>
+        var request = new XResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens,
-            ["input"] = _input,
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens,
+            Input = _input,
         };
 
         if (!string.IsNullOrEmpty(prompt.System))
-            request["instructions"] = prompt.System!;
+            request.Instructions = prompt.System!;
 
         if (llm is XChatBase chatLlm)
         {
-            if (chatLlm.Temperature < 1.0) request["temperature"] = chatLlm.Temperature;
-            if (chatLlm.TopP < 1.0) request["top_p"] = chatLlm.TopP;
+            if (chatLlm.Temperature < 1.0) request.Temperature = chatLlm.Temperature;
+            if (chatLlm.TopP < 1.0) request.TopP = chatLlm.TopP;
         }
 
         if (llm is XReasoningBase { Reason: not null } reasoning)
-            request["reasoning_effort"] = reasoning.Reason.Value.ToString().ToLowerInvariant();
+            request.ReasoningEffort = reasoning.Reason.Value.ToString().ToLowerInvariant();
 
-        // Structured output (X uses response_format, not text.format).
         if (_context.ResponseType is { } responseType)
         {
-            request["response_format"] = new
+            request.ResponseFormat = new XResponseFormat
             {
-                type = "json_schema",
-                json_schema = new
+                Type = "json_schema",
+                JsonSchema = new XJsonSchemaSpec
                 {
-                    name = "response",
-                    schema = JsonSchemaGenerator.Generate(responseType),
-                    strict = true,
+                    Name = "response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true,
                 },
             };
         }
 
-        // Tools: native (function/web_search/x_search) + custom agent tools.
-        var tools = new List<object>();
+        var tools = new List<XTool>();
         if (llm.Tools is { Length: > 0 } native)
         {
             foreach (var t in native)
@@ -209,37 +206,36 @@ internal sealed class XAgentSession : IAgentSession
         }
         foreach (var custom in _context.Tools)
         {
-            tools.Add(new
+            tools.Add(new XTool
             {
-                type = "function",
-                name = custom.Name,
-                description = custom.Description,
-                parameters = custom.InputSchema,
-                strict = true,
+                Type = "function",
+                Name = custom.Name,
+                Description = custom.Description,
+                Parameters = custom.InputSchema,
+                Strict = true,
             });
         }
         if (tools.Count > 0)
-            request["tools"] = tools;
+            request.Tools = tools;
 
         return request;
     }
 
-    private static object BuildNativeTool(IToolBase tool) => tool switch
+    private static XTool BuildNativeTool(IToolBase tool) => tool switch
     {
-        FunctionTool f => new
+        FunctionTool f => new XTool
         {
-            type = "function",
-            name = f.Name,
-            description = f.Description,
-            parameters = f.Parameters,
-            strict = f.Strict,
+            Type = "function",
+            Name = f.Name,
+            Description = f.Description,
+            Parameters = f.Parameters,
+            Strict = f.Strict,
         },
-        WebSearchTool w => new
+        WebSearchTool w => new XTool
         {
-            type = "web_search",
-            search_context_size = w.ContextSize.ToString().ToLowerInvariant(),
+            Type = "web_search",
         },
-        _ => new { type = "unknown" },
+        _ => new XTool { Type = "unknown" },
     };
 
     private AgentTurn ParseResponse(string body, TimeSpan duration)
@@ -278,12 +274,11 @@ internal sealed class XAgentSession : IAgentSession
                     });
 
                     // Re-add the function_call to history so the next turn references it correctly.
-                    _input.Add(new
+                    _input.Add(new XInputItem
                     {
-                        type = "function_call",
-                        call_id = callId,
-                        name,
-                        arguments = argsElement.GetRawText(),
+                        Type = "function_call",
+                        CallId = callId,
+                        Output = argsElement.GetRawText(),
                     });
                 }
                 else if (type == "message"
@@ -303,10 +298,10 @@ internal sealed class XAgentSession : IAgentSession
                     // Append assistant message to history.
                     if (finalText != null)
                     {
-                        _input.Add(new
+                        _input.Add(new XInputItem
                         {
-                            role = "assistant",
-                            content = new object[] { new { type = "output_text", text = finalText } },
+                            Role = "assistant",
+                            Content = new List<XContentPart> { new() { Type = "output_text", Text = finalText } },
                         });
                     }
                 }

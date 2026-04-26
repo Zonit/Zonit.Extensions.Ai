@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
@@ -23,6 +25,8 @@ public interface IAgentSession : IAsyncDisposable
     /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The resulting turn — either more tool calls or a final answer.</returns>
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     Task<AgentTurn> RunTurnAsync(
         IReadOnlyList<ToolResult>? toolResults,
         CancellationToken cancellationToken);

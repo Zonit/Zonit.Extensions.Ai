@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Zonit.Extensions;
 
@@ -14,8 +11,8 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Stateful agent session for Anthropic Messages API. Client-side message
 /// history is maintained across turns.
 /// </summary>
-[RequiresUnreferencedCode("JSON serialization requires types that cannot be statically analyzed.")]
-[RequiresDynamicCode("JSON serialization requires runtime code generation.")]
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 internal sealed class AnthropicAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
@@ -23,16 +20,8 @@ internal sealed class AnthropicAgentSession : IAgentSession
     private readonly ILogger _logger;
 
     // Accumulating conversation history.
-    private readonly List<object> _messages = new();
+    private readonly List<AnthropicMessageItem> _messages = new();
     private int _turnIndex;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public AnthropicAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
     {
@@ -41,6 +30,8 @@ internal sealed class AnthropicAgentSession : IAgentSession
         _logger = logger;
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     public async Task<AgentTurn> RunTurnAsync(
         IReadOnlyList<ToolResult>? toolResults,
         CancellationToken cancellationToken)
@@ -49,9 +40,6 @@ internal sealed class AnthropicAgentSession : IAgentSession
 
         if (_turnIndex == 1)
         {
-            // Seed any pre-existing chat[] history first (from IAiProvider.ChatAsync),
-            // then either continue with the prompt's user message OR — if the chat
-            // already ended on a User turn — let it be the initial user message.
             var seeded = AppendInitialChatHistory();
             if (!seeded)
                 AppendInitialUserMessage();
@@ -62,7 +50,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         }
 
         var request = BuildRequest();
-        var payload = JsonSerializer.Serialize(request, JsonOptions);
+        var payload = JsonSerializer.Serialize(request, AnthropicJsonContext.Default.AnthropicMessagesRequest);
         _logger.LogDebug("Anthropic agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         var sw = Stopwatch.StartNew();
@@ -80,57 +68,27 @@ internal sealed class AnthropicAgentSession : IAgentSession
         return ParseResponse(body, sw.Elapsed);
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     private void AppendInitialUserMessage()
     {
         var prompt = _context.Prompt;
-        var userContent = new List<object>();
+        var userContent = new List<AnthropicContentBlock>();
 
-        // Images / docs (if any) come first so Claude can reference them in the text.
         if (prompt.Files is not null)
-        {
-            foreach (var file in prompt.Files.Where(f => f.IsImage))
-            {
-                userContent.Add(new
-                {
-                    type = "image",
-                    source = new
-                    {
-                        type = "base64",
-                        media_type = file.MediaType.Value,
-                        data = file.Base64,
-                    },
-                });
-            }
-
-            foreach (var file in prompt.Files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
-            {
-                userContent.Add(new
-                {
-                    type = "document",
-                    source = new
-                    {
-                        type = "base64",
-                        media_type = file.MediaType.Value,
-                        data = file.Base64,
-                    },
-                });
-            }
-        }
+            AppendFiles(userContent, prompt.Files);
 
         var text = prompt.Text;
         if (_context.ResponseType is not null)
         {
-            // Append JSON-schema guidance to the user message — Anthropic doesn't
-            // have native structured outputs in agent mode, so we steer Claude
-            // toward the expected shape.
             var schema = JsonSchemaGenerator.Generate(_context.ResponseType);
             text += "\n\nWhen you are ready to produce the final answer (after all tool calls), "
                  + "respond with a SINGLE JSON object (no markdown fences) matching this schema:\n"
                  + schema.ToString();
         }
 
-        userContent.Add(new { type = "text", text });
-        _messages.Add(new { role = "user", content = userContent });
+        userContent.Add(new AnthropicContentBlock { Type = "text", Text = text });
+        _messages.Add(new AnthropicMessageItem { Role = "user", Content = userContent });
     }
 
     /// <summary>
@@ -144,7 +102,6 @@ internal sealed class AnthropicAgentSession : IAgentSession
         var chat = _context.InitialChat;
         if (chat is null || chat.Count == 0) return false;
 
-        // Anthropic requires the conversation to start with user — drop any leading assistant turns.
         var i = 0;
         while (i < chat.Count && chat[i] is Assistant) i++;
 
@@ -157,36 +114,36 @@ internal sealed class AnthropicAgentSession : IAgentSession
             {
                 case User u:
                 {
-                    var userContent = new List<object>();
+                    var userContent = new List<AnthropicContentBlock>();
                     if (!sessionFilesAttached && promptFiles is not null)
                     {
                         AppendFiles(userContent, promptFiles);
                         sessionFilesAttached = true;
                     }
                     if (u.Files is not null) AppendFiles(userContent, u.Files);
-                    userContent.Add(new { type = "text", text = u.Text });
-                    _messages.Add(new { role = "user", content = userContent });
+                    userContent.Add(new AnthropicContentBlock { Type = "text", Text = u.Text });
+                    _messages.Add(new AnthropicMessageItem { Role = "user", Content = userContent });
                     break;
                 }
                 case Assistant a:
-                    _messages.Add(new
+                    _messages.Add(new AnthropicMessageItem
                     {
-                        role = "assistant",
-                        content = new object[] { new { type = "text", text = a.Text } },
+                        Role = "assistant",
+                        Content = new List<AnthropicContentBlock> { new() { Type = "text", Text = a.Text } },
                     });
                     break;
                 case Tool t:
-                    _messages.Add(new
+                    _messages.Add(new AnthropicMessageItem
                     {
-                        role = "user",
-                        content = new object[]
+                        Role = "user",
+                        Content = new List<AnthropicContentBlock>
                         {
-                            new
+                            new()
                             {
-                                type = "tool_result",
-                                tool_use_id = t.ToolCallId,
-                                content = t.ResultJson,
-                                is_error = t.IsError ? true : (bool?)null,
+                                Type = "tool_result",
+                                ToolUseId = t.ToolCallId,
+                                Content = t.ResultJson,
+                                IsError = t.IsError ? true : null,
                             },
                         },
                     });
@@ -194,55 +151,48 @@ internal sealed class AnthropicAgentSession : IAgentSession
             }
         }
 
-        // Did we end on a user turn (or tool_result, which is also user-role)?
         if (_messages.Count == 0) return false;
-        return IsUserMessage(_messages[^1]);
+        return _messages[^1].Role == "user";
     }
 
-    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    private static void AppendFiles(List<AnthropicContentBlock> content, IReadOnlyList<Asset> files)
     {
         foreach (var file in files.Where(f => f.IsImage))
         {
-            content.Add(new
+            content.Add(new AnthropicContentBlock
             {
-                type = "image",
-                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 },
+                Type = "image",
+                Source = new AnthropicSource { Type = "base64", MediaType = file.MediaType.Value, Data = file.Base64 },
             });
         }
         foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
         {
-            content.Add(new
+            content.Add(new AnthropicContentBlock
             {
-                type = "document",
-                source = new { type = "base64", media_type = file.MediaType.Value, data = file.Base64 },
+                Type = "document",
+                Source = new AnthropicSource { Type = "base64", MediaType = file.MediaType.Value, Data = file.Base64 },
             });
         }
-    }
-
-    private static bool IsUserMessage(object message)
-    {
-        var roleProp = message.GetType().GetProperty("role");
-        return roleProp?.GetValue(message) as string == "user";
     }
 
     private void AppendToolResultsMessage(IReadOnlyList<ToolResult> toolResults)
     {
-        var content = new List<object>(toolResults.Count);
+        var content = new List<AnthropicContentBlock>(toolResults.Count);
         foreach (var r in toolResults)
         {
-            content.Add(new
+            content.Add(new AnthropicContentBlock
             {
-                type = "tool_result",
-                tool_use_id = r.CallId,
-                content = r.Output.GetRawText(),
-                is_error = r.IsError ? true : (bool?)null,
+                Type = "tool_result",
+                ToolUseId = r.CallId,
+                Content = r.Output.GetRawText(),
+                IsError = r.IsError ? true : null,
             });
         }
 
-        _messages.Add(new { role = "user", content });
+        _messages.Add(new AnthropicMessageItem { Role = "user", Content = content });
     }
 
-    private Dictionary<string, object> BuildRequest()
+    private AnthropicMessagesRequest BuildRequest()
     {
         var llm = _context.Llm;
         var prompt = _context.Prompt;
@@ -254,57 +204,55 @@ internal sealed class AnthropicAgentSession : IAgentSession
             if (maxTokens < required) maxTokens = required;
         }
 
-        var request = new Dictionary<string, object>
+        var request = new AnthropicMessagesRequest
         {
-            ["model"] = llm.Name,
-            ["max_tokens"] = maxTokens,
-            ["messages"] = _messages,
+            Model = llm.Name,
+            MaxTokens = maxTokens,
+            Messages = _messages,
         };
 
         if (!string.IsNullOrEmpty(prompt.System))
-            request["system"] = prompt.System!;
+            request.System = prompt.System!;
 
         if (llm is AnthropicBase anth)
         {
-            // Anthropic allows only one of temperature / top_p.
-            if (anth.TopP < 1.0) request["top_p"] = anth.TopP;
-            else if (anth.Temperature < 1.0) request["temperature"] = anth.Temperature;
+            if (anth.TopP < 1.0) request.TopP = anth.TopP;
+            else if (anth.Temperature < 1.0) request.Temperature = anth.Temperature;
 
             if (anth.ThinkingBudget.HasValue)
             {
-                request["thinking"] = new
+                request.Thinking = new AnthropicThinking
                 {
-                    type = "enabled",
-                    budget_tokens = anth.ThinkingBudget.Value,
+                    Type = "enabled",
+                    BudgetTokens = anth.ThinkingBudget.Value,
                 };
             }
         }
 
-        // Tools: native FunctionTool (from ILlm.Tools) + custom agent tools.
-        var tools = new List<object>();
+        var tools = new List<AnthropicTool>();
         if (llm.Tools is { Length: > 0 } native)
         {
             foreach (var ft in native.OfType<FunctionTool>())
             {
-                tools.Add(new
+                tools.Add(new AnthropicTool
                 {
-                    name = ft.Name,
-                    description = ft.Description,
-                    input_schema = ft.Parameters,
+                    Name = ft.Name,
+                    Description = ft.Description,
+                    InputSchema = ft.Parameters,
                 });
             }
         }
         foreach (var custom in _context.Tools)
         {
-            tools.Add(new
+            tools.Add(new AnthropicTool
             {
-                name = custom.Name,
-                description = custom.Description,
-                input_schema = custom.InputSchema,
+                Name = custom.Name,
+                Description = custom.Description,
+                InputSchema = custom.InputSchema,
             });
         }
         if (tools.Count > 0)
-            request["tools"] = tools;
+            request.Tools = tools;
 
         return request;
     }
@@ -317,7 +265,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         var usage = ParseUsage(root);
 
         var toolCalls = new List<PendingToolCall>();
-        var assistantContent = new List<object>();
+        var assistantContent = new List<AnthropicContentBlock>();
         var finalTextBuilder = new StringBuilder();
 
         if (root.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
@@ -343,32 +291,29 @@ internal sealed class AnthropicAgentSession : IAgentSession
                         Arguments = input,
                     });
 
-                    assistantContent.Add(new
+                    assistantContent.Add(new AnthropicContentBlock
                     {
-                        type = "tool_use",
-                        id,
-                        name,
-                        input = JsonDocument.Parse(input.GetRawText()).RootElement,
+                        Type = "tool_use",
+                        Id = id,
+                        Name = name,
+                        Input = input,
                     });
                 }
                 else if (type == "text" && block.TryGetProperty("text", out var textEl))
                 {
                     var text = textEl.GetString() ?? string.Empty;
                     finalTextBuilder.Append(text);
-
-                    assistantContent.Add(new { type = "text", text });
+                    assistantContent.Add(new AnthropicContentBlock { Type = "text", Text = text });
                 }
                 else if (type == "thinking" && block.TryGetProperty("thinking", out var thinkEl))
                 {
-                    // Preserve thinking block to maintain message consistency for subsequent turns.
                     var signature = block.TryGetProperty("signature", out var sigEl) ? sigEl.GetString() : null;
-                    assistantContent.Add(new { type = "thinking", thinking = thinkEl.GetString(), signature });
+                    assistantContent.Add(new AnthropicContentBlock { Type = "thinking", Thinking = thinkEl.GetString(), Signature = signature });
                 }
             }
         }
 
-        // Append assistant turn to history so the next user/tool_result message is correctly ordered.
-        _messages.Add(new { role = "assistant", content = assistantContent });
+        _messages.Add(new AnthropicMessageItem { Role = "assistant", Content = assistantContent });
 
         return new AgentTurn
         {

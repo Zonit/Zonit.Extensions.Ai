@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,8 @@ namespace Zonit.Extensions.Ai.Mistral;
 /// <summary>
 /// Mistral provider implementation.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("mistral")]
 public sealed class MistralProvider : IModelProvider
 {
@@ -28,7 +31,11 @@ public sealed class MistralProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            MistralJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public MistralProvider(
@@ -50,9 +57,7 @@ public sealed class MistralProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is MistralBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -60,7 +65,7 @@ public sealed class MistralProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, MistralJsonContext.Default.MistralChatRequest);
 
         _logger.LogDebug("Mistral request: {Payload}", jsonPayload);
 
@@ -77,7 +82,7 @@ public sealed class MistralProvider : IModelProvider
             throw new HttpRequestException($"Mistral API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var mistralResponse = JsonSerializer.Deserialize<MistralResponse>(responseJson, JsonOptions)!;
+        var mistralResponse = JsonSerializer.Deserialize(responseJson, MistralJsonContext.Default.MistralResponse)!;
 
         var textContent = mistralResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -134,8 +139,6 @@ public sealed class MistralProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
@@ -143,13 +146,13 @@ public sealed class MistralProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new
+        var request = new MistralEmbedRequest
         {
-            model = llm.Name,
-            input = new[] { input }
+            Model = llm.Name,
+            Input = new[] { input }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, MistralJsonContext.Default.MistralEmbedRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v1/embeddings", content, cancellationToken);
@@ -158,7 +161,7 @@ public sealed class MistralProvider : IModelProvider
         response.EnsureSuccessStatusCode();
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-        var embeddingResponse = JsonSerializer.Deserialize<EmbeddingResponse>(responseJson, JsonOptions);
+        var embeddingResponse = JsonSerializer.Deserialize(responseJson, MistralJsonContext.Default.EmbeddingResponse);
 
         var inputTokens = embeddingResponse?.Usage?.PromptTokens ?? 0;
         var (inputCost, _) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
@@ -185,17 +188,15 @@ public sealed class MistralProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, MistralJsonContext.Default.MistralChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = content };
@@ -214,7 +215,7 @@ public sealed class MistralProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, MistralJsonContext.Default.StreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -244,41 +245,35 @@ public sealed class MistralProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    private static MistralChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<MistralRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new MistralRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new MistralRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new MistralChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
         };
 
-        // Only send temperature/top_p if not default - Mistral recommends altering one, not both
         if (llm is MistralBase mistralLlm)
         {
             if (mistralLlm.Temperature < 1.0)
-                request["temperature"] = mistralLlm.Temperature;
+                request.Temperature = mistralLlm.Temperature;
             if (mistralLlm.TopP < 1.0)
-                request["top_p"] = mistralLlm.TopP;
+                request.TopP = mistralLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
-        {
-            request["response_format"] = new { type = "json_object" };
-        }
+            request.ResponseFormat = new MistralResponseFormat { Type = "json_object" };
 
         return request;
     }
@@ -399,4 +394,33 @@ internal sealed class StreamChoice
 internal sealed class StreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class MistralChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<MistralRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public MistralResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class MistralRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class MistralResponseFormat
+{
+    public string Type { get; set; } = "";
+}
+
+internal sealed class MistralEmbedRequest
+{
+    public string Model { get; set; } = "";
+    public string[] Input { get; set; } = [];
 }

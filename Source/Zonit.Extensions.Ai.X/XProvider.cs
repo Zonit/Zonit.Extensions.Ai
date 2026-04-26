@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.X;
 /// X (Grok) provider implementation.
 /// Uses Responses API (/v1/responses) with Agent Tools for web/X search.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("x")]
 public sealed class XProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class XProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            XJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public XProvider(
@@ -51,9 +58,7 @@ public sealed class XProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is XBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class XProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
 
         _logger.LogDebug("X request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class XProvider : IModelProvider
             throw new HttpRequestException($"X API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var xResponse = JsonSerializer.Deserialize<XResponse>(responseJson, JsonOptions)!;
+        var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
         // Responses API uses 'output' array instead of 'choices'
         var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
@@ -130,8 +135,6 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<Asset>> GenerateImageAsync(
         IImageLlm llm,
         IPrompt<Asset> prompt,
@@ -139,25 +142,22 @@ public sealed class XProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new Dictionary<string, object>
+        var request = new XImageRequest
         {
-            ["model"] = llm.Name,
-            ["prompt"] = prompt.Text,
-            ["n"] = 1,
-            ["response_format"] = "b64_json"
+            Model = llm.Name,
+            Prompt = prompt.Text,
+            N = 1,
+            ResponseFormat = "b64_json"
         };
 
-        // X.ai supports aspect_ratio but NOT quality parameter
         if (!string.IsNullOrEmpty(llm.AspectRatioValue))
-            request["aspect_ratio"] = llm.AspectRatioValue;
+            request.AspectRatio = llm.AspectRatioValue;
 
-        // If source image is provided, use it for image editing
-        // X.ai expects image_url in data URL format: data:image/jpeg;base64,...
         var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
         if (sourceImage is { HasValue: true } img)
-            request["image_url"] = img.DataUrl;
+            request.ImageUrl = img.DataUrl;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XImageRequest);
         _logger.LogDebug("X image generation request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -172,7 +172,7 @@ public sealed class XProvider : IModelProvider
             throw new HttpRequestException($"X Image API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var imageResponse = JsonSerializer.Deserialize<XImageResponse>(responseJson, JsonOptions);
+        var imageResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XImageResponse);
 
         if (imageResponse?.Data == null || imageResponse.Data.Length == 0)
             throw new InvalidOperationException("No image data in response");
@@ -200,8 +200,6 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<Asset>> GenerateVideoAsync(
         IVideoLlm llm,
         IPrompt<Asset> prompt,
@@ -213,31 +211,24 @@ public sealed class XProvider : IModelProvider
         var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
         var sourceVideo = prompt.Files?.FirstOrDefault(f => f.IsVideo);
 
-        // Step 1: Create video generation/edit task
-        var createRequest = new Dictionary<string, object>
+        var createRequest = new XVideoRequest
         {
-            ["model"] = llm.Name,
-            ["prompt"] = prompt.Text,
-            ["duration"] = llm.DurationSeconds,
-            ["resolution"] = llm.QualityValue,
-            ["aspect_ratio"] = llm.AspectRatioValue
+            Model = llm.Name,
+            Prompt = prompt.Text,
+            Duration = llm.DurationSeconds,
+            Resolution = llm.QualityValue,
+            AspectRatio = llm.AspectRatioValue
         };
 
-        // Video from Image: adds image parameter
-        // X.ai expects: {"image": {"url": "<data url or public url>"}}
         if (sourceImage is { HasValue: true } img)
-            createRequest["image"] = new Dictionary<string, string> { ["url"] = img.DataUrl };
+            createRequest.Image = new XVideoUrlRef { Url = img.DataUrl };
 
-        // Video Edit: adds video parameter (requires public URL, not base64)
-        // X.ai expects: {"video": {"url": "<public url>"}}
-        // Note: For video editing, use a public URL - base64 is not supported for video input
         if (sourceVideo is { HasValue: true } vid)
-            createRequest["video"] = new Dictionary<string, string> { ["url"] = vid.DataUrl };
+            createRequest.Video = new XVideoUrlRef { Url = vid.DataUrl };
 
-        // Choose endpoint: /v1/videos/edits for video editing, /v1/videos/generations for all else
         var endpoint = sourceVideo is { HasValue: true } ? "/v1/videos/edits" : "/v1/videos/generations";
 
-        var jsonPayload = JsonSerializer.Serialize(createRequest, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(createRequest, XJsonContext.Default.XVideoRequest);
         _logger.LogDebug("X video generation request: {Payload}", jsonPayload);
 
         using var createContent = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -253,7 +244,7 @@ public sealed class XProvider : IModelProvider
 
         _logger.LogDebug("X video generation response: {Response}", createResponseJson);
 
-        var videoTask = JsonSerializer.Deserialize<XVideoTaskResponse>(createResponseJson, JsonOptions);
+        var videoTask = JsonSerializer.Deserialize(createResponseJson, XJsonContext.Default.XVideoTaskResponse);
 
         // API may return 'id' or 'request_id'
         var taskId = videoTask?.Id ?? videoTask?.RequestId;
@@ -284,7 +275,7 @@ public sealed class XProvider : IModelProvider
                 continue;
             }
 
-            statusResponse = JsonSerializer.Deserialize<XVideoStatusResponse>(statusJson, JsonOptions);
+            statusResponse = JsonSerializer.Deserialize(statusJson, XJsonContext.Default.XVideoStatusResponse);
 
             // Check status (API may return 'status' or 'state' field)
             var currentStatus = statusResponse?.State ?? statusResponse?.Status;
@@ -348,17 +339,15 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
@@ -377,7 +366,7 @@ public sealed class XProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, XJsonContext.Default.StreamChunk);
             var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
 
             if (text != null)
@@ -386,9 +375,7 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+    public async Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -397,7 +384,7 @@ public sealed class XProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
         _logger.LogDebug("X chat request: {Payload}", jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
@@ -413,7 +400,7 @@ public sealed class XProvider : IModelProvider
             throw new HttpRequestException($"X API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var xResponse = JsonSerializer.Deserialize<XResponse>(responseJson, JsonOptions)!;
+        var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
         var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
             ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
@@ -461,8 +448,6 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
@@ -470,9 +455,9 @@ public sealed class XProvider : IModelProvider
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildChatRequest<string>(llm, new ChatFallback.PromptShim(prompt), chat, typeof(string));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/responses") { Content = content };
         using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -490,7 +475,7 @@ public sealed class XProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<StreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, XJsonContext.Default.StreamChunk);
             var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
             if (text != null)
                 yield return text;
@@ -519,80 +504,69 @@ public sealed class XProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static XResponsesRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var request = new Dictionary<string, object>
+        var request = new XResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens
         };
 
-        // Responses API uses 'instructions' for system message
         if (!string.IsNullOrEmpty(prompt.System))
-            request["instructions"] = prompt.System;
+            request.Instructions = prompt.System;
 
-        // Build input - Responses API format
-        var input = new List<object>();
-        var content = new List<object> { new { type = "input_text", text = prompt.Text } };
+        var content = new List<XContentPart>
+        {
+            new() { Type = "input_text", Text = prompt.Text }
+        };
 
         if (prompt.Files != null)
         {
             foreach (var file in prompt.Files)
             {
                 if (file.IsImage)
-                {
-                    content.Add(new
-                    {
-                        type = "input_image",
-                        image_url = file.DataUrl
-                    });
-                }
+                    content.Add(new XContentPart { Type = "input_image", ImageUrl = file.DataUrl });
             }
         }
 
-        input.Add(new { role = "user", content });
-        request["input"] = input;
+        request.Input = new List<XInputItem>
+        {
+            new() { Role = "user", Content = content }
+        };
 
-        // Only send temperature/top_p if not default - OpenAI-compatible API recommends altering one, not both
         if (llm is XChatBase xLlm)
         {
             if (xLlm.Temperature < 1.0)
-                request["temperature"] = xLlm.Temperature;
+                request.Temperature = xLlm.Temperature;
             if (xLlm.TopP < 1.0)
-                request["top_p"] = xLlm.TopP;
+                request.TopP = xLlm.TopP;
 
-            // WebSearch support - using Responses API Agent Tools
-            // NOTE: Responses API uses separate 'web_search' and 'x_search' tools
             if (xLlm.WebSearch != null && xLlm.WebSearch.Mode != ModeType.Never)
             {
                 var tools = BuildAgentTools(xLlm.WebSearch);
                 if (tools.Count > 0)
-                    request["tools"] = tools;
+                    request.Tools = tools;
             }
         }
 
-        // Reasoning
         if (llm is XReasoningBase { Reason: not null } reasoningLlm)
-        {
-            request["reasoning_effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
-        }
+            request.ReasoningEffort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new XResponseFormat
             {
-                type = "json_schema",
-                json_schema = new
+                Type = "json_schema",
+                JsonSchema = new XJsonSchemaSpec
                 {
-                    name = "response",
-                    schema = JsonSchemaGenerator.Generate(responseType),
-                    strict = true
+                    Name = "response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
                 }
             };
         }
@@ -600,24 +574,24 @@ public sealed class XProvider : IModelProvider
         return request;
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildChatRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static XResponsesRequest BuildChatRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var request = new Dictionary<string, object>
+        var request = new XResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens,
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens
         };
 
         if (!string.IsNullOrEmpty(prompt.Text))
-            request["instructions"] = prompt.Text;
+            request.Instructions = prompt.Text;
 
-        var input = new List<object>();
+        var input = new List<XInputItem>();
         var sessionFilesAttached = false;
 
         foreach (var msg in chat)
@@ -626,29 +600,35 @@ public sealed class XProvider : IModelProvider
             {
                 case User u:
                 {
-                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    var userContent = new List<XContentPart>
+                    {
+                        new() { Type = "input_text", Text = u.Text }
+                    };
                     if (!sessionFilesAttached && prompt.Files != null)
                     {
                         AppendFiles(userContent, prompt.Files);
                         sessionFilesAttached = true;
                     }
                     if (u.Files != null) AppendFiles(userContent, u.Files);
-                    input.Add(new { role = "user", content = userContent });
+                    input.Add(new XInputItem { Role = "user", Content = userContent });
                     break;
                 }
                 case Assistant a:
-                    input.Add(new
+                    input.Add(new XInputItem
                     {
-                        role = "assistant",
-                        content = new object[] { new { type = "output_text", text = a.Text } }
+                        Role = "assistant",
+                        Content = new List<XContentPart>
+                        {
+                            new() { Type = "output_text", Text = a.Text }
+                        }
                     });
                     break;
                 case Tool t:
-                    input.Add(new
+                    input.Add(new XInputItem
                     {
-                        type = "function_call_output",
-                        call_id = t.ToolCallId,
-                        output = t.ResultJson
+                        Type = "function_call_output",
+                        CallId = t.ToolCallId,
+                        Output = t.ResultJson
                     });
                     break;
             }
@@ -656,75 +636,73 @@ public sealed class XProvider : IModelProvider
 
         if (input.Count == 0)
         {
-            input.Add(new
+            input.Add(new XInputItem
             {
-                role = "user",
-                content = new object[] { new { type = "input_text", text = string.Empty } }
+                Role = "user",
+                Content = new List<XContentPart>
+                {
+                    new() { Type = "input_text", Text = string.Empty }
+                }
             });
         }
 
-        request["input"] = input;
+        request.Input = input;
 
         if (llm is XChatBase xLlm)
         {
-            if (xLlm.Temperature < 1.0) request["temperature"] = xLlm.Temperature;
-            if (xLlm.TopP < 1.0) request["top_p"] = xLlm.TopP;
+            if (xLlm.Temperature < 1.0) request.Temperature = xLlm.Temperature;
+            if (xLlm.TopP < 1.0) request.TopP = xLlm.TopP;
 
-            // X-native WebSearch (Search settings) propagated as Responses API tools.
             if (xLlm.WebSearch != null && xLlm.WebSearch.Mode != ModeType.Never)
             {
                 var tools = BuildAgentTools(xLlm.WebSearch);
                 if (tools.Count > 0)
-                    request["tools"] = tools;
+                    request.Tools = tools;
             }
         }
 
         if (llm is XReasoningBase { Reason: not null } reasoningLlm)
-            request["reasoning_effort"] = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+            request.ReasoningEffort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
 
-        // Structured output (X uses response_format, not text.format).
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new XResponseFormat
             {
-                type = "json_schema",
-                json_schema = new
+                Type = "json_schema",
+                JsonSchema = new XJsonSchemaSpec
                 {
-                    name = "response",
-                    schema = JsonSchemaGenerator.Generate(responseType),
-                    strict = true,
-                },
+                    Name = "response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
+                }
             };
         }
 
-        // Attached function tools from llm.Tools (in addition to web/x_search added above).
         if (llm.Tools is { Length: > 0 } native)
         {
-            var tools = request.TryGetValue("tools", out var existing) && existing is List<object> existingList
-                ? existingList
-                : new List<object>();
+            var tools = request.Tools ?? new List<XTool>();
             foreach (var t in native.OfType<FunctionTool>())
             {
-                tools.Add(new
+                tools.Add(new XTool
                 {
-                    type = "function",
-                    name = t.Name,
-                    description = t.Description,
-                    parameters = t.Parameters,
-                    strict = t.Strict,
+                    Type = "function",
+                    Name = t.Name,
+                    Description = t.Description,
+                    Parameters = t.Parameters,
+                    Strict = t.Strict
                 });
             }
             if (tools.Count > 0)
-                request["tools"] = tools;
+                request.Tools = tools;
         }
 
         return request;
     }
 
-    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    private static void AppendFiles(List<XContentPart> content, IReadOnlyList<Asset> files)
     {
         foreach (var file in files.Where(f => f.IsImage))
-            content.Add(new { type = "input_image", image_url = file.DataUrl });
+            content.Add(new XContentPart { Type = "input_image", ImageUrl = file.DataUrl });
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
@@ -798,50 +776,46 @@ public sealed class XProvider : IModelProvider
     /// Builds agent tools array for the Agent Tools API.
     /// Uses 'live_search' type for /v1/chat/completions endpoint compatibility.
     /// </summary>
-    private static List<object> BuildAgentTools(Search webSearch)
+    private static List<XTool> BuildAgentTools(Search webSearch)
     {
-        var tools = new List<object>();
+        var tools = new List<XTool>();
 
-        // Responses API uses separate web_search and x_search tools
         var hasWebSource = webSearch.Sources?.Any(s => s.Type == SourceType.Web) ?? true;
         var hasXSource = webSearch.Sources?.Any(s => s.Type == SourceType.X) ?? true;
 
-        // Build web_search tool
         if (hasWebSource)
         {
-            var webSearchConfig = new Dictionary<string, object> { ["type"] = "web_search" };
+            var webSearchConfig = new XTool { Type = "web_search" };
 
             var webSource = webSearch.Sources?.OfType<WebSearchSource>().FirstOrDefault();
             if (webSource != null)
             {
                 if (webSource.AllowedWebsites?.Length > 0)
-                    webSearchConfig["allowed_domains"] = webSource.AllowedWebsites.Take(5).ToArray();
+                    webSearchConfig.AllowedDomains = webSource.AllowedWebsites.Take(5).ToList();
                 if (webSource.ExcludedWebsites?.Length > 0)
-                    webSearchConfig["excluded_domains"] = webSource.ExcludedWebsites.Take(5).ToArray();
+                    webSearchConfig.ExcludedDomains = webSource.ExcludedWebsites.Take(5).ToList();
             }
 
             tools.Add(webSearchConfig);
         }
 
-        // Build x_search tool
         if (hasXSource)
         {
-            var xSearchConfig = new Dictionary<string, object> { ["type"] = "x_search" };
+            var xSearchConfig = new XTool { Type = "x_search" };
 
             var xSource = webSearch.Sources?.OfType<XSearchSource>().FirstOrDefault();
             if (xSource != null)
             {
                 if (xSource.IncludedXHandles?.Length > 0)
-                    xSearchConfig["allowed_x_handles"] = xSource.IncludedXHandles.Take(10).ToArray();
+                    xSearchConfig.AllowedXHandles = xSource.IncludedXHandles.Take(10).ToList();
                 if (xSource.ExcludedXHandles?.Length > 0)
-                    xSearchConfig["excluded_x_handles"] = xSource.ExcludedXHandles.Take(10).ToArray();
+                    xSearchConfig.ExcludedXHandles = xSource.ExcludedXHandles.Take(10).ToList();
             }
 
-            // Date filters (shared between web and x search)
             if (webSearch.FromDate.HasValue)
-                xSearchConfig["from_date"] = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
+                xSearchConfig.FromDate = webSearch.FromDate.Value.ToString("yyyy-MM-dd");
             if (webSearch.ToDate.HasValue)
-                xSearchConfig["to_date"] = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
+                xSearchConfig.ToDate = webSearch.ToDate.Value.ToString("yyyy-MM-dd");
 
             tools.Add(xSearchConfig);
         }
@@ -961,4 +935,89 @@ internal sealed class XVideoData
 internal sealed class XVideoOutput
 {
     public string? Url { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class XResponsesRequest
+{
+    public string Model { get; set; } = "";
+    public int? MaxOutputTokens { get; set; }
+    public string? Instructions { get; set; }
+    public List<XInputItem>? Input { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public string? ReasoningEffort { get; set; }
+    public List<XTool>? Tools { get; set; }
+    public XResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class XInputItem
+{
+    public string? Role { get; set; }
+    public List<XContentPart>? Content { get; set; }
+    public string? Type { get; set; }
+    public string? CallId { get; set; }
+    public string? Output { get; set; }
+}
+
+internal sealed class XContentPart
+{
+    public string Type { get; set; } = "";
+    public string? Text { get; set; }
+    public string? ImageUrl { get; set; }
+}
+
+internal sealed class XResponseFormat
+{
+    public string Type { get; set; } = "";
+    public XJsonSchemaSpec? JsonSchema { get; set; }
+}
+
+internal sealed class XJsonSchemaSpec
+{
+    public string Name { get; set; } = "";
+    public JsonElement Schema { get; set; }
+    public bool Strict { get; set; }
+}
+
+internal sealed class XTool
+{
+    public string Type { get; set; } = "";
+    public string? Name { get; set; }
+    public string? Description { get; set; }
+    public JsonElement? Parameters { get; set; }
+    public bool? Strict { get; set; }
+    public List<string>? AllowedDomains { get; set; }
+    public List<string>? ExcludedDomains { get; set; }
+    public List<string>? AllowedXHandles { get; set; }
+    public List<string>? ExcludedXHandles { get; set; }
+    public string? FromDate { get; set; }
+    public string? ToDate { get; set; }
+}
+
+internal sealed class XImageRequest
+{
+    public string Model { get; set; } = "";
+    public string Prompt { get; set; } = "";
+    public int N { get; set; }
+    public string ResponseFormat { get; set; } = "b64_json";
+    public string? AspectRatio { get; set; }
+    public string? ImageUrl { get; set; }
+}
+
+internal sealed class XVideoRequest
+{
+    public string Model { get; set; } = "";
+    public string Prompt { get; set; } = "";
+    public int Duration { get; set; }
+    public string Resolution { get; set; } = "";
+    public string AspectRatio { get; set; } = "";
+    public XVideoUrlRef? Image { get; set; }
+    public XVideoUrlRef? Video { get; set; }
+}
+
+internal sealed class XVideoUrlRef
+{
+    public string Url { get; set; } = "";
 }

@@ -439,23 +439,15 @@ internal sealed class AgentRunner
         return typeName;
     }
 
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for TResponse.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     private static TResponse ParseFinal<TResponse>(string finalText, IPrompt<TResponse> prompt)
     {
         if (typeof(TResponse) == typeof(string))
             return (TResponse)(object)finalText;
 
-        // Strip accidental markdown fences.
-        var json = finalText.Trim();
-        if (json.StartsWith("```"))
-        {
-            var firstNewline = json.IndexOf('\n');
-            if (firstNewline > 0) json = json[(firstNewline + 1)..];
-            if (json.EndsWith("```")) json = json[..^3];
-            json = json.Trim();
-        }
-
-        return JsonSerializer.Deserialize<TResponse>(json, JsonSerializerOptions.Default)
-            ?? throw new InvalidOperationException(
-                $"JSON deserialization of agent final answer returned null for {typeof(TResponse).Name}.");
+        // Routes through AiJsonTypeInfoResolver (AOT-safe) with a reflection
+        // fallback for types that weren't picked up by the source generator.
+        return JsonResponseParser.Parse<TResponse>(finalText);
     }
 }

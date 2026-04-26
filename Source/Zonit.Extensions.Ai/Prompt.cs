@@ -11,10 +11,19 @@ namespace Zonit.Extensions.Ai;
 /// </summary>
 /// <typeparam name="TResponse">The expected response type - strongly typed!</typeparam>
 /// <remarks>
-/// This class uses reflection to discover properties for template rendering.
-/// It is not compatible with AOT compilation without additional configuration.
+/// <para>
+/// At build time the <c>AiPromptBindingGenerator</c> source generator emits an
+/// AOT-safe binding for every concrete subclass and registers it through
+/// <see cref="PromptBindingRegistry"/>. <see cref="RenderTemplate"/> uses that
+/// binding for zero-reflection rendering.
+/// </para>
+/// <para>
+/// When no binding is registered (e.g. the type was emitted at runtime, or the
+/// generator did not run), the renderer falls back to reflection-based property
+/// discovery — that path is annotated with
+/// <see cref="RequiresUnreferencedCodeAttribute"/> and is not AOT-safe.
+/// </para>
 /// </remarks>
-[RequiresUnreferencedCode("Uses reflection to get properties for template rendering.")]
 public abstract class PromptBase<TResponse> : IPrompt<TResponse>
 {
     /// <summary>
@@ -48,7 +57,26 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
 
         var scriptObject = new ScriptObject();
 
-        // Add all public properties as snake_case
+        // Prefer the source-generated, AOT-safe binding. Only fall back to
+        // reflection when the consumer compiled without our source generator
+        // (or the prompt type was synthesised at runtime).
+        if (!PromptBindingRegistry.TryPopulate(this, scriptObject))
+        {
+            PopulateScriptObjectViaReflection(scriptObject);
+        }
+
+        var context = new TemplateContext();
+        context.PushGlobal(scriptObject);
+
+        return template.Render(context);
+    }
+
+    [RequiresUnreferencedCode(
+        "Reflection-based property discovery for Scriban templating. " +
+        "Reference Zonit.Extensions.Ai's source generator (default for the package) " +
+        "to get an AOT-safe binding emitted for this prompt type.")]
+    private void PopulateScriptObjectViaReflection(ScriptObject scriptObject)
+    {
         foreach (var prop in GetType().GetProperties())
         {
             if (prop.Name is nameof(System) or nameof(Text) or nameof(Files) or nameof(Prompt))
@@ -58,11 +86,6 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
             var snakeName = ToSnakeCase(prop.Name);
             scriptObject.Add(snakeName, value);
         }
-
-        var context = new TemplateContext();
-        context.PushGlobal(scriptObject);
-
-        return template.Render(context);
     }
 
     private static string ToSnakeCase(string name)
@@ -118,8 +141,10 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
 /// Inherit from this class to create typed image prompts with parameters.
 /// </summary>
 /// <remarks>
-/// This class uses reflection to discover properties for template rendering.
-/// It is not compatible with AOT compilation without additional configuration.
+/// Inherits AOT-safe Scriban binding from <see cref="PromptBase{TResponse}"/>.
+/// Concrete subclasses get a source-generated binding registered via
+/// <see cref="PromptBindingRegistry"/>; reflection-based fallback applies only
+/// when the generator did not run.
 /// </remarks>
 /// <example>
 /// <code>
@@ -133,7 +158,6 @@ public sealed class SimplePrompt<TResponse> : IPrompt<TResponse>
 /// }
 /// </code>
 /// </example>
-[RequiresUnreferencedCode("Uses reflection to get properties for template rendering.")]
 public abstract class ImagePromptBase : PromptBase<Asset>
 {
 }

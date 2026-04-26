@@ -1,33 +1,25 @@
 using System.ComponentModel;
-using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging;
 using Zonit.Extensions;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Anthropic;
-using Zonit.Extensions.Ai.Converters;
 
 namespace Example.Backgrounds;
 
 /// <summary>
-/// Test for ProductDescription prompt - reproduces the '#' JSON parsing error.
+/// Test for ProductDescription prompt — exercises typed structured-output generation
+/// via the registered <see cref="IModelProvider"/> chain.
 /// </summary>
 public class ProductDescriptionTestBackground : BackgroundService
 {
-    private readonly IOptions<AnthropicOptions> _options;
     private readonly IEnumerable<IModelProvider> _providers;
     private readonly ILogger<ProductDescriptionTestBackground> _logger;
 
     public ProductDescriptionTestBackground(
-        IOptions<AnthropicOptions> options,
         IEnumerable<IModelProvider> providers,
         ILogger<ProductDescriptionTestBackground> logger)
     {
-        _options = options;
         _providers = providers;
         _logger = logger;
     }
@@ -36,110 +28,10 @@ public class ProductDescriptionTestBackground : BackgroundService
     {
         await Task.Delay(500, ct);
 
-        Console.WriteLine("=== Test 1: Direct HTTP (bypassing Polly) ===\n");
-        await TestDirectHttp(ct);
-
-        Console.WriteLine("\n\n=== Test 2: Using IAiProvider from DI ===\n");
+        Console.WriteLine("=== ProductDescription via IAiProvider (DI) ===\n");
         await TestWithProvider(ct);
 
         Environment.Exit(0);
-    }
-
-    private async Task TestDirectHttp(CancellationToken ct)
-    {
-        await Task.Delay(500, ct);
-
-        Console.WriteLine("Testing ProductDescription with Anthropic (direct HTTP)...\n");
-
-        try
-        {
-            var prompt = new ProductDescriptionPrompt
-            {
-                Culture = "pl-PL",
-                DescriptionLength = CategoryLengthType.Standard,
-                Specification = "Laptop 15.6\", Intel i7, 16GB RAM, 512GB SSD",
-                Notes = "Focus on gaming capabilities"
-            };
-
-            // Build request directly
-            var schema = JsonSchemaGenerator.Generate(typeof(ProductDescriptionResult));
-            var schemaJson = schema.ToString();
-
-            var systemPrompt = $"You must respond ONLY with valid JSON matching this schema (no markdown, no explanation, no code blocks):\n{schemaJson}\n\nRespond with raw JSON only.";
-
-            var requestBody = new
-            {
-                model = "claude-sonnet-4-20250514",
-                max_tokens = 4096,
-                system = systemPrompt,
-                messages = new object[]
-                {
-                    new { role = "user", content = prompt.Prompt },
-                    new { role = "assistant", content = "{" }  // Prefill
-                }
-            };
-
-            var json = JsonSerializer.Serialize(requestBody, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-            });
-
-            Console.WriteLine("Request body:");
-            Console.WriteLine(json[..Math.Min(500, json.Length)] + "...\n");
-
-            using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
-            httpClient.DefaultRequestHeaders.Add("x-api-key", _options.Value.ApiKey);
-            httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-
-            Console.WriteLine("Sending request to Anthropic...");
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var response = await httpClient.PostAsync("https://api.anthropic.com/v1/messages", content, ct);
-
-            var responseJson = await response.Content.ReadAsStringAsync(ct);
-
-            Console.WriteLine($"\nResponse status: {response.StatusCode}");
-            Console.WriteLine($"Response body:\n{responseJson[..Math.Min(1000, responseJson.Length)]}...\n");
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"API error: {responseJson}");
-            }
-
-            // Parse response
-            var anthropicResponse = JsonSerializer.Deserialize<JsonElement>(responseJson);
-            var textContent = anthropicResponse
-                .GetProperty("content")
-                .EnumerateArray()
-                .First(c => c.GetProperty("type").GetString() == "text")
-                .GetProperty("text")
-                .GetString();
-
-            Console.WriteLine($"Raw text content:\n{textContent}\n");
-
-            // Add back the prefill "{" 
-            var jsonContent = "{" + textContent;
-            Console.WriteLine($"JSON to parse:\n{jsonContent[..Math.Min(300, jsonContent.Length)]}...\n");
-
-            // Parse to ProductDescriptionResult
-            var result = JsonSerializer.Deserialize<ProductDescriptionResult>(jsonContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                Converters = { new CaseInsensitiveEnumConverterFactory() }
-            });
-
-            Console.WriteLine("\n=== Direct HTTP SUCCESS ===");
-            Console.WriteLine($"Title: {result!.Title}");
-            Console.WriteLine($"ShortDescription: {result.ShortDescription}");
-            Console.WriteLine($"Content length: {result.Content?.Length ?? 0} chars");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"\n=== Direct HTTP FAILED ===");
-            Console.WriteLine($"Error: {ex.Message}");
-            Console.WriteLine($"\nFull exception:\n{ex}");
-        }
     }
 
     private async Task TestWithProvider(CancellationToken ct)

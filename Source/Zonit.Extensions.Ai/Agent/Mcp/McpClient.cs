@@ -1,10 +1,6 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Net.Http.Headers;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 
 namespace Zonit.Extensions.Ai;
@@ -26,8 +22,6 @@ namespace Zonit.Extensions.Ai;
 /// agent run — <see cref="McpToolFactory"/> creates and caches instances.
 /// </para>
 /// </remarks>
-[RequiresUnreferencedCode("JSON serialization requires types that cannot be statically analyzed.")]
-[RequiresDynamicCode("JSON serialization requires runtime code generation.")]
 public sealed class McpClient : IAsyncDisposable
 {
     private readonly HttpClient _httpClient;
@@ -37,14 +31,6 @@ public sealed class McpClient : IAsyncDisposable
     private long _nextRequestId;
     private string? _sessionId;
     private bool _initialized;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public McpClient(HttpClient httpClient, Mcp server, ILogger logger)
     {
@@ -85,18 +71,22 @@ public sealed class McpClient : IAsyncDisposable
     {
         if (_initialized) return;
 
-        var result = await SendAsync("initialize", new Dictionary<string, object?>
+        var result = await SendAsync("initialize", static w =>
         {
-            ["protocolVersion"] = "2025-03-26",
-            ["capabilities"] = new Dictionary<string, object?>
-            {
-                ["tools"] = new Dictionary<string, object?>(),
-            },
-            ["clientInfo"] = new Dictionary<string, object?>
-            {
-                ["name"] = "Zonit.Extensions.Ai",
-                ["version"] = "1.0.0",
-            },
+            w.WriteStartObject();
+            w.WriteString("protocolVersion", "2025-03-26");
+            w.WritePropertyName("capabilities");
+            w.WriteStartObject();
+            w.WritePropertyName("tools");
+            w.WriteStartObject();
+            w.WriteEndObject();
+            w.WriteEndObject();
+            w.WritePropertyName("clientInfo");
+            w.WriteStartObject();
+            w.WriteString("name", "Zonit.Extensions.Ai");
+            w.WriteString("version", "1.0.0");
+            w.WriteEndObject();
+            w.WriteEndObject();
         }, cancellationToken).ConfigureAwait(false);
 
         _initialized = true;
@@ -143,59 +133,70 @@ public sealed class McpClient : IAsyncDisposable
     {
         await InitializeAsync(cancellationToken).ConfigureAwait(false);
 
-        var parameters = new Dictionary<string, object?>
+        var argsClone = arguments;
+        var result = await SendAsync("tools/call", w =>
         {
-            ["name"] = toolName,
-            ["arguments"] = arguments.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null
-                ? new Dictionary<string, object>()
-                : (object)JsonDocument.Parse(arguments.GetRawText()).RootElement,
-        };
+            w.WriteStartObject();
+            w.WriteString("name", toolName);
+            w.WritePropertyName("arguments");
+            if (argsClone.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+            {
+                w.WriteStartObject();
+                w.WriteEndObject();
+            }
+            else
+            {
+                argsClone.WriteTo(w);
+            }
+            w.WriteEndObject();
+        }, cancellationToken).ConfigureAwait(false);
 
-        var result = await SendAsync("tools/call", parameters, cancellationToken).ConfigureAwait(false);
-
-        // MCP tools/call returns { content: [...], isError?: bool }
-        // Flatten content[] text parts into a single JSON payload so downstream
-        // can feed it back to the model as a structured tool result.
+        // MCP tools/call returns { content: [...], isError?: bool }.
+        // Repack as a normalized payload via Utf8JsonWriter (AOT-safe).
         if (result.TryGetProperty("content", out var contentArr) && contentArr.ValueKind == JsonValueKind.Array)
         {
-            var parts = new List<object>();
-            foreach (var c in contentArr.EnumerateArray())
-            {
-                if (c.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "text"
-                    && c.TryGetProperty("text", out var textEl))
-                {
-                    parts.Add(new { type = "text", text = textEl.GetString() });
-                }
-                else
-                {
-                    parts.Add(JsonDocument.Parse(c.GetRawText()).RootElement);
-                }
-            }
-
             var isError = result.TryGetProperty("isError", out var errEl) && errEl.GetBoolean();
 
-            var json = JsonSerializer.Serialize(new { content = parts, isError }, JsonOptions);
-            using var doc = JsonDocument.Parse(json);
+            using var ms = new MemoryStream();
+            using (var w = new Utf8JsonWriter(ms))
+            {
+                w.WriteStartObject();
+                w.WritePropertyName("content");
+                w.WriteStartArray();
+                foreach (var c in contentArr.EnumerateArray())
+                {
+                    if (c.TryGetProperty("type", out var typeEl) && typeEl.GetString() == "text"
+                        && c.TryGetProperty("text", out var textEl))
+                    {
+                        w.WriteStartObject();
+                        w.WriteString("type", "text");
+                        w.WriteString("text", textEl.GetString());
+                        w.WriteEndObject();
+                    }
+                    else
+                    {
+                        c.WriteTo(w);
+                    }
+                }
+                w.WriteEndArray();
+                w.WriteBoolean("isError", isError);
+                w.WriteEndObject();
+            }
+            using var doc = JsonDocument.Parse(ms.ToArray());
             return doc.RootElement.Clone();
         }
 
         return result;
     }
 
-    private async Task<JsonElement> SendAsync(string method, object? parameters, CancellationToken cancellationToken)
+    private async Task<JsonElement> SendAsync(string method, Action<Utf8JsonWriter>? writeParams, CancellationToken cancellationToken)
     {
         var id = Interlocked.Increment(ref _nextRequestId);
 
-        var request = new Dictionary<string, object?>
-        {
-            ["jsonrpc"] = "2.0",
-            ["id"] = id,
-            ["method"] = method,
-        };
-        if (parameters is not null) request["params"] = parameters;
-
-        var body = JsonSerializer.Serialize(request, JsonOptions);
-        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var bodyBytes = BuildJsonRpcEnvelope(id, method, writeParams);
+        var body = Encoding.UTF8.GetString(bodyBytes);
+        using var content = new ByteArrayContent(bodyBytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "")
         {
@@ -223,17 +224,11 @@ public sealed class McpClient : IAsyncDisposable
         return await ReadJsonRpcResponseAsync(response, id, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task SendNotificationAsync(string method, object? parameters, CancellationToken cancellationToken)
+    private async Task SendNotificationAsync(string method, Action<Utf8JsonWriter>? writeParams, CancellationToken cancellationToken)
     {
-        var request = new Dictionary<string, object?>
-        {
-            ["jsonrpc"] = "2.0",
-            ["method"] = method,
-        };
-        if (parameters is not null) request["params"] = parameters;
-
-        var body = JsonSerializer.Serialize(request, JsonOptions);
-        using var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var bodyBytes = BuildJsonRpcEnvelope(id: null, method, writeParams);
+        using var content = new ByteArrayContent(bodyBytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "")
         {
@@ -249,6 +244,25 @@ public sealed class McpClient : IAsyncDisposable
             _logger.LogWarning("MCP [{Server}] notification {Method} returned {Status}",
                 _server.Name, method, response.StatusCode);
         }
+    }
+
+    private static byte[] BuildJsonRpcEnvelope(long? id, string method, Action<Utf8JsonWriter>? writeParams)
+    {
+        using var ms = new MemoryStream();
+        using (var w = new Utf8JsonWriter(ms))
+        {
+            w.WriteStartObject();
+            w.WriteString("jsonrpc", "2.0");
+            if (id.HasValue) w.WriteNumber("id", id.Value);
+            w.WriteString("method", method);
+            if (writeParams is not null)
+            {
+                w.WritePropertyName("params");
+                writeParams(w);
+            }
+            w.WriteEndObject();
+        }
+        return ms.ToArray();
     }
 
     /// <summary>

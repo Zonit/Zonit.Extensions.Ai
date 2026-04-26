@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Baidu;
 /// Baidu AI (Qianfan) provider implementation.
 /// Provides access to ERNIE models.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("baidu")]
 public sealed class BaiduProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class BaiduProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            BaiduJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public BaiduProvider(
@@ -51,9 +58,7 @@ public sealed class BaiduProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is BaiduBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class BaiduProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, BaiduJsonContext.Default.BaiduChatRequest);
 
         _logger.LogDebug("Baidu request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class BaiduProvider : IModelProvider
             throw new HttpRequestException($"Baidu API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var baiduResponse = JsonSerializer.Deserialize<BaiduResponse>(responseJson, JsonOptions)!;
+        var baiduResponse = JsonSerializer.Deserialize(responseJson, BaiduJsonContext.Default.BaiduResponse)!;
 
         var textContent = baiduResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -144,17 +149,15 @@ public sealed class BaiduProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, BaiduJsonContext.Default.BaiduChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v2/chat/completions") { Content = content };
@@ -173,7 +176,7 @@ public sealed class BaiduProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<BaiduStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, BaiduJsonContext.Default.BaiduStreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -203,33 +206,31 @@ public sealed class BaiduProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    private static BaiduChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<BaiduRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new BaiduRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new BaiduRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new BaiduChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_output_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxOutputTokens = llm.MaxTokens
         };
 
         if (llm is BaiduBase baiduLlm)
         {
             if (baiduLlm.Temperature < 1.0)
-                request["temperature"] = baiduLlm.Temperature;
+                request.Temperature = baiduLlm.Temperature;
             if (baiduLlm.TopP < 1.0)
-                request["top_p"] = baiduLlm.TopP;
+                request.TopP = baiduLlm.TopP;
         }
 
         return request;
@@ -332,4 +333,21 @@ internal sealed class BaiduStreamChoice
 internal sealed class BaiduStreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class BaiduChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<BaiduRequestMessage> Messages { get; set; } = new();
+    public int? MaxOutputTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+}
+
+internal sealed class BaiduRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
 }

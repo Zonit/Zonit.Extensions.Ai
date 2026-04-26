@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
 
 namespace Zonit.Extensions.Ai;
@@ -25,7 +26,8 @@ public static partial class JsonListParser
     /// <param name="response">Raw AI response string.</param>
     /// <param name="options">Optional JSON serializer options.</param>
     /// <returns>List of parsed items.</returns>
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for List<T>.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     public static List<T> ParseList<T>(string response, JsonSerializerOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(response))
@@ -64,7 +66,8 @@ public static partial class JsonListParser
     /// <summary>
     /// Tries to parse AI response as a list.
     /// </summary>
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for List<T>.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     public static bool TryParseList<T>(string response, [NotNullWhen(true)] out List<T>? result, JsonSerializerOptions? options = null)
     {
         try
@@ -89,14 +92,24 @@ public static partial class JsonListParser
 
         var trimmed = RemoveMarkdownCodeBlocks(response.Trim());
 
-        // Try JSON array of strings first
+        // Try JSON array of strings first (AOT-safe via JsonDocument).
         if (trimmed.StartsWith('['))
         {
             try
             {
-                var items = JsonSerializer.Deserialize<List<string>>(trimmed);
-                if (items is not null)
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind == JsonValueKind.Array)
+                {
+                    var items = new List<string>(doc.RootElement.GetArrayLength());
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        if (el.ValueKind == JsonValueKind.String)
+                            items.Add(el.GetString() ?? string.Empty);
+                        else
+                            items.Add(el.GetRawText());
+                    }
                     return items;
+                }
             }
             catch { /* Continue with text parsing */ }
         }
@@ -130,13 +143,37 @@ public static partial class JsonListParser
         return match.Success ? match.Groups[1].Value.Trim() : text;
     }
 
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for List<T>.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     private static bool TryParseJsonArray<T>(string json, JsonSerializerOptions options, [NotNullWhen(true)] out List<T>? result)
     {
         result = null;
 
         if (!json.StartsWith('['))
             return false;
+
+        // Prefer AOT-safe binding for List<T> if registered.
+        if (AiJsonTypeInfoResolver.Instance.GetTypeInfo(typeof(List<T>), options) is JsonTypeInfo<List<T>> listInfo)
+        {
+            try
+            {
+                result = JsonSerializer.Deserialize(json, listInfo);
+                return result is not null;
+            }
+            catch
+            {
+                var cleaned = CleanJsonArray(json);
+                try
+                {
+                    result = JsonSerializer.Deserialize(cleaned, listInfo);
+                    return result is not null;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+        }
 
         try
         {
@@ -159,13 +196,16 @@ public static partial class JsonListParser
         }
     }
 
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for List<T>.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     private static bool TryParseWrappedList<T>(string json, JsonSerializerOptions options, [NotNullWhen(true)] out List<T>? result)
     {
         result = null;
 
         if (!json.StartsWith('{'))
             return false;
+
+        var listInfo = AiJsonTypeInfoResolver.Instance.GetTypeInfo(typeof(List<T>), options) as JsonTypeInfo<List<T>>;
 
         try
         {
@@ -178,7 +218,9 @@ public static partial class JsonListParser
             {
                 if (root.TryGetProperty(field, out var prop) && prop.ValueKind == JsonValueKind.Array)
                 {
-                    result = JsonSerializer.Deserialize<List<T>>(prop.GetRawText(), options);
+                    result = listInfo is not null
+                        ? JsonSerializer.Deserialize(prop.GetRawText(), listInfo)
+                        : JsonSerializer.Deserialize<List<T>>(prop.GetRawText(), options);
                     return result is not null;
                 }
             }
@@ -188,7 +230,9 @@ public static partial class JsonListParser
             {
                 if (prop.Value.ValueKind == JsonValueKind.Array)
                 {
-                    result = JsonSerializer.Deserialize<List<T>>(prop.Value.GetRawText(), options);
+                    result = listInfo is not null
+                        ? JsonSerializer.Deserialize(prop.Value.GetRawText(), listInfo)
+                        : JsonSerializer.Deserialize<List<T>>(prop.Value.GetRawText(), options);
                     return result is not null;
                 }
             }
@@ -198,7 +242,8 @@ public static partial class JsonListParser
         return false;
     }
 
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for the element type.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     private static List<T> ParsePrimitiveList<T>(string text, JsonSerializerOptions options)
     {
         var result = new List<T>();
@@ -208,11 +253,16 @@ public static partial class JsonListParser
             ? IntegerPattern()
             : NumberPattern();
 
+        // Primitives have built-in JsonTypeInfo through JsonMetadataServices defaults.
+        var elementInfo = AiJsonTypeInfoResolver.Instance.GetTypeInfo(typeof(T), options) as JsonTypeInfo<T>;
+
         foreach (Match match in pattern.Matches(text))
         {
             try
             {
-                var value = JsonSerializer.Deserialize<T>($"{match.Value}", options);
+                var value = elementInfo is not null
+                    ? JsonSerializer.Deserialize(match.Value, elementInfo)
+                    : JsonSerializer.Deserialize<T>(match.Value, options);
                 if (value is not null)
                     result.Add(value);
             }

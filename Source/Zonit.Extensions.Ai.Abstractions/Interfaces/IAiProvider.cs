@@ -21,9 +21,7 @@ public interface IAiProvider
     /// <summary>
     /// Generates a structured response from a typed prompt.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<Result<TResponse>> GenerateAsync<TResponse>(
+    Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default);
@@ -31,8 +29,6 @@ public interface IAiProvider
     /// <summary>
     /// Generates a text response from a simple string prompt.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<string>> GenerateAsync(
         ILlm llm,
         string prompt,
@@ -62,9 +58,7 @@ public interface IAiProvider
     /// Both can be supplied.
     /// </para>
     /// </remarks>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<Result<TResponse>> ChatAsync<TResponse>(
+    Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -76,8 +70,6 @@ public interface IAiProvider
     /// <summary>
     /// Plain-text overload. <paramref name="systemPrompt"/> is the system instruction (may be empty).
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<string>> ChatAsync(
         ILlm llm,
         string systemPrompt,
@@ -95,8 +87,6 @@ public interface IAiProvider
     /// API — pass <see cref="ChatAsync{TResponse}"/> with tools for tool-driven
     /// runs (and use <c>GenerateStreamAsync</c> for fine-grained agent events).
     /// </remarks>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
@@ -106,8 +96,6 @@ public interface IAiProvider
     /// <summary>
     /// Plain-text overload of <see cref="ChatStreamAsync(ILlm, IPrompt, IReadOnlyList{ChatMessage}, CancellationToken)"/>.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         string systemPrompt,
@@ -165,8 +153,6 @@ public interface IAiProvider
     /// <summary>
     /// Generates text embeddings (vector representation).
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<float[]>> GenerateAsync(
         IEmbeddingLlm llm,
         string input,
@@ -179,8 +165,6 @@ public interface IAiProvider
     /// <summary>
     /// Transcribes audio to text.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<Result<string>> GenerateAsync(
         IAudioLlm llm,
         Asset audioFile,
@@ -194,8 +178,6 @@ public interface IAiProvider
     /// <summary>
     /// Streams a text response token by token.
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     IAsyncEnumerable<string> StreamAsync(
         ILlm llm,
         string prompt,
@@ -222,9 +204,7 @@ public interface IAiProvider
     /// </param>
     /// <param name="options">Per-call overrides (iterations, timeout, cost cap, allow-list, <c>OnToolCall</c>).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    Task<ResultAgent<TResponse>> GenerateAsync<TResponse>(
+    Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -235,8 +215,6 @@ public interface IAiProvider
     /// <summary>
     /// Agent-mode overload for plain-text output (no structured response type).
     /// </summary>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
     Task<ResultAgent<string>> GenerateAsync(
         IAgentLlm llm,
         string prompt,
@@ -259,9 +237,7 @@ public interface IAiProvider
     /// <see cref="AgentFinalTextEvent"/> + <see cref="AgentCompletedEvent{TResponse}"/>
     /// (success) or <see cref="AgentFailedEvent"/> (failure).
     /// </remarks>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -282,9 +258,7 @@ public interface IAiProvider
     /// <see cref="AgentToolCallCompletedEvent"/> for tool activity (with parallel
     /// fan-out preserved).
     /// </remarks>
-    [RequiresUnreferencedCode("JSON serialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization might require runtime code generation.")]
-    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,

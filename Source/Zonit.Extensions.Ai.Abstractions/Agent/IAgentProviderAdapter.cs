@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
@@ -30,5 +32,7 @@ public interface IAgentProviderAdapter
     /// Opens a new agent session. The caller disposes the returned instance
     /// after <c>GenerateAsync</c> completes (or the cancellation token fires).
     /// </summary>
+    [RequiresUnreferencedCode("Agent session may invoke JsonSchemaGenerator.Generate via the runner.")]
+    [RequiresDynamicCode("Agent session may invoke JsonSchemaGenerator.Generate via the runner.")]
     IAgentSession BeginSession(AgentSessionContext context);
 }

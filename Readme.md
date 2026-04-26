@@ -1406,13 +1406,91 @@ services.AddAiOpenAi()
 
 ## AOT and Trimming
 
-This library uses reflection for:
-- Scriban templating (property discovery)
-- JSON serialization (response parsing)
+**Status: AOT and trim-ready on .NET 10. Zero manual setup for consumers.**
 
-For AOT projects, use Source Generators:
-- `AiJsonSerializerGenerator` - Generates JsonSerializerContext
-- `AiPromptRegistrationGenerator` - Generates prompt registration
+The library targets `net10.0` only (Scriban 7+ unblocks AOT for templating).
+`Directory.Build.props` ships with `IsTrimmable=true`, `IsAotCompatible=true`,
+`EnableTrimAnalyzer=true` and `EnableAotAnalyzer=true` for every package, so
+violations surface at build time, not at publish.
+
+All 16 providers serialize requests **and** deserialize responses through
+their own source-generated `JsonSerializerContext`. User-defined
+`PromptBase<T>` response types are handled by an incremental source generator
+(`AiJsonTypeInfoGenerator`) that emits AOT-safe `JsonTypeInfo<T>` factories
+and registers them via a module initializer into `AiJsonTypeInfoResolver`.
+Scriban template binding is also fully AOT — `AiPromptBindingGenerator`
+emits `ScriptObject` population delegates for every concrete prompt class.
+
+### What's wired automatically
+
+- **Per-provider `JsonSerializerContext`** (one per package: `OpenAiJsonContext`,
+  `AnthropicJsonContext`, `GoogleJsonContext`, `XJsonContext`, `MistralJsonContext`,
+  `DeepSeekJsonContext`, `GroqJsonContext`, `TogetherJsonContext`,
+  `FireworksJsonContext`, `CohereJsonContext`, `PerplexityJsonContext`,
+  `AlibabaJsonContext`, `BaiduJsonContext`, `ZhipuJsonContext`,
+  `MoonshotJsonContext`, `YiJsonContext`) — covers both **request** DTOs and
+  **response** DTOs.
+- **Strongly-typed request DTOs** for every provider — no more
+  `Dictionary<string, object>` or anonymous types on the payload path. This
+  applies to both single-shot generation and **agent sessions** (`OpenAiAgentSession`,
+  `AnthropicAgentSession`, `GoogleAgentSession`, `XAgentSession`).
+- **MCP client** (`McpClient`) builds JSON-RPC envelopes via `Utf8JsonWriter`
+  — no anonymous types, no `JsonOptions` on the wire.
+- **Agent runner final-answer parsing** routes through `JsonResponseParser.Parse<T>`
+  → `AiJsonTypeInfoResolver` → user-type source-generated `JsonTypeInfo<T>`.
+- **`AiJsonTypeInfoResolver`** chained into each provider's
+  `JsonSerializerOptions.TypeInfoResolverChain` so user `PromptBase<T>` types
+  bind to source-generated metadata at runtime.
+- **`PromptBindingRegistry`** populated at module-init by
+  `AiPromptBindingGenerator` — Scriban template variables are resolved via
+  emitted delegates instead of reflection (Scriban 7+ runtime is AOT-safe).
+- **`AiProviderRegistrationGenerator`** / `AiToolRegistrationGenerator` emit
+  startup-time provider/tool registration without reflection scanning.
+
+### Remaining reflection touchpoints
+
+All gated behind `[RequiresUnreferencedCode]` / `[RequiresDynamicCode]` so
+the trim/AOT analyzers warn on the **single** public entry point that
+exercises them, not transitively across the codebase:
+
+- **`JsonSchemaGenerator.Generate(Type)`** — reflection over `TResponse` to
+  emit the JSON schema sent to the model (json_schema response_format /
+  Gemini `responseSchema` / Anthropic `input_schema`). The response type
+  is propagated with `[DynamicallyAccessedMembers(PublicProperties)]` from
+  `IPrompt<TResponse>`, so trimming preserves the necessary members. A
+  build-time schema generator is the next planned reduction.
+- **`FunctionTool.Create(string, string, object)`** and
+  `FileSearchTool.Filters` — accept user-supplied `object` payloads and
+  funnel them through `JsonSerializer.SerializeToElement`. Use the
+  `JsonElement` overloads when AOT matters.
+- **`ToolBase<TInput, TOutput>`** — generic deserialization of model-supplied
+  arguments into `TInput`. `TInput` carries
+  `[DynamicallyAccessedMembers(PublicProperties)]`.
+- **`JsonResponseParser.Parse<T>` / `JsonListParser` reflection fallback** —
+  only triggered when a `TResponse` wasn't picked up by
+  `Zonit.Extensions.Ai.SourceGenerators` (e.g. types from an assembly that
+  doesn't reference the generator package). The AOT-safe path through
+  `AiJsonTypeInfoResolver` is preferred whenever a binding is available.
+- **Per-provider `ParseResponse<TResponse>`** — same story: lit only when
+  the source generator hasn't emitted a binding for the user's
+  `TResponse`. Annotated.
+
+### Publishing with NativeAOT
+
+Enable `<PublishAot>true</PublishAot>` in your application's `csproj` and
+publish:
+
+```bash
+dotnet publish -c Release -r win-x64
+```
+
+The Example project ships with `PublishAot=true` and `InvariantGlobalization=true`
+as a working reference.
+
+### Targeting
+
+Single TFM: **`net10.0`**. Earlier frameworks were dropped to take advantage of
+Scriban 7+ AOT support and the matured trim/AOT analyzer story in .NET 10.
 
 ---
 

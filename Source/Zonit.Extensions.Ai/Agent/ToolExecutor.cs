@@ -243,13 +243,17 @@ internal sealed class ToolExecutor
 
     private static JsonElement BuildErrorPayload(string message, string errorType)
     {
-        var payload = new
+        // Hand-rolled JSON to avoid reflection-based serialization of an
+        // anonymous type (AOT-safe).
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
         {
-            error = message,
-            errorType,
-        };
-        var json = JsonSerializer.Serialize(payload);
-        using var doc = JsonDocument.Parse(json);
+            writer.WriteStartObject();
+            writer.WriteString("error", message);
+            writer.WriteString("errorType", errorType);
+            writer.WriteEndObject();
+        }
+        using var doc = JsonDocument.Parse(stream.ToArray());
         return doc.RootElement.Clone();
     }
 }

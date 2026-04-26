@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Zonit.Extensions;
@@ -20,8 +17,8 @@ namespace Zonit.Extensions.Ai.Google;
 /// Tool calls are received as <c>functionCall</c> parts in the model output;
 /// tool results are sent back as user-role <c>functionResponse</c> parts.
 /// </remarks>
-[RequiresUnreferencedCode("JSON serialization requires types that cannot be statically analyzed.")]
-[RequiresDynamicCode("JSON serialization requires runtime code generation.")]
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 internal sealed class GoogleAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
@@ -29,19 +26,11 @@ internal sealed class GoogleAgentSession : IAgentSession
     private readonly ILogger _logger;
     private readonly GoogleOptions _options;
 
-    private readonly List<object> _contents = new();
+    private readonly List<GeminiRequestContent> _contents = new();
     // Cache of call_id → name; Gemini does not surface tool_call_id in functionCall —
     // the runner manufactures Ids per-call so we map them back to function names here.
     private readonly Dictionary<string, string> _pendingCalls = new(StringComparer.Ordinal);
     private int _turnIndex;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     public GoogleAgentSession(HttpClient httpClient, IOptions<GoogleOptions> options, AgentSessionContext context, ILogger logger)
     {
@@ -51,6 +40,8 @@ internal sealed class GoogleAgentSession : IAgentSession
         _logger = logger;
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     public async Task<AgentTurn> RunTurnAsync(
         IReadOnlyList<ToolResult>? toolResults,
         CancellationToken cancellationToken)
@@ -69,7 +60,7 @@ internal sealed class GoogleAgentSession : IAgentSession
         }
 
         var request = BuildRequest();
-        var payload = JsonSerializer.Serialize(request, JsonOptions);
+        var payload = JsonSerializer.Serialize(request, GoogleJsonContext.Default.GeminiRequest);
         _logger.LogDebug("Google agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         var endpoint = $"/v1beta/models/{_context.Llm.Name}:generateContent?key={_options.ApiKey}";
@@ -104,38 +95,38 @@ internal sealed class GoogleAgentSession : IAgentSession
             {
                 case User u:
                 {
-                    var parts = new List<object>();
+                    var parts = new List<GeminiPartItem>();
                     if (!sessionFilesAttached && promptFiles is not null)
                     {
                         AppendInlineFiles(parts, promptFiles);
                         sessionFilesAttached = true;
                     }
                     if (u.Files is not null) AppendInlineFiles(parts, u.Files);
-                    parts.Add(new { text = u.Text });
-                    _contents.Add(new { role = "user", parts });
+                    parts.Add(new GeminiPartItem { Text = u.Text });
+                    _contents.Add(new GeminiRequestContent { Role = "user", Parts = parts });
                     endsOnUserOrTool = true;
                     break;
                 }
                 case Assistant a:
-                    _contents.Add(new
+                    _contents.Add(new GeminiRequestContent
                     {
-                        role = "model",
-                        parts = new object[] { new { text = a.Text } },
+                        Role = "model",
+                        Parts = new List<GeminiPartItem> { new() { Text = a.Text } },
                     });
                     endsOnUserOrTool = false;
                     break;
                 case Tool t:
-                    _contents.Add(new
+                    _contents.Add(new GeminiRequestContent
                     {
-                        role = "user",
-                        parts = new object[]
+                        Role = "user",
+                        Parts = new List<GeminiPartItem>
                         {
-                            new
+                            new()
                             {
-                                functionResponse = new
+                                FunctionResponse = new GeminiFunctionResponse
                                 {
-                                    name = t.Name,
-                                    response = JsonSerializer.Deserialize<JsonElement>(t.ResultJson),
+                                    Name = t.Name,
+                                    Response = JsonSerializer.Deserialize(t.ResultJson, GoogleJsonContext.Default.JsonElement),
                                 },
                             },
                         },
@@ -148,90 +139,94 @@ internal sealed class GoogleAgentSession : IAgentSession
         return endsOnUserOrTool;
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     private void AppendInitialUserMessage()
     {
         var prompt = _context.Prompt;
-        var parts = new List<object>();
+        var parts = new List<GeminiPartItem>();
         if (prompt.Files is not null) AppendInlineFiles(parts, prompt.Files);
 
         var text = prompt.Text;
         if (_context.ResponseType is { } responseType)
         {
-            // Gemini does NOT mix function-calling tools with native structured outputs.
-            // Steer with a schema hint in the user text instead.
             var schema = JsonSchemaGenerator.Generate(responseType);
             text += "\n\nWhen finished, respond with a SINGLE JSON object (no markdown fences) matching:\n"
                  + schema.ToString();
         }
-        parts.Add(new { text });
-        _contents.Add(new { role = "user", parts });
+        parts.Add(new GeminiPartItem { Text = text });
+        _contents.Add(new GeminiRequestContent { Role = "user", Parts = parts });
     }
 
     private void AppendToolResultsAsFunctionResponses(IReadOnlyList<ToolResult> toolResults)
     {
-        var parts = new List<object>(toolResults.Count);
+        var parts = new List<GeminiPartItem>(toolResults.Count);
         foreach (var r in toolResults)
         {
             var name = _pendingCalls.TryGetValue(r.CallId, out var n) ? n : r.CallId;
-            parts.Add(new
+            parts.Add(new GeminiPartItem
             {
-                functionResponse = new
+                FunctionResponse = new GeminiFunctionResponse
                 {
-                    name,
-                    response = JsonSerializer.Deserialize<JsonElement>(r.Output.GetRawText()),
+                    Name = name,
+                    Response = JsonSerializer.Deserialize(r.Output.GetRawText(), GoogleJsonContext.Default.JsonElement),
                 },
             });
         }
-        _contents.Add(new { role = "user", parts });
+        _contents.Add(new GeminiRequestContent { Role = "user", Parts = parts });
     }
 
-    private static void AppendInlineFiles(List<object> parts, IReadOnlyList<Asset> files)
+    private static void AppendInlineFiles(List<GeminiPartItem> parts, IReadOnlyList<Asset> files)
     {
         foreach (var file in files.Where(f => f.IsImage))
-            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+            parts.Add(new GeminiPartItem { InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 } });
         foreach (var file in files.Where(f => f.IsDocument && f.MediaType == Asset.MimeType.ApplicationPdf))
-            parts.Add(new { inlineData = new { mimeType = file.MediaType.Value, data = file.Base64 } });
+            parts.Add(new GeminiPartItem { InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 } });
     }
 
-    private Dictionary<string, object> BuildRequest()
+    private GeminiRequest BuildRequest()
     {
         var llm = _context.Llm;
         var prompt = _context.Prompt;
 
-        var config = new Dictionary<string, object> { ["maxOutputTokens"] = llm.MaxTokens };
+        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
         if (llm is GoogleBase g)
         {
-            if (g.Temperature < 1.0) config["temperature"] = g.Temperature;
-            if (g.TopP < 1.0) config["topP"] = g.TopP;
+            if (g.Temperature < 1.0) config.Temperature = g.Temperature;
+            if (g.TopP < 1.0) config.TopP = g.TopP;
         }
 
-        var request = new Dictionary<string, object>
+        var request = new GeminiRequest
         {
-            ["contents"] = _contents,
-            ["generationConfig"] = config,
+            Contents = _contents,
+            GenerationConfig = config,
         };
 
         if (!string.IsNullOrEmpty(prompt.System))
-            request["systemInstruction"] = new { parts = new[] { new { text = prompt.System! } } };
+        {
+            request.SystemInstruction = new GeminiSystemInstruction
+            {
+                Parts = new List<GeminiPartItem> { new() { Text = prompt.System! } },
+            };
+        }
 
-        // Tools: native FunctionTool from llm.Tools + custom agent tools.
-        var declarations = new List<object>();
+        var declarations = new List<GeminiFunctionDeclaration>();
         if (llm.Tools is { Length: > 0 } native)
         {
             foreach (var t in native.OfType<FunctionTool>())
-                declarations.Add(new { name = t.Name, description = t.Description, parameters = t.Parameters });
+                declarations.Add(new GeminiFunctionDeclaration { Name = t.Name, Description = t.Description, Parameters = t.Parameters });
         }
         foreach (var custom in _context.Tools)
         {
-            declarations.Add(new
+            declarations.Add(new GeminiFunctionDeclaration
             {
-                name = custom.Name,
-                description = custom.Description,
-                parameters = custom.InputSchema,
+                Name = custom.Name,
+                Description = custom.Description,
+                Parameters = custom.InputSchema,
             });
         }
         if (declarations.Count > 0)
-            request["tools"] = new[] { new { functionDeclarations = declarations } };
+            request.Tools = new List<GeminiToolGroup> { new() { FunctionDeclarations = declarations } };
 
         return request;
     }
@@ -242,7 +237,7 @@ internal sealed class GoogleAgentSession : IAgentSession
         var requestId = root.TryGetProperty("responseId", out var idEl) ? idEl.GetString() : null;
 
         var toolCalls = new List<PendingToolCall>();
-        var modelParts = new List<object>();
+        var modelParts = new List<GeminiPartItem>();
         var finalTextBuilder = new StringBuilder();
 
         if (root.TryGetProperty("candidates", out var cands) && cands.ValueKind == JsonValueKind.Array)
@@ -262,9 +257,6 @@ internal sealed class GoogleAgentSession : IAgentSession
                             ? a.Clone()
                             : JsonDocument.Parse("{}").RootElement.Clone();
 
-                        // Manufacture a stable call_id since Gemini doesn't supply one
-                        // (tool-name + ordinal collision is acceptable: the runner pairs
-                        // results with calls in-order).
                         var callId = $"call_{toolCalls.Count}_{name}";
                         _pendingCalls[callId] = name;
 
@@ -275,21 +267,23 @@ internal sealed class GoogleAgentSession : IAgentSession
                             Arguments = args,
                         });
 
-                        modelParts.Add(new { functionCall = new { name, args = JsonSerializer.Deserialize<JsonElement>(args.GetRawText()) } });
+                        modelParts.Add(new GeminiPartItem
+                        {
+                            FunctionCall = new GeminiFunctionCall { Name = name, Args = args },
+                        });
                     }
                     else if (part.TryGetProperty("text", out var text))
                     {
                         var s = text.GetString() ?? string.Empty;
                         finalTextBuilder.Append(s);
-                        modelParts.Add(new { text = s });
+                        modelParts.Add(new GeminiPartItem { Text = s });
                     }
                 }
             }
         }
 
-        // Mirror the model turn into history so the next functionResponse alternates correctly.
         if (modelParts.Count > 0)
-            _contents.Add(new { role = "model", parts = modelParts });
+            _contents.Add(new GeminiRequestContent { Role = "model", Parts = modelParts });
 
         var usage = ParseUsage(root);
 

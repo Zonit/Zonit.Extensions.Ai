@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>Zonit.Extensions.Ai.Fireworks</PackageId>
     <Title>Zonit.Extensions.Ai.Fireworks</Title>
     <Description>Fireworks AI provider for Zonit.Extensions.Ai. Fast inference for Llama, Mixtral, and custom fine-tuned models.</Description>

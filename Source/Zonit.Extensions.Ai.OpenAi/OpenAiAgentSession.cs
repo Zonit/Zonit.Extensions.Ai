@@ -1,10 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Zonit.Extensions;
 
@@ -19,8 +16,8 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// subsequent call sends only the new tool results (function_call_output items).
 /// This mirrors OpenAI's recommended pattern for tool-calling agents.
 /// </remarks>
-[RequiresUnreferencedCode("JSON serialization requires types that cannot be statically analyzed.")]
-[RequiresDynamicCode("JSON serialization requires runtime code generation.")]
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 internal sealed class OpenAiAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
@@ -33,14 +30,6 @@ internal sealed class OpenAiAgentSession : IAgentSession
     // Cache of call_id → tool name; used to build function_call_output items.
     private readonly Dictionary<string, string> _pendingCalls = new(StringComparer.Ordinal);
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-        WriteIndented = false,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public OpenAiAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
     {
         _httpClient = httpClient;
@@ -48,6 +37,8 @@ internal sealed class OpenAiAgentSession : IAgentSession
         _logger = logger;
     }
 
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     public async Task<AgentTurn> RunTurnAsync(
         IReadOnlyList<ToolResult>? toolResults,
         CancellationToken cancellationToken)
@@ -59,7 +50,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
             ? BuildInitialRequest()
             : BuildContinuationRequest(toolResults ?? Array.Empty<ToolResult>());
 
-        var payload = JsonSerializer.Serialize(request, JsonOptions);
+        var payload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
         _logger.LogDebug("OpenAI agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         using var content = new StringContent(payload, Encoding.UTF8, "application/json");
@@ -77,94 +68,96 @@ internal sealed class OpenAiAgentSession : IAgentSession
         return ParseResponse(body, sw.Elapsed);
     }
 
-    private Dictionary<string, object> BuildInitialRequest()
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private OpenAiResponsesRequest BuildInitialRequest()
     {
         var llm = _context.Llm;
-        var request = new Dictionary<string, object>
+        var request = new OpenAiResponsesRequest
         {
-            ["model"] = llm.Name,
-            ["max_output_tokens"] = llm.MaxTokens,
+            Model = llm.Name,
+            MaxOutputTokens = llm.MaxTokens,
         };
 
         var prompt = _context.Prompt;
         if (!string.IsNullOrEmpty(prompt.System))
-            request["instructions"] = prompt.System!;
+            request.Instructions = prompt.System!;
 
-        var input = new List<object>();
+        var input = new List<OpenAiInputItem>();
         var seededFromChat = SeedInitialChatInto(input, prompt.Files);
 
-        // If the chat history didn't already end on a user turn, append the prompt's
-        // own initial user message (this is the classic GenerateAsync flow, plus a
-        // fall-through for chat[] sequences that ended on Assistant/Tool messages
-        // — though for OpenAI Responses API a Tool result *is* a valid last input).
         if (!seededFromChat)
         {
-            var userContent = new List<object> { new { type = "input_text", text = prompt.Text } };
+            var userContent = new List<OpenAiContentPart>
+            {
+                new() { Type = "input_text", Text = prompt.Text }
+            };
 
             if (prompt.Files is not null)
             {
                 foreach (var file in prompt.Files)
                 {
                     if (file.IsImage)
-                        userContent.Add(new { type = "input_image", image_url = file.DataUrl });
+                        userContent.Add(new OpenAiContentPart { Type = "input_image", ImageUrl = file.DataUrl });
                     else if (file.IsDocument)
-                        userContent.Add(new { type = "input_file", file_data = file.DataUrl, filename = file.OriginalName.Value });
+                        userContent.Add(new OpenAiContentPart { Type = "input_file", FileData = file.DataUrl, Filename = file.OriginalName.Value });
                 }
             }
 
-            input.Add(new { role = "user", content = userContent });
+            input.Add(new OpenAiInputItem { Role = "user", Content = userContent });
         }
 
-        request["input"] = input;
+        request.Input = input;
 
-        // Structured output schema.
         if (_context.ResponseType is { } responseType)
         {
-            var schema = JsonSchemaGenerator.Generate(responseType);
-            request["text"] = new Dictionary<string, object>
+            request.Text = new OpenAiTextConfig
             {
-                ["format"] = new Dictionary<string, object>
+                Format = new OpenAiTextFormat
                 {
-                    ["type"] = "json_schema",
-                    ["name"] = "response",
-                    ["description"] = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
-                    ["schema"] = schema,
-                    ["strict"] = true,
+                    Type = "json_schema",
+                    Name = "response",
+                    Description = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true,
                 },
             };
         }
 
-        // Model-specific settings.
         switch (llm)
         {
             case OpenAiChatBase chat:
-                if (chat.Temperature < 1.0) request["temperature"] = chat.Temperature;
-                if (chat.TopP < 1.0) request["top_p"] = chat.TopP;
+                if (chat.Temperature < 1.0) request.Temperature = chat.Temperature;
+                if (chat.TopP < 1.0) request.TopP = chat.TopP;
                 break;
 
             case OpenAiReasoningBase reasoning:
-                var r = new Dictionary<string, object>();
+                var r = new OpenAiReasoningConfig();
+                var hasReasoning = false;
                 if (((IReasoningLlm)reasoning).Reason.HasValue)
-                    r["effort"] = ((IReasoningLlm)reasoning).Reason!.Value.ToString().ToLowerInvariant();
+                {
+                    r.Effort = ((IReasoningLlm)reasoning).Reason!.Value.ToString().ToLowerInvariant();
+                    hasReasoning = true;
+                }
                 if (((IReasoningLlm)reasoning).ReasonSummary.HasValue)
-                    r["summary"] = ((IReasoningLlm)reasoning).ReasonSummary!.Value.ToString().ToLowerInvariant();
-                if (r.Count > 0) request["reasoning"] = r;
+                {
+                    r.Summary = ((IReasoningLlm)reasoning).ReasonSummary!.Value.ToString().ToLowerInvariant();
+                    hasReasoning = true;
+                }
+                if (hasReasoning) request.Reasoning = r;
 
                 if (((IReasoningLlm)reasoning).OutputVerbosity.HasValue)
                 {
-                    if (!request.ContainsKey("text"))
-                        request["text"] = new Dictionary<string, object>();
-                    if (request["text"] is Dictionary<string, object> textCfg)
-                        textCfg["verbosity"] = ((IReasoningLlm)reasoning).OutputVerbosity!.Value.ToString().ToLowerInvariant();
+                    request.Text ??= new OpenAiTextConfig();
+                    request.Text.Verbosity = ((IReasoningLlm)reasoning).OutputVerbosity!.Value.ToString().ToLowerInvariant();
                 }
                 break;
         }
 
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
-            request["store"] = true;
+            request.Store = true;
 
-        // Tools: native (ILlm.Tools) + custom (context.Tools).
-        var tools = new List<object>();
+        var tools = new List<OpenAiToolItem>();
         if (llm.Tools is { Length: > 0 } native)
         {
             foreach (var t in native)
@@ -172,42 +165,42 @@ internal sealed class OpenAiAgentSession : IAgentSession
         }
         foreach (var custom in _context.Tools)
         {
-            tools.Add(new
+            tools.Add(new OpenAiToolItem
             {
-                type = "function",
-                name = custom.Name,
-                description = custom.Description,
-                parameters = custom.InputSchema,
-                strict = true,
+                Type = "function",
+                Name = custom.Name,
+                Description = custom.Description,
+                Parameters = custom.InputSchema,
+                Strict = true,
             });
         }
         if (tools.Count > 0)
-            request["tools"] = tools;
+            request.Tools = tools;
 
         return request;
     }
 
-    private Dictionary<string, object> BuildContinuationRequest(IReadOnlyList<ToolResult> toolResults)
+    private OpenAiResponsesRequest BuildContinuationRequest(IReadOnlyList<ToolResult> toolResults)
     {
         if (_previousResponseId is null)
             throw new InvalidOperationException("Continuation requested before initial turn completed.");
 
-        var input = new List<object>(toolResults.Count);
+        var input = new List<OpenAiInputItem>(toolResults.Count);
         foreach (var result in toolResults)
         {
-            input.Add(new
+            input.Add(new OpenAiInputItem
             {
-                type = "function_call_output",
-                call_id = result.CallId,
-                output = result.Output.GetRawText(),
+                Type = "function_call_output",
+                CallId = result.CallId,
+                Output = result.Output.GetRawText(),
             });
         }
 
-        return new Dictionary<string, object>
+        return new OpenAiResponsesRequest
         {
-            ["model"] = _context.Llm.Name,
-            ["previous_response_id"] = _previousResponseId,
-            ["input"] = input,
+            Model = _context.Llm.Name,
+            PreviousResponseId = _previousResponseId,
+            Input = input,
         };
     }
 
@@ -217,7 +210,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
     /// user-role message (or a tool result) so the caller does not need to append
     /// the prompt's own initial user turn.
     /// </summary>
-    private bool SeedInitialChatInto(List<object> input, IReadOnlyList<Asset>? promptFiles)
+    private bool SeedInitialChatInto(List<OpenAiInputItem> input, IReadOnlyList<Asset>? promptFiles)
     {
         var chat = _context.InitialChat;
         if (chat is null || chat.Count == 0) return false;
@@ -231,31 +224,34 @@ internal sealed class OpenAiAgentSession : IAgentSession
             {
                 case User u:
                 {
-                    var userContent = new List<object> { new { type = "input_text", text = u.Text } };
+                    var userContent = new List<OpenAiContentPart>
+                    {
+                        new() { Type = "input_text", Text = u.Text }
+                    };
                     if (!sessionFilesAttached && promptFiles is not null)
                     {
                         AppendFiles(userContent, promptFiles);
                         sessionFilesAttached = true;
                     }
                     if (u.Files is not null) AppendFiles(userContent, u.Files);
-                    input.Add(new { role = "user", content = userContent });
+                    input.Add(new OpenAiInputItem { Role = "user", Content = userContent });
                     endsOnUserOrTool = true;
                     break;
                 }
                 case Assistant a:
-                    input.Add(new
+                    input.Add(new OpenAiInputItem
                     {
-                        role = "assistant",
-                        content = new object[] { new { type = "output_text", text = a.Text } },
+                        Role = "assistant",
+                        Content = new List<OpenAiContentPart> { new() { Type = "output_text", Text = a.Text } },
                     });
                     endsOnUserOrTool = false;
                     break;
                 case Tool t:
-                    input.Add(new
+                    input.Add(new OpenAiInputItem
                     {
-                        type = "function_call_output",
-                        call_id = t.ToolCallId,
-                        output = t.ResultJson,
+                        Type = "function_call_output",
+                        CallId = t.ToolCallId,
+                        Output = t.ResultJson,
                     });
                     endsOnUserOrTool = true;
                     break;
@@ -265,34 +261,34 @@ internal sealed class OpenAiAgentSession : IAgentSession
         return endsOnUserOrTool;
     }
 
-    private static void AppendFiles(List<object> content, IReadOnlyList<Asset> files)
+    private static void AppendFiles(List<OpenAiContentPart> content, IReadOnlyList<Asset> files)
     {
         foreach (var file in files)
         {
             if (file.IsImage)
-                content.Add(new { type = "input_image", image_url = file.DataUrl });
+                content.Add(new OpenAiContentPart { Type = "input_image", ImageUrl = file.DataUrl });
             else if (file.IsDocument)
-                content.Add(new { type = "input_file", file_data = file.DataUrl, filename = file.OriginalName.Value });
+                content.Add(new OpenAiContentPart { Type = "input_file", FileData = file.DataUrl, Filename = file.OriginalName.Value });
         }
     }
 
-    private static object BuildNativeTool(IToolBase tool) => tool switch
+    private static OpenAiToolItem BuildNativeTool(IToolBase tool) => tool switch
     {
-        FunctionTool f => new
+        FunctionTool f => new OpenAiToolItem
         {
-            type = "function",
-            name = f.Name,
-            description = f.Description,
-            parameters = f.Parameters,
-            strict = f.Strict,
+            Type = "function",
+            Name = f.Name,
+            Description = f.Description,
+            Parameters = f.Parameters,
+            Strict = f.Strict,
         },
-        WebSearchTool w => new
+        WebSearchTool w => new OpenAiToolItem
         {
-            type = "web_search",
-            search_context_size = w.ContextSize.ToString().ToLowerInvariant(),
+            Type = "web_search",
+            SearchContextSize = w.ContextSize.ToString().ToLowerInvariant(),
         },
-        CodeInterpreterTool => new { type = "code_interpreter" },
-        _ => new { type = "unknown" },
+        CodeInterpreterTool => new OpenAiToolItem { Type = "code_interpreter" },
+        _ => new OpenAiToolItem { Type = "unknown" },
     };
 
     private AgentTurn ParseResponse(string body, TimeSpan duration)

@@ -1,7 +1,7 @@
 <Project>
   <!-- Common NuGet Package Metadata for all Zonit.Extensions.Ai packages -->
   <PropertyGroup>
-    <Version>1.50.0</Version>
+    <Version>2.0.0</Version>
     <Authors>Zonit</Authors>
     <Company>Zonit</Company>
     <Product>Zonit.Extensions.Ai</Product>
@@ -26,11 +26,14 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     
-    <!-- AOT and Trimming support -->
-    <!-- This library uses reflection for JSON serialization and template rendering. -->
-    <!-- AOT compilation is not fully supported. Use source generators for AOT projects. -->
-    <IsTrimmable>false</IsTrimmable>
-    <IsAotCompatible>false</IsAotCompatible>
+    <!-- AOT and Trimming support (net10.0 only). SourceGenerators (netstandard2.0) opt-out below. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+
+    <!-- Suppress the "you're using a .NET preview SDK" info banner. -->
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
   </PropertyGroup>
   
   <!-- Language settings -->

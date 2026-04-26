@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Fireworks;
 /// Fireworks AI provider implementation.
 /// Uses OpenAI-compatible API with fast inference.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("fireworks")]
 public sealed class FireworksProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class FireworksProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            FireworksJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public FireworksProvider(
@@ -51,9 +58,7 @@ public sealed class FireworksProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is FireworksBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class FireworksProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, FireworksJsonContext.Default.FireworksChatRequest);
 
         _logger.LogDebug("Fireworks request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class FireworksProvider : IModelProvider
             throw new HttpRequestException($"Fireworks API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var fireworksResponse = JsonSerializer.Deserialize<FireworksResponse>(responseJson, JsonOptions)!;
+        var fireworksResponse = JsonSerializer.Deserialize(responseJson, FireworksJsonContext.Default.FireworksResponse)!;
 
         var textContent = fireworksResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -144,17 +149,15 @@ public sealed class FireworksProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, FireworksJsonContext.Default.FireworksChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/inference/v1/chat/completions") { Content = content };
@@ -173,7 +176,7 @@ public sealed class FireworksProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<FireworksStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, FireworksJsonContext.Default.FireworksStreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -203,42 +206,41 @@ public sealed class FireworksProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static FireworksChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<FireworksRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new FireworksRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new FireworksRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new FireworksChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
         };
 
         if (llm is FireworksBase fireworksLlm)
         {
             if (fireworksLlm.Temperature < 1.0)
-                request["temperature"] = fireworksLlm.Temperature;
+                request.Temperature = fireworksLlm.Temperature;
             if (fireworksLlm.TopP < 1.0)
-                request["top_p"] = fireworksLlm.TopP;
+                request.TopP = fireworksLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new FireworksResponseFormat
             {
-                type = "json_object",
-                schema = JsonSchemaGenerator.Generate(responseType)
+                Type = "json_object",
+                Schema = JsonSchemaGenerator.Generate(responseType)
             };
         }
 
@@ -342,4 +344,28 @@ internal sealed class FireworksStreamChoice
 internal sealed class FireworksStreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class FireworksChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<FireworksRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public FireworksResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class FireworksRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class FireworksResponseFormat
+{
+    public string Type { get; set; } = "";
+    public JsonElement Schema { get; set; }
 }

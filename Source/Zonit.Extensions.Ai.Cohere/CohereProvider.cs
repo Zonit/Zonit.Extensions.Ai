@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Cohere;
 /// Cohere provider implementation.
 /// Supports chat completions and embeddings.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("cohere")]
 public sealed class CohereProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class CohereProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            CohereJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public CohereProvider(
@@ -51,9 +58,7 @@ public sealed class CohereProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is CohereBase or CohereEmbeddingBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class CohereProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, CohereJsonContext.Default.CohereChatRequest);
 
         _logger.LogDebug("Cohere request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class CohereProvider : IModelProvider
             throw new HttpRequestException($"Cohere API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var cohereResponse = JsonSerializer.Deserialize<CohereResponse>(responseJson, JsonOptions)!;
+        var cohereResponse = JsonSerializer.Deserialize(responseJson, CohereJsonContext.Default.CohereResponse)!;
 
         var textContent = cohereResponse.Message?.Content?.FirstOrDefault()?.Text;
 
@@ -135,8 +140,6 @@ public sealed class CohereProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
     public async Task<Result<float[]>> EmbedAsync(
         IEmbeddingLlm llm,
         string input,
@@ -144,15 +147,15 @@ public sealed class CohereProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        var request = new
+        var request = new CohereEmbedRequest
         {
-            model = llm.Name,
-            texts = new[] { input },
-            input_type = "search_document",
-            embedding_types = new[] { "float" }
+            Model = llm.Name,
+            Texts = new List<string> { input },
+            InputType = "search_document",
+            EmbeddingTypes = new List<string> { "float" }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, CohereJsonContext.Default.CohereEmbedRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v2/embed", content, cancellationToken);
@@ -167,7 +170,7 @@ public sealed class CohereProvider : IModelProvider
             throw new HttpRequestException($"Cohere API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var embedResponse = JsonSerializer.Deserialize<CohereEmbedResponse>(responseJson, JsonOptions)!;
+        var embedResponse = JsonSerializer.Deserialize(responseJson, CohereJsonContext.Default.CohereEmbedResponse)!;
         var embedding = embedResponse.Embeddings?.Float?.FirstOrDefault()
             ?? throw new InvalidOperationException("No embeddings in Cohere response");
 
@@ -194,17 +197,15 @@ public sealed class CohereProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, CohereJsonContext.Default.CohereChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v2/chat") { Content = content };
@@ -223,7 +224,7 @@ public sealed class CohereProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<CohereStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, CohereJsonContext.Default.CohereStreamChunk);
             if (chunk?.Type == "content-delta")
             {
                 var text = chunk.Delta?.Message?.Content?.Text;
@@ -255,44 +256,43 @@ public sealed class CohereProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static CohereChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<CohereRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new CohereRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new CohereRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new CohereChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages
+            Model = llm.Name,
+            Messages = messages
         };
 
         if (llm is CohereBase cohereLlm)
         {
             if (cohereLlm.Temperature < 1.0)
-                request["temperature"] = cohereLlm.Temperature;
+                request.Temperature = cohereLlm.Temperature;
             if (cohereLlm.TopP < 1.0)
-                request["p"] = cohereLlm.TopP;
+                request.P = cohereLlm.TopP;
         }
 
         if (llm.MaxTokens > 0)
-            request["max_tokens"] = llm.MaxTokens;
+            request.MaxTokens = llm.MaxTokens;
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new CohereResponseFormat
             {
-                type = "json_object",
-                schema = JsonSchemaGenerator.Generate(responseType)
+                Type = "json_object",
+                Schema = JsonSchemaGenerator.Generate(responseType)
             };
         }
 
@@ -430,4 +430,36 @@ internal sealed class CohereDeltaMessage
 internal sealed class CohereDeltaContent
 {
     public string? Text { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class CohereChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<CohereRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? P { get; set; }
+    public bool? Stream { get; set; }
+    public CohereResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class CohereRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class CohereResponseFormat
+{
+    public string Type { get; set; } = "";
+    public JsonElement Schema { get; set; }
+}
+
+internal sealed class CohereEmbedRequest
+{
+    public string Model { get; set; } = "";
+    public List<string> Texts { get; set; } = new();
+    public string InputType { get; set; } = "";
+    public List<string> EmbeddingTypes { get; set; } = new();
 }

@@ -122,6 +122,22 @@ public class AiJsonSerializerGenerator : IIncrementalGenerator
         sb.AppendLine("    PropertyNameCaseInsensitive = true)]");
         sb.AppendLine("public partial class AiJsonSerializerContext : JsonSerializerContext");
         sb.AppendLine("{");
+        sb.AppendLine("    // ------------------------------------------------------------------");
+        sb.AppendLine("    // .NET 10 turned JsonSerializerContext.GetTypeInfo(Type) and");
+        sb.AppendLine("    // GeneratedSerializerOptions into ABSTRACT members. The System.Text.Json");
+        sb.AppendLine("    // source generator normally provides these overrides via partial-class");
+        sb.AppendLine("    // merge, but Roslyn source generators cannot observe files emitted by");
+        sb.AppendLine("    // other generators in the same compilation, so STJ never sees this");
+        sb.AppendLine("    // declaration and never emits the overrides for it.");
+        sb.AppendLine("    //");
+        sb.AppendLine("    // We supply reflection-based fallbacks so the type compiles cleanly on");
+        sb.AppendLine("    // .NET 10. Consumers can still extend this partial class in their own");
+        sb.AppendLine("    // assembly to opt into a fully AOT-friendly context.");
+        sb.AppendLine("    // ------------------------------------------------------------------");
+        sb.AppendLine("#if NET10_0_OR_GREATER");
+        sb.AppendLine("    public override System.Text.Json.Serialization.Metadata.JsonTypeInfo? GetTypeInfo(System.Type type) => null;");
+        sb.AppendLine("    protected override System.Text.Json.JsonSerializerOptions? GeneratedSerializerOptions => null;");
+        sb.AppendLine("#endif");
         sb.AppendLine("}");
 
         return sb.ToString();

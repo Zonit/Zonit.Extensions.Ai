@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -17,6 +18,8 @@ namespace Zonit.Extensions.Ai.Groq;
 /// Groq provider implementation.
 /// Uses OpenAI-compatible API with ultra-fast LPU inference.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 [AiProvider("groq")]
 public sealed class GroqProvider : IModelProvider
 {
@@ -29,7 +32,11 @@ public sealed class GroqProvider : IModelProvider
         PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
         WriteIndented = false,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            GroqJsonContext.Default,
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
     };
 
     public GroqProvider(
@@ -51,9 +58,7 @@ public sealed class GroqProvider : IModelProvider
     public bool SupportsModel(ILlm llm) => llm is GroqBase;
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -61,7 +66,7 @@ public sealed class GroqProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GroqJsonContext.Default.GroqChatRequest);
 
         _logger.LogDebug("Groq request: {Payload}", jsonPayload);
 
@@ -78,7 +83,7 @@ public sealed class GroqProvider : IModelProvider
             throw new HttpRequestException($"Groq API failed: {response.StatusCode}: {responseJson}");
         }
 
-        var groqResponse = JsonSerializer.Deserialize<GroqResponse>(responseJson, JsonOptions)!;
+        var groqResponse = JsonSerializer.Deserialize(responseJson, GroqJsonContext.Default.GroqResponse)!;
 
         var textContent = groqResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
@@ -144,17 +149,15 @@ public sealed class GroqProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    public async IAsyncEnumerable<string> StreamAsync<TResponse>(
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        request["stream"] = true;
+        request.Stream = true;
 
-        var jsonPayload = JsonSerializer.Serialize(request, JsonOptions);
+        var jsonPayload = JsonSerializer.Serialize(request, GroqJsonContext.Default.GroqChatRequest);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
         using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/openai/v1/chat/completions") { Content = content };
@@ -173,7 +176,7 @@ public sealed class GroqProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize<GroqStreamChunk>(data, JsonOptions);
+            var chunk = JsonSerializer.Deserialize(data, GroqJsonContext.Default.GroqStreamChunk);
             var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
 
             if (text != null)
@@ -203,46 +206,45 @@ public sealed class GroqProvider : IModelProvider
         }
     }
 
-    [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed.")]
-    [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation.")]
-    private Dictionary<string, object> BuildRequest<TResponse>(
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private static GroqChatRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        Type responseType)
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var messages = new List<object>();
+        var messages = new List<GroqRequestMessage>();
 
         if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new { role = "system", content = prompt.System });
+            messages.Add(new GroqRequestMessage { Role = "system", Content = prompt.System });
 
-        messages.Add(new { role = "user", content = prompt.Text });
+        messages.Add(new GroqRequestMessage { Role = "user", Content = prompt.Text });
 
-        var request = new Dictionary<string, object>
+        var request = new GroqChatRequest
         {
-            ["model"] = llm.Name,
-            ["messages"] = messages,
-            ["max_tokens"] = llm.MaxTokens
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
         };
 
         if (llm is GroqBase groqLlm)
         {
             if (groqLlm.Temperature < 1.0)
-                request["temperature"] = groqLlm.Temperature;
+                request.Temperature = groqLlm.Temperature;
             if (groqLlm.TopP < 1.0)
-                request["top_p"] = groqLlm.TopP;
+                request.TopP = groqLlm.TopP;
         }
 
-        // Structured output
         if (responseType != typeof(string))
         {
-            request["response_format"] = new
+            request.ResponseFormat = new GroqResponseFormat
             {
-                type = "json_schema",
-                json_schema = new
+                Type = "json_schema",
+                JsonSchema = new GroqJsonSchemaSpec
                 {
-                    name = "response",
-                    schema = JsonSchemaGenerator.Generate(responseType),
-                    strict = true
+                    Name = "response",
+                    Schema = JsonSchemaGenerator.Generate(responseType),
+                    Strict = true
                 }
             };
         }
@@ -347,4 +349,35 @@ internal sealed class GroqStreamChoice
 internal sealed class GroqStreamDelta
 {
     public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class GroqChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<GroqRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public GroqResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class GroqRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class GroqResponseFormat
+{
+    public string Type { get; set; } = "";
+    public GroqJsonSchemaSpec? JsonSchema { get; set; }
+}
+
+internal sealed class GroqJsonSchemaSpec
+{
+    public string Name { get; set; } = "";
+    public JsonElement Schema { get; set; }
+    public bool Strict { get; set; }
 }

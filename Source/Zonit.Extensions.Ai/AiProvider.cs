@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Zonit.Extensions;
 
@@ -25,7 +26,7 @@ internal sealed class AiProvider : IAiProvider
     #region Text Generation
 
     /// <inheritdoc />
-    public async Task<Result<TResponse>> GenerateAsync<TResponse>(
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         CancellationToken cancellationToken = default)
@@ -50,7 +51,7 @@ internal sealed class AiProvider : IAiProvider
     #region Chat
 
     /// <inheritdoc />
-    public async Task<Result<TResponse>> ChatAsync<TResponse>(
+    public async Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
@@ -230,7 +231,7 @@ internal sealed class AiProvider : IAiProvider
     #region Agent
 
     /// <inheritdoc />
-    public Task<ResultAgent<TResponse>> GenerateAsync<TResponse>(
+    public Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -255,7 +256,7 @@ internal sealed class AiProvider : IAiProvider
     }
 
     /// <inheritdoc />
-    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -268,7 +269,7 @@ internal sealed class AiProvider : IAiProvider
     }
 
     /// <inheritdoc />
-    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<TResponse>(
+    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,

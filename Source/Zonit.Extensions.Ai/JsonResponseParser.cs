@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
 
 namespace Zonit.Extensions.Ai;
@@ -26,7 +27,13 @@ public static partial class JsonResponseParser
     /// <param name="options">Optional JSON serializer options.</param>
     /// <returns>Parsed value of type T.</returns>
     /// <exception cref="JsonException">When parsing fails after all recovery attempts.</exception>
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    /// <remarks>
+    /// Routes through <see cref="AiJsonTypeInfoResolver"/> when an AOT-safe
+    /// binding is registered for <typeparamref name="T"/>; falls back to
+    /// reflection-based deserialisation otherwise.
+    /// </remarks>
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for the target type.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     public static T Parse<T>(string response, JsonSerializerOptions? options = null)
     {
         if (string.IsNullOrWhiteSpace(response))
@@ -57,6 +64,41 @@ public static partial class JsonResponseParser
         // For complex types, extract JSON and parse
         var json = ExtractJson(response);
 
+        // Prefer the AOT-safe path when a JsonTypeInfo<T> is available.
+        if (AiJsonTypeInfoResolver.Instance.GetTypeInfo(targetType, opts) is JsonTypeInfo<T> aotInfo)
+        {
+            return DeserializeWithTypeInfo(json, aotInfo);
+        }
+
+        return DeserializeWithReflection<T>(json, opts, targetType);
+    }
+
+    private static T DeserializeWithTypeInfo<T>(string json, JsonTypeInfo<T> typeInfo)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(json, typeInfo)
+                ?? throw new JsonException($"Deserialization returned null for type {typeof(T).Name}");
+        }
+        catch (JsonException ex)
+        {
+            var cleanedJson = CleanJson(json);
+            try
+            {
+                return JsonSerializer.Deserialize(cleanedJson, typeInfo)
+                    ?? throw new JsonException($"Deserialization returned null for type {typeof(T).Name}");
+            }
+            catch
+            {
+                throw new JsonException($"Failed to parse response as {typeof(T).Name}: {ex.Message}", ex);
+            }
+        }
+    }
+
+    [RequiresUnreferencedCode("Reflection-based JSON deserialization is not AOT-safe.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
+    private static T DeserializeWithReflection<T>(string json, JsonSerializerOptions opts, Type targetType)
+    {
         try
         {
             return JsonSerializer.Deserialize<T>(json, opts)
@@ -64,7 +106,6 @@ public static partial class JsonResponseParser
         }
         catch (JsonException ex)
         {
-            // Try to recover with additional cleaning
             var cleanedJson = CleanJson(json);
             try
             {
@@ -86,7 +127,8 @@ public static partial class JsonResponseParser
     /// <param name="result">Parsed value if successful.</param>
     /// <param name="options">Optional JSON serializer options.</param>
     /// <returns>True if parsing succeeded, false otherwise.</returns>
-    [RequiresUnreferencedCode("JSON deserialization might require types that cannot be statically analyzed.")]
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for the target type.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
     public static bool TryParse<T>(string response, [NotNullWhen(true)] out T? result, JsonSerializerOptions? options = null)
     {
         try

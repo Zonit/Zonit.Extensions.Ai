@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>Zonit.Extensions.Ai.Zhipu</PackageId>
     <Title>Zonit.Extensions.Ai.Zhipu</Title>
     <Description>Zhipu AI provider for Zonit.Extensions.Ai. Access to GLM-4 and ChatGLM models.</Description>

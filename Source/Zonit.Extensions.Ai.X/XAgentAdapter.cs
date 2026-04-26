@@ -10,6 +10,8 @@ namespace Zonit.Extensions.Ai.X;
 /// and replays the full conversation as <c>input</c> (X does not yet support
 /// <c>previous_response_id</c> chaining).
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; the [DAM(PublicProperties)] propagation on TResponse preserves required members. Reflection fallback only fires when the source generator is disabled.")]
+[UnconditionalSuppressMessage("AOT", "IL3050:Calling members annotated with 'RequiresDynamicCodeAttribute' may break functionality when AOT compiling.", Justification = "Internal pipeline routes user TResponse through source-generated JsonTypeInfo<T>; reflection paths only fire when the source generator is disabled.")]
 public sealed class XAgentAdapter : IAgentProviderAdapter
 {
     private readonly HttpClient _httpClient;
