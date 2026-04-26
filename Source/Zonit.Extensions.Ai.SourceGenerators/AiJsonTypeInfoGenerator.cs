@@ -41,6 +41,23 @@ namespace Zonit.Extensions.Ai.SourceGenerators;
 [Generator]
 public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 {
+    /// <summary>
+    /// Fully-qualified, global::-prefixed format that does NOT collapse to language
+    /// aliases (so emitted code says <c>global::System.Int32</c>, never <c>global::int</c>;
+    /// <c>global::System.Nullable&lt;global::System.Int32&gt;</c>, never <c>global::int?</c>).
+    /// Using <c>SymbolDisplayFormat.FullyQualifiedFormat</c> directly is unsafe because
+    /// it has <c>UseSpecialTypes</c> on, which produces invalid output when concatenated
+    /// with <c>global::</c>.
+    /// </summary>
+    private static readonly SymbolDisplayFormat FqFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat
+            .WithMiscellaneousOptions(
+                SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions
+                & ~SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    private static string Fq(ITypeSymbol t) =>
+        t.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(FqFormat);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var responseTypes = context.SyntaxProvider
@@ -92,7 +109,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
         var roots = rootTypes
             .Where(t => t is not null)
             .Cast<INamedTypeSymbol>()
-            .GroupBy(t => t.ToDisplayString(), System.StringComparer.Ordinal)
+            .GroupBy(t => Fq(t), System.StringComparer.Ordinal)
             .Select(g => g.First())
             .ToList();
 
@@ -139,11 +156,11 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 
         foreach (var poco in collector.Pocos.Values.OrderBy(p => p.FullName, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        AiJsonTypeInfoResolver.Register(typeof(global::{poco.FullName}), Build_{poco.MangledName});");
+            sb.AppendLine($"        AiJsonTypeInfoResolver.Register(typeof({poco.FullName}), Build_{poco.MangledName});");
         }
         foreach (var coll in collector.Collections.Values.OrderBy(c => c.CollectionFullName, System.StringComparer.Ordinal))
         {
-            sb.AppendLine($"        AiJsonTypeInfoResolver.Register(typeof(global::{coll.CollectionFullName}), Build_{coll.MangledName});");
+            sb.AppendLine($"        AiJsonTypeInfoResolver.Register(typeof({coll.CollectionFullName}), Build_{coll.MangledName});");
         }
 
         sb.AppendLine("    }");
@@ -167,7 +184,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 
     private static void EmitPocoFactory(StringBuilder sb, PocoTypeInfo poco)
     {
-        var fq = $"global::{poco.FullName}";
+        var fq = poco.FullName; // already global::-qualified by FqFormat
 
         sb.AppendLine($"    private static JsonTypeInfo Build_{poco.MangledName}(JsonSerializerOptions options)");
         sb.AppendLine("    {");
@@ -180,7 +197,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 
         foreach (var p in poco.Properties)
         {
-            var propTypeFq = $"global::{p.TypeFullName}";
+            var propTypeFq = p.TypeFullName; // already global::-qualified
             sb.AppendLine($"                JsonMetadataServices.CreatePropertyInfo<{propTypeFq}>(opts, new JsonPropertyInfoValues<{propTypeFq}>");
             sb.AppendLine("                {");
             sb.AppendLine("                    IsProperty = true,");
@@ -216,8 +233,8 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 
     private static void EmitCollectionFactory(StringBuilder sb, CollectionTypeInfo coll)
     {
-        var collFq = $"global::{coll.CollectionFullName}";
-        var elemFq = $"global::{coll.ElementFullName}";
+        var collFq = coll.CollectionFullName; // already global::-qualified
+        var elemFq = coll.ElementFullName;    // already global::-qualified
 
         sb.AppendLine($"    private static JsonTypeInfo Build_{coll.MangledName}(JsonSerializerOptions options)");
         sb.AppendLine("    {");
@@ -240,6 +257,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                 sb.AppendLine($"            ObjectCreator = static () => new {collFq}(),");
             else
                 sb.AppendLine($"            ObjectCreator = static () => new global::System.Collections.Generic.List<{elemFq}>(),");
+            // NOTE: no NumberHandling on JsonCollectionInfoValues<T> — it has none in net10.
             sb.AppendLine("            NumberHandling = null,");
             sb.AppendLine("            SerializeHandler = null,");
             sb.AppendLine("        });");
@@ -262,7 +280,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
         public void Visit(ITypeSymbol type)
         {
             type = Unwrap(type);
-            var fq = type.ToDisplayString();
+            var fq = Fq(type);
             if (!_visited.Add(fq))
                 return;
 
@@ -286,12 +304,13 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                 if (IsSupported(arr.ElementType))
                 {
                     var element = Unwrap(arr.ElementType);
-                    var collFqName = $"{element.ToDisplayString()}[]";
+                    var elementFq = Fq(element);
+                    var collFqName = $"{elementFq}[]";
                     if (!Collections.ContainsKey(collFqName))
                     {
                         Collections[collFqName] = new CollectionTypeInfo(
                             CollectionFullName: collFqName,
-                            ElementFullName: element.ToDisplayString(),
+                            ElementFullName: elementFq,
                             MangledName: Mangle(collFqName),
                             Kind: CollectionKind.Array);
                     }
@@ -309,12 +328,12 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                     var element = named.TypeArguments[0];
                     if (IsSupported(element))
                     {
-                        var collFq = named.ToDisplayString();
+                        var collFq = Fq(named);
                         if (!Collections.ContainsKey(collFq))
                         {
                             Collections[collFq] = new CollectionTypeInfo(
                                 CollectionFullName: collFq,
-                                ElementFullName: Unwrap(element).ToDisplayString(),
+                                ElementFullName: Fq(element),
                                 MangledName: Mangle(collFq),
                                 Kind: kind.Value);
                         }
@@ -335,7 +354,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                 var pocoInfo = BuildPocoInfo(poco);
                 if (pocoInfo is not null)
                 {
-                    Pocos[poco.ToDisplayString()] = pocoInfo;
+                    Pocos[Fq(poco)] = pocoInfo;
                     foreach (var p in pocoInfo.Properties)
                     {
                         var propType = ResolveTypeSymbol(poco, p.PropertyTypeSymbol);
@@ -376,7 +395,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
 
                     props.Add(new PocoProperty(
                         Name: prop.Name,
-                        TypeFullName: prop.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(),
+                        TypeFullName: Fq(prop.Type),
                         PropertyTypeSymbol: prop.Type,
                         HasSetter: hasSetter));
                 }
@@ -385,7 +404,7 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
             if (props.Count == 0)
                 return null;
 
-            var fullName = type.ToDisplayString();
+            var fullName = Fq(type);
             return new PocoTypeInfo(fullName, Mangle(fullName), props.ToImmutableArray());
         }
 

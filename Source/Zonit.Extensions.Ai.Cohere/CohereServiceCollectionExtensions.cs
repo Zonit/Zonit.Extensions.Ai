@@ -55,8 +55,7 @@ public static class CohereServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<CohereOptions>()
-            .BindConfiguration(CohereOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<CohereOptions>(CohereOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

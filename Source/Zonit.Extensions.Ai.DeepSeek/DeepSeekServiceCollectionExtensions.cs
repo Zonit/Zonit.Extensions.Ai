@@ -67,8 +67,7 @@ public static class DeepSeekServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<DeepSeekOptions>()
-            .BindConfiguration(DeepSeekOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<DeepSeekOptions>(DeepSeekOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

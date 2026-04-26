@@ -48,6 +48,13 @@ public abstract class PromptBase<TResponse> : IPrompt<TResponse>
     /// </summary>
     public virtual IReadOnlyList<Asset>? Files { get; init; }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification =
+            "PopulateScriptObjectViaReflection is the documented reflection-based fallback for prompt " +
+            "types whose AOT-safe binding was not emitted by AiPromptBindingGenerator (e.g. prompts " +
+            "synthesised at runtime, or consumers building without the source generator). The fallback " +
+            "is gated by PromptBindingRegistry.TryPopulate returning false; under AOT/trimmed builds " +
+            "the generator is always active and the fallback path is never taken.")]
     private string RenderTemplate()
     {
         var template = Scriban.Template.Parse(Prompt);

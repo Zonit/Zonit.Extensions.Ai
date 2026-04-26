@@ -55,8 +55,7 @@ public static class FireworksServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<FireworksOptions>()
-            .BindConfiguration(FireworksOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<FireworksOptions>(FireworksOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

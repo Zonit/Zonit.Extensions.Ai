@@ -55,8 +55,7 @@ public static class TogetherServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<TogetherOptions>()
-            .BindConfiguration(TogetherOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<TogetherOptions>(TogetherOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

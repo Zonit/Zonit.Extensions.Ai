@@ -55,8 +55,7 @@ public static class PerplexityServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<PerplexityOptions>()
-            .BindConfiguration(PerplexityOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<PerplexityOptions>(PerplexityOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

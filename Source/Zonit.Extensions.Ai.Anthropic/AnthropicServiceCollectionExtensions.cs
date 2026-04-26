@@ -70,9 +70,8 @@ public static class AnthropicServiceCollectionExtensions
         // Ensure core AI services are registered
         services.AddAi();
 
-        // Bind configuration from appsettings.json
-        services.AddOptions<AnthropicOptions>()
-            .BindConfiguration(AnthropicOptions.SectionName);
+        // Bind configuration from appsettings.json (AOT-safe).
+        services.AddAiOptionsFromConfiguration<AnthropicOptions>(AnthropicOptions.SectionName);
 
         // Apply additional configuration via PostConfigure
         if (options is not null)

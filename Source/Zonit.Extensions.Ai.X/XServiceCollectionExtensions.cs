@@ -68,8 +68,7 @@ public static class XServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<XOptions>()
-            .BindConfiguration(XOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<XOptions>(XOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

@@ -70,9 +70,8 @@ public static class GoogleServiceCollectionExtensions
         // Ensure core AI services are registered
         services.AddAi();
 
-        // Bind configuration from appsettings.json
-        services.AddOptions<GoogleOptions>()
-            .BindConfiguration(GoogleOptions.SectionName);
+        // Bind configuration from appsettings.json (AOT-safe).
+        services.AddAiOptionsFromConfiguration<GoogleOptions>(GoogleOptions.SectionName);
 
         // Apply additional configuration via PostConfigure
         if (options is not null)

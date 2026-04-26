@@ -55,8 +55,7 @@ public static class YiServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<YiOptions>()
-            .BindConfiguration(YiOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<YiOptions>(YiOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

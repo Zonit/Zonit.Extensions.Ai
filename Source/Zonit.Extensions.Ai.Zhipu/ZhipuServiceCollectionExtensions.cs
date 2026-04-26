@@ -55,8 +55,7 @@ public static class ZhipuServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<ZhipuOptions>()
-            .BindConfiguration(ZhipuOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<ZhipuOptions>(ZhipuOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

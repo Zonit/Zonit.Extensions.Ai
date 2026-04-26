@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -15,6 +16,17 @@ public class CaseInsensitiveEnumConverterFactory : JsonConverterFactory
                (Nullable.GetUnderlyingType(typeToConvert)?.IsEnum == true);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2071",
+        Justification =
+            "EnumConverter<TEnum> and NullableEnumConverter<TEnum> only require the parameterless " +
+            "constructor of TEnum, which always exists for value types (enum is a struct). " +
+            "Activator.CreateInstance therefore never needs metadata that the trimmer would remove.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification =
+            "MakeGenericType is called only with concrete enum types passed in by the JSON serializer. " +
+            "The set of enums declared by the consumer is rooted by their use as property types on " +
+            "response/options POCOs, which are themselves preserved via DAM(PublicProperties). " +
+            "Native AOT will therefore have the closed generic instantiation available at runtime.")]
     public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
     {
         Type enumType = Nullable.GetUnderlyingType(typeToConvert) ?? typeToConvert;

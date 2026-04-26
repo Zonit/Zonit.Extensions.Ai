@@ -55,8 +55,7 @@ public static class MoonshotServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<MoonshotOptions>()
-            .BindConfiguration(MoonshotOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<MoonshotOptions>(MoonshotOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

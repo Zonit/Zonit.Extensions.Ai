@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Zonit.Extensions.Ai;
 
 /// <summary>
@@ -31,17 +33,22 @@ public static class EnumValueExtensions
     /// Gets the EnumValue attribute value for an enum member.
     /// Returns the enum member name if no attribute is defined.
     /// </summary>
-    public static string GetEnumValue<TEnum>(this TEnum enumValue) where TEnum : Enum
+    public static string GetEnumValue<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicFields)] TEnum>(
+        this TEnum enumValue) where TEnum : Enum
     {
-        var memberInfo = typeof(TEnum).GetMember(enumValue.ToString());
-        if (memberInfo.Length > 0)
+        // Enum members are public static fields — Type.GetField only requires
+        // DAM(PublicFields), unlike Type.GetMember which would need 5 categories.
+        var name = enumValue.ToString();
+        var field = typeof(TEnum).GetField(name);
+        if (field is not null)
         {
-            var attributes = memberInfo[0].GetCustomAttributes(typeof(EnumValueAttribute), false);
+            var attributes = field.GetCustomAttributes(typeof(EnumValueAttribute), false);
             if (attributes.Length > 0)
             {
                 return ((EnumValueAttribute)attributes[0]).Value;
             }
         }
-        return enumValue.ToString().ToLowerInvariant();
+        return name.ToLowerInvariant();
     }
 }

@@ -12,7 +12,8 @@ public interface IAiProvider
     #region Text Generation
 
     [Obsolete("Support legacy, use GenerateAsync<TResponse>(ILlm llm, IPrompt<TResponse> prompt, CancellationToken cancellationToken = default)")]
-    Task<Result<TResponse>> GenerateAsync<TResponse>(
+    Task<Result<TResponse>> GenerateAsync<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IPrompt<TResponse> prompt,
         ILlm llm,
         CancellationToken cancellationToken = default)

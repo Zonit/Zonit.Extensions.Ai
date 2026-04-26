@@ -67,8 +67,7 @@ public static class MistralServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<MistralOptions>()
-            .BindConfiguration(MistralOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<MistralOptions>(MistralOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

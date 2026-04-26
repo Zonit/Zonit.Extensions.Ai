@@ -55,8 +55,7 @@ public static class BaiduServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<BaiduOptions>()
-            .BindConfiguration(BaiduOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<BaiduOptions>(BaiduOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

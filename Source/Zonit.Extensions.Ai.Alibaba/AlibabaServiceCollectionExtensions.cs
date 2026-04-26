@@ -55,8 +55,7 @@ public static class AlibabaServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<AlibabaOptions>()
-            .BindConfiguration(AlibabaOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<AlibabaOptions>(AlibabaOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);

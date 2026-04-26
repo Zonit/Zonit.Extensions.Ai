@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Zonit.Extensions.Ai;
@@ -31,7 +32,9 @@ public static class AgentServiceCollectionExtensions
     /// <see cref="AgentOptions.DefaultTools"/>). Idempotent.
     /// </summary>
     /// <typeparam name="TTool">A concrete <see cref="ITool"/> implementation.</typeparam>
-    public static IServiceCollection AddAiTools<TTool>(this IServiceCollection services)
+    public static IServiceCollection AddAiTools<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TTool>(
+        this IServiceCollection services)
         where TTool : class, ITool
     {
         services.TryAddScoped<TTool>();
@@ -62,6 +65,7 @@ public static class AgentServiceCollectionExtensions
         Func<IServiceProvider, TTool> factory)
         where TTool : class, ITool
     {
+        // No DAM needed: TTool is constructed by the user-provided factory, not by DI reflection.
         services.Add(ServiceDescriptor.Scoped(typeof(TTool), sp => factory(sp)));
         services.Add(ServiceDescriptor.Scoped<ITool>(sp => sp.GetRequiredService<TTool>()));
         return services;
@@ -70,7 +74,9 @@ public static class AgentServiceCollectionExtensions
     /// <summary>
     /// Backwards-compatible alias for <see cref="AddAiTools{TTool}(IServiceCollection)"/>.
     /// </summary>
-    public static IServiceCollection AddAiTool<TTool>(this IServiceCollection services)
+    public static IServiceCollection AddAiTool<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TTool>(
+        this IServiceCollection services)
         where TTool : class, ITool
         => services.AddAiTools<TTool>();
 

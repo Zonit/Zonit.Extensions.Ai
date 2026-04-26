@@ -176,17 +176,21 @@ public static partial class JsonResponseParser
         // Remove markdown code blocks
         trimmed = RemoveMarkdownCodeBlocks(trimmed);
 
-        // If it's a JSON string literal, extract the content
+        // If it's a JSON string literal, extract the content (AOT-safe — uses JsonDocument,
+        // not JsonSerializer.Deserialize<string> which would warn under trimming).
         if (trimmed.StartsWith('"') && trimmed.EndsWith('"'))
         {
             try
             {
-                return JsonSerializer.Deserialize<string>(trimmed) ?? trimmed;
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind == JsonValueKind.String)
+                    return doc.RootElement.GetString() ?? trimmed;
             }
             catch
             {
-                return trimmed.Trim('"');
+                // Fallthrough to manual unquote below.
             }
+            return trimmed.Trim('"');
         }
 
         // If it's a JSON object with common text fields, extract them

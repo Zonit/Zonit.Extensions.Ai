@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Zonit.Extensions.Ai;
 
 namespace Zonit.Extensions;
@@ -48,6 +49,24 @@ public static class AiServiceCollectionExtensions
     /// });
     /// </code>
     /// </example>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification =
+            "AgentRunner and McpToolFactory rely on System.Text.Json reflection only as a fallback when " +
+            "no AOT binding is registered for a response type. When consumers compile with the " +
+            "Zonit.Extensions.Ai source generators (enabled by default via this package), bindings " +
+            "are emitted statically and the reflection path is never taken.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification =
+            "AgentRunner/McpToolFactory ctors are flagged [RequiresDynamicCode] because they fall back " +
+            "to reflection-based JSON serialization when no AOT binding is available. In the supported " +
+            "configuration (source generators on, which is the package default) every response/tool " +
+            "payload type has a statically emitted JsonTypeInfo, so no runtime code generation is " +
+            "needed and the RDC path is never reached.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072",
+        Justification =
+            "ToolDiscovery.RegisteredTypes is populated exclusively by ToolDiscoveryGenerator, " +
+            "which emits a [DynamicDependency] for the parameterless constructor of every " +
+            "registered tool type. Those constructors are therefore preserved under trimming.")]
     public static IServiceCollection AddAi(
         this IServiceCollection services,
         Action<AiOptions>? options = null)
@@ -75,9 +94,8 @@ public static class AiServiceCollectionExtensions
                 ServiceDescriptor.Scoped(typeof(ITool), toolType));
         }
 
-        // Bind configuration from appsettings.json
-        services.AddOptions<AiOptions>()
-            .BindConfiguration(AiOptions.SectionName);
+        // Bind configuration from appsettings.json (AOT-safe via DAM-constrained helper).
+        services.AddAiOptionsFromConfiguration<AiOptions>(AiOptions.SectionName);
 
         // Apply additional configuration via PostConfigure
         if (options is not null)
@@ -133,7 +151,9 @@ public static class AiServiceCollectionExtensions
     /// <typeparam name="TProvider">The provider implementation type.</typeparam>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection TryAddModelProvider<TProvider>(this IServiceCollection services)
+    public static IServiceCollection TryAddModelProvider<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TProvider>(
+        this IServiceCollection services)
         where TProvider : class, IModelProvider
     {
         // Skip if already registered (idempotent)
@@ -149,6 +169,42 @@ public static class AiServiceCollectionExtensions
         services.AddTransient<IModelProvider>(sp => sp.GetRequiredService<TProvider>());
 
         return services;
+    }
+
+    /// <summary>
+    /// Binds an <c>Ai</c>-family options class (<see cref="AiOptions"/>, <c>OpenAiOptions</c>,
+    /// <c>AnthropicOptions</c>, …) to an <c>appsettings.json</c> section. This is the
+    /// AOT/trim-safe replacement for calling <c>AddOptions&lt;T&gt;().BindConfiguration(...)</c>
+    /// directly: <typeparamref name="TOptions"/> has a
+    /// <see cref="DynamicallyAccessedMembersAttribute"/> constraint that preserves its
+    /// <c>PublicProperties</c> and <c>PublicFields</c>, which is exactly what the configuration
+    /// binder needs. The framework's own <c>IL2026</c>/<c>IL3050</c> warnings are suppressed
+    /// here — they are false positives for plain POCO options types.
+    /// </summary>
+    /// <remarks>
+    /// Provider packages should call this helper instead of binding configuration themselves
+    /// so that the suppressions live in one well-justified place.
+    /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification =
+            "TOptions is a plain POCO whose PublicProperties/PublicFields are preserved by the " +
+            "DynamicallyAccessedMembers constraint on the type parameter; the configuration binder " +
+            "only reads those members, so the RequiresUnreferencedCode warning from BindConfiguration " +
+            "does not apply here.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification =
+            "The configuration binder may use reflection at runtime, but only over the PublicProperties " +
+            "and PublicFields of TOptions — all of which are preserved via the DAM constraint. No " +
+            "generic type expansion or runtime code generation is required for POCO options classes.")]
+    public static OptionsBuilder<TOptions> AddAiOptionsFromConfiguration<
+        [DynamicallyAccessedMembers(
+            DynamicallyAccessedMemberTypes.PublicProperties |
+            DynamicallyAccessedMemberTypes.PublicFields)] TOptions>(
+        this IServiceCollection services,
+        string sectionName)
+        where TOptions : class
+    {
+        return services.AddOptions<TOptions>().BindConfiguration(sectionName);
     }
 
     /// <summary>

@@ -82,9 +82,8 @@ public static class OpenAiServiceCollectionExtensions
         // Ensure core AI services are registered
         services.AddAi();
 
-        // Bind configuration from appsettings.json
-        services.AddOptions<OpenAiOptions>()
-            .BindConfiguration(OpenAiOptions.SectionName);
+        // Bind configuration from appsettings.json (AOT-safe).
+        services.AddAiOptionsFromConfiguration<OpenAiOptions>(OpenAiOptions.SectionName);
 
         // Apply additional configuration via PostConfigure
         if (options is not null)

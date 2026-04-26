@@ -40,6 +40,17 @@ public static class JsonSchemaGenerator
     public static string? GetDescription(Type type)
         => type.GetCustomAttribute<DescriptionAttribute>()?.Description;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2072",
+        Justification =
+            "GenerateSchema recurses into Type.GetElementType() (for arrays), " +
+            "Type.GetGenericArguments() (for List<T>/IEnumerable<T>) and PropertyInfo.PropertyType. " +
+            "The trimmer cannot statically prove that those types carry the same DAM(PublicProperties) " +
+            "constraint as the parameter, but the public entry points (Generate<T>(), Generate(Type)) " +
+            "are themselves marked [RequiresUnreferencedCode]/[RequiresDynamicCode], so callers are " +
+            "already required to ensure the whole reachable type graph is preserved. The recursive " +
+            "calls below merely propagate that contract.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2062",
+        Justification = "Same as above — recursion stays inside the [RUC]-annotated public entry points.")]
     private static Dictionary<string, object> GenerateSchema([DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type, bool isNullable = false)
     {
         // Handle Nullable<T> - extract underlying type

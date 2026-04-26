@@ -55,8 +55,7 @@ public static class GroqServiceCollectionExtensions
 
         services.AddAi();
 
-        services.AddOptions<GroqOptions>()
-            .BindConfiguration(GroqOptions.SectionName);
+        services.AddAiOptionsFromConfiguration<GroqOptions>(GroqOptions.SectionName);
 
         if (options is not null)
             services.PostConfigure(options);
