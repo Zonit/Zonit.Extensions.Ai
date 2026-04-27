@@ -742,12 +742,8 @@ public sealed class OpenAiProvider : IModelProvider
             ? result.GetRawText()
             : json;
 
-        return JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            Converters = { new CaseInsensitiveEnumConverterFactory(), new DateTimeConverterFactory() }
-        }) ?? throw new JsonException("Deserialization returned null");
+        return JsonSerializer.Deserialize<TResponse>(jsonToDeserialize, JsonResponseParser.ProviderResponseOptions)
+            ?? throw new JsonException("Deserialization returned null");
     }
 }
 

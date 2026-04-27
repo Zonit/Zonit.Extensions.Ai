@@ -643,12 +643,8 @@ Remember: Your response must start with the opening curly brace and be a valid J
 
         try
         {
-            return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true,
-                Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-                Converters = { new CaseInsensitiveEnumConverterFactory(), new DateTimeConverterFactory() }
-            }) ?? throw new JsonException("Deserialization returned null");
+            return JsonSerializer.Deserialize<TResponse>(jsonContent, JsonResponseParser.ProviderResponseOptions)
+                ?? throw new JsonException("Deserialization returned null");
         }
         catch (JsonException ex)
         {

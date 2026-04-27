@@ -261,12 +261,8 @@ public sealed class GroqProvider : IModelProvider
 
         var jsonContent = ExtractJson(json);
 
-        return JsonSerializer.Deserialize<TResponse>(jsonContent, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            Converters = { new CaseInsensitiveEnumConverterFactory(), new DateTimeConverterFactory() }
-        }) ?? throw new JsonException("Deserialization returned null");
+        return JsonSerializer.Deserialize<TResponse>(jsonContent, JsonResponseParser.ProviderResponseOptions)
+            ?? throw new JsonException("Deserialization returned null");
     }
 
     private static string ExtractJson(string text)

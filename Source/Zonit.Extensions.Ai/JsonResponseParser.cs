@@ -1,7 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using System.Text.RegularExpressions;
+using System.Text.Unicode;
+using Zonit.Extensions.Ai.Converters;
 
 namespace Zonit.Extensions.Ai;
 
@@ -12,11 +15,60 @@ namespace Zonit.Extensions.Ai;
 /// </summary>
 public static partial class JsonResponseParser
 {
+    // .NET 10 change: JsonSerializerOptions must specify a TypeInfoResolver
+    // before being marked read-only, otherwise the very first Deserialize call
+    // throws "JsonSerializerOptions instance must specify a TypeInfoResolver
+    // setting before being marked as read-only." We combine the AOT-safe
+    // resolver populated by AiJsonTypeInfoGenerator with DefaultJsonTypeInfoResolver
+    // for the reflection fallback path (which is gated by [RequiresUnreferencedCode]
+    // / [RequiresDynamicCode] on Parse<T>).
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresUnreferencedCode].")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresDynamicCode].")]
     private static readonly JsonSerializerOptions DefaultOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
-        ReadCommentHandling = JsonCommentHandling.Skip
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver())
+    };
+
+    /// <summary>
+    /// Cached <see cref="JsonSerializerOptions"/> shared by every concrete
+    /// provider's <c>ParseResponse&lt;TResponse&gt;</c> implementation.
+    /// Configures permissive deserialisation (case-insensitive properties,
+    /// case-insensitive enum + DateOnly/TimeOnly converters, full-Unicode
+    /// encoder) and — critically for .NET 10 — a non-null
+    /// <see cref="JsonSerializerOptions.TypeInfoResolver"/> so the options
+    /// can be marked read-only on first use without throwing.
+    /// </summary>
+    /// <remarks>
+    /// Routes through <see cref="AiJsonTypeInfoResolver"/> first so any
+    /// source-generated <c>JsonTypeInfo&lt;T&gt;</c> is preferred under AOT;
+    /// falls back to <see cref="DefaultJsonTypeInfoResolver"/> for shapes the
+    /// generator did not emit. The fallback is gated by the provider's own
+    /// <c>[RequiresUnreferencedCode]</c> / <c>[RequiresDynamicCode]</c> on
+    /// <c>ParseResponse</c>.
+    /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresUnreferencedCode].")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresDynamicCode].")]
+    public static readonly JsonSerializerOptions ProviderResponseOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        Converters =
+        {
+            new CaseInsensitiveEnumConverterFactory(),
+            new DateTimeConverterFactory(),
+        },
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver()),
     };
 
     /// <summary>
