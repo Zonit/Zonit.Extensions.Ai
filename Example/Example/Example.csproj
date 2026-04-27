@@ -12,6 +12,17 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <!--
+      Attach the Roslyn source generator directly to the Example project so that any
+      breaking change in the emitted code (e.g. STJ metadata API drift) surfaces during
+      the in-repo build instead of only when a downstream consumer pulls the NuGet
+      package. ReferenceOutputAssembly=false keeps the generator DLL out of the
+      runtime output; it is used at compile time only.
+    -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.SourceGenerators\Zonit.Extensions.Ai.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+
     <!-- Reference all AI providers -->
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />

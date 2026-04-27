@@ -185,20 +185,51 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
     private static void EmitPocoFactory(StringBuilder sb, PocoTypeInfo poco)
     {
         var fq = poco.FullName; // already global::-qualified by FqFormat
+        var hasAnyRequired = poco.Properties.Any(p => p.IsRequired);
+
+        // Emit per-property UnsafeAccessor stubs at class scope for every init-only
+        // setter we need to invoke (regular `obj.Prop = value` would produce CS8852).
+        // The compiler generates a thunk that bypasses the init-only restriction;
+        // this is fully supported under NativeAOT.
+        foreach (var p in poco.Properties.Where(p => p.HasSetter && p.IsInitOnly))
+        {
+            sb.AppendLine($"    [global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"set_{p.Name}\")]");
+            sb.AppendLine($"    private static extern void __set_{poco.MangledName}__{p.Name}({fq} target, {p.TypeFullName} value);");
+            sb.AppendLine();
+        }
 
         sb.AppendLine($"    private static JsonTypeInfo Build_{poco.MangledName}(JsonSerializerOptions options)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var info = JsonMetadataServices.CreateObjectInfo<{fq}>(options, new JsonObjectInfoValues<{fq}>");
         sb.AppendLine("        {");
-        sb.AppendLine($"            ObjectCreator = static () => new {fq}(),");
+
+        // ObjectCreator: only emit if the type has no required members; otherwise
+        // CS9035 ("required members must be set in object initializer") fires. STJ
+        // recognises a null ObjectCreator and uses the IsRequired metadata + setters
+        // to populate the instance.
+        if (hasAnyRequired)
+        {
+            sb.AppendLine("            ObjectCreator = null,");
+        }
+        else
+        {
+            sb.AppendLine($"            ObjectCreator = static () => new {fq}(),");
+        }
         sb.AppendLine("            ObjectWithParameterizedConstructorCreator = null,");
-        sb.AppendLine("            PropertyMetadataInitializer = static (opts) => new JsonPropertyInfo[]");
+
+        // .NET 10 breaking change: PropertyMetadataInitializer's delegate parameter changed
+        // from JsonSerializerOptions to JsonSerializerContext. We emit `ctx` and forward
+        // `ctx.Options` to CreatePropertyInfo (which still takes JsonSerializerOptions).
+        // We use a statement-body lambda so we can apply post-construction tweaks
+        // (e.g. setting JsonPropertyInfo.IsRequired = true for `required` members).
+        sb.AppendLine("            PropertyMetadataInitializer = static (ctx) =>");
         sb.AppendLine("            {");
 
-        foreach (var p in poco.Properties)
+        for (int i = 0; i < poco.Properties.Length; i++)
         {
+            var p = poco.Properties[i];
             var propTypeFq = p.TypeFullName; // already global::-qualified
-            sb.AppendLine($"                JsonMetadataServices.CreatePropertyInfo<{propTypeFq}>(opts, new JsonPropertyInfoValues<{propTypeFq}>");
+            sb.AppendLine($"                var __p_{i} = JsonMetadataServices.CreatePropertyInfo<{propTypeFq}>(ctx.Options, new JsonPropertyInfoValues<{propTypeFq}>");
             sb.AppendLine("                {");
             sb.AppendLine("                    IsProperty = true,");
             sb.AppendLine("                    IsPublic = true,");
@@ -208,7 +239,14 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
             sb.AppendLine($"                    Getter = static (obj) => (({fq})obj).{p.Name},");
             if (p.HasSetter)
             {
-                sb.AppendLine($"                    Setter = static (obj, value) => (({fq})obj).{p.Name} = ({propTypeFq})value!,");
+                if (p.IsInitOnly)
+                {
+                    sb.AppendLine($"                    Setter = static (obj, value) => __set_{poco.MangledName}__{p.Name}(({fq})obj, ({propTypeFq})value!),");
+                }
+                else
+                {
+                    sb.AppendLine($"                    Setter = static (obj, value) => (({fq})obj).{p.Name} = ({propTypeFq})value!,");
+                }
             }
             else
             {
@@ -217,13 +255,29 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
             sb.AppendLine("                    Converter = null,");
             sb.AppendLine("                    IgnoreCondition = null,");
             sb.AppendLine("                    HasJsonInclude = false,");
-            sb.AppendLine("                    NumberHandling = null,");
-            sb.AppendLine("                }),");
+            // .NET 10 breaking change: JsonPropertyInfoValues<T>.NumberHandling changed
+            // from JsonNumberHandling? to non-nullable JsonNumberHandling. Omitting the
+            // initialiser leaves the default value (JsonNumberHandling.Strict == 0),
+            // which matches the previous `null` semantics (no per-property override).
+            sb.AppendLine("                });");
+            if (p.IsRequired)
+            {
+                sb.AppendLine($"                __p_{i}.IsRequired = true;");
+            }
         }
 
+        sb.Append("                return new JsonPropertyInfo[] { ");
+        for (int i = 0; i < poco.Properties.Length; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append($"__p_{i}");
+        }
+        sb.AppendLine(" };");
         sb.AppendLine("            },");
+
         sb.AppendLine("            ConstructorParameterMetadataInitializer = null,");
-        sb.AppendLine("            NumberHandling = null,");
+        // .NET 10 change: JsonObjectInfoValues<T>.NumberHandling is now a non-nullable
+        // struct (default 0 = Strict), so we omit it instead of writing `= null`.
         sb.AppendLine("            SerializeHandler = null,");
         sb.AppendLine("        });");
         sb.AppendLine("        return info;");
@@ -239,12 +293,14 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
         sb.AppendLine($"    private static JsonTypeInfo Build_{coll.MangledName}(JsonSerializerOptions options)");
         sb.AppendLine("    {");
 
+        // .NET 10: JsonCollectionInfoValues<T>.NumberHandling is non-nullable
+        // (was JsonNumberHandling? before). Omitting it leaves the default value
+        // (Strict == 0), which matches the previous `null` semantics.
         if (coll.Kind == CollectionKind.Array)
         {
             sb.AppendLine($"        return JsonMetadataServices.CreateArrayInfo<{elemFq}>(options, new JsonCollectionInfoValues<{elemFq}[]>");
             sb.AppendLine("        {");
             sb.AppendLine("            ObjectCreator = null,");
-            sb.AppendLine("            NumberHandling = null,");
             sb.AppendLine("            SerializeHandler = null,");
             sb.AppendLine("        });");
         }
@@ -257,8 +313,6 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                 sb.AppendLine($"            ObjectCreator = static () => new {collFq}(),");
             else
                 sb.AppendLine($"            ObjectCreator = static () => new global::System.Collections.Generic.List<{elemFq}>(),");
-            // NOTE: no NumberHandling on JsonCollectionInfoValues<T> — it has none in net10.
-            sb.AppendLine("            NumberHandling = null,");
             sb.AppendLine("            SerializeHandler = null,");
             sb.AppendLine("        });");
         }
@@ -391,13 +445,23 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
                     if (!IsSupported(prop.Type))
                         continue;
 
-                    var hasSetter = prop.SetMethod is { DeclaredAccessibility: Accessibility.Public };
+                    var setMethod = prop.SetMethod;
+                    var hasSetter = setMethod is { DeclaredAccessibility: Accessibility.Public };
+                    // `init`-only setters cannot be invoked through ordinary
+                    // assignment outside an object initializer; we route them
+                    // through UnsafeAccessor instead. `required` members force
+                    // ObjectCreator = null and need IsRequired = true on the
+                    // generated JsonPropertyInfo.
+                    var isInitOnly = hasSetter && setMethod!.IsInitOnly;
+                    var isRequired = prop.IsRequired;
 
                     props.Add(new PocoProperty(
                         Name: prop.Name,
                         TypeFullName: Fq(prop.Type),
                         PropertyTypeSymbol: prop.Type,
-                        HasSetter: hasSetter));
+                        HasSetter: hasSetter,
+                        IsInitOnly: isInitOnly,
+                        IsRequired: isRequired));
                 }
             }
 
@@ -509,6 +573,6 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
     private enum CollectionKind { Array, ConcreteList, InterfaceList }
 
     private sealed record PocoTypeInfo(string FullName, string MangledName, ImmutableArray<PocoProperty> Properties);
-    private sealed record PocoProperty(string Name, string TypeFullName, ITypeSymbol PropertyTypeSymbol, bool HasSetter);
+    private sealed record PocoProperty(string Name, string TypeFullName, ITypeSymbol PropertyTypeSymbol, bool HasSetter, bool IsInitOnly, bool IsRequired);
     private sealed record CollectionTypeInfo(string CollectionFullName, string ElementFullName, string MangledName, CollectionKind Kind);
 }
