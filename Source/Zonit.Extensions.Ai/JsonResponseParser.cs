@@ -22,19 +22,14 @@ public static partial class JsonResponseParser
     // resolver populated by AiJsonTypeInfoGenerator with DefaultJsonTypeInfoResolver
     // for the reflection fallback path (which is gated by [RequiresUnreferencedCode]
     // / [RequiresDynamicCode] on Parse<T>).
-    [UnconditionalSuppressMessage("Trimming", "IL2026",
-        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresUnreferencedCode].")]
-    [UnconditionalSuppressMessage("AOT", "IL3050",
-        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresDynamicCode].")]
-    private static readonly JsonSerializerOptions DefaultOptions = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        AllowTrailingCommas = true,
-        ReadCommentHandling = JsonCommentHandling.Skip,
-        TypeInfoResolver = JsonTypeInfoResolver.Combine(
-            AiJsonTypeInfoResolver.Instance,
-            new DefaultJsonTypeInfoResolver())
-    };
+    //
+    // The factories below are wrapped in methods (not field initialisers) so the
+    // [UnconditionalSuppressMessage] attributes actually cover the DefaultJsonTypeInfoResolver
+    // constructor call — suppress-on-field does NOT propagate to the synthesised
+    // static constructor (.cctor) in which field initialisers run, and would leave
+    // IL2026/IL3050 unsuppressed at publish time.
+
+    private static readonly JsonSerializerOptions DefaultOptions = CreateDefaultOptions();
 
     /// <summary>
     /// Cached <see cref="JsonSerializerOptions"/> shared by every concrete
@@ -53,11 +48,27 @@ public static partial class JsonResponseParser
     /// <c>[RequiresUnreferencedCode]</c> / <c>[RequiresDynamicCode]</c> on
     /// <c>ParseResponse</c>.
     /// </remarks>
+    public static readonly JsonSerializerOptions ProviderResponseOptions = CreateProviderResponseOptions();
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresUnreferencedCode].")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresDynamicCode].")]
+    private static JsonSerializerOptions CreateDefaultOptions() => new()
+    {
+        PropertyNameCaseInsensitive = true,
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver()),
+    };
+
     [UnconditionalSuppressMessage("Trimming", "IL2026",
         Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresUnreferencedCode].")]
     [UnconditionalSuppressMessage("AOT", "IL3050",
         Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresDynamicCode].")]
-    public static readonly JsonSerializerOptions ProviderResponseOptions = new()
+    private static JsonSerializerOptions CreateProviderResponseOptions() => new()
     {
         PropertyNameCaseInsensitive = true,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),

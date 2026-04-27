@@ -217,19 +217,23 @@ public class AiJsonTypeInfoGenerator : IIncrementalGenerator
         }
         sb.AppendLine("            ObjectWithParameterizedConstructorCreator = null,");
 
-        // .NET 10 breaking change: PropertyMetadataInitializer's delegate parameter changed
-        // from JsonSerializerOptions to JsonSerializerContext. We emit `ctx` and forward
-        // `ctx.Options` to CreatePropertyInfo (which still takes JsonSerializerOptions).
-        // We use a statement-body lambda so we can apply post-construction tweaks
+        // .NET 10: PropertyMetadataInitializer is `Func<JsonSerializerContext, JsonPropertyInfo[]>`.
+        // STJ invokes it as `propInitFunc(typeInfo.SerializerContext)` — and that argument is
+        // **null** whenever the JsonTypeInfo was built through a custom IJsonTypeInfoResolver
+        // (i.e. AiJsonTypeInfoResolver.Register), because no JsonSerializerContext is attached.
+        // Dereferencing `ctx.Options` therefore throws NRE on the very first deserialise call.
+        // Fix: capture the outer `options` parameter via closure (non-static lambda) and ignore
+        // the argument entirely. `options` is always non-null here — the resolver passed it in.
+        // We also need the statement-body form so we can apply post-construction tweaks
         // (e.g. setting JsonPropertyInfo.IsRequired = true for `required` members).
-        sb.AppendLine("            PropertyMetadataInitializer = static (ctx) =>");
+        sb.AppendLine("            PropertyMetadataInitializer = (_) =>");
         sb.AppendLine("            {");
 
         for (int i = 0; i < poco.Properties.Length; i++)
         {
             var p = poco.Properties[i];
             var propTypeFq = p.TypeFullName; // already global::-qualified
-            sb.AppendLine($"                var __p_{i} = JsonMetadataServices.CreatePropertyInfo<{propTypeFq}>(ctx.Options, new JsonPropertyInfoValues<{propTypeFq}>");
+            sb.AppendLine($"                var __p_{i} = JsonMetadataServices.CreatePropertyInfo<{propTypeFq}>(options, new JsonPropertyInfoValues<{propTypeFq}>");
             sb.AppendLine("                {");
             sb.AppendLine("                    IsProperty = true,");
             sb.AppendLine("                    IsPublic = true,");
