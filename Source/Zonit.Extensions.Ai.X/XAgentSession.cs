@@ -172,8 +172,12 @@ internal sealed class XAgentSession : IAgentSession
             Input = _input,
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            request.Instructions = prompt.System!;
+        // When the agent run was seeded from chat[], prompt.Text is the system instruction
+        // (per IAiProvider.ChatAsync semantics). For standalone agent runs (no chat seed),
+        // prompt.Text is already injected as the initial user message by AppendInitialUserMessage,
+        // so we don't duplicate it as Instructions.
+        if (_context.InitialChat is { Count: > 0 } && !string.IsNullOrEmpty(prompt.Text))
+            request.Instructions = prompt.Text;
 
         if (llm is XChatBase chatLlm)
         {

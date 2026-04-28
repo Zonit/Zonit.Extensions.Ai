@@ -213,8 +213,6 @@ public sealed class BaiduProvider : IModelProvider
     {
         var messages = new List<BaiduRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new BaiduRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new BaiduRequestMessage { Role = "user", Content = prompt.Text });
 

@@ -517,9 +517,6 @@ public sealed class XProvider : IModelProvider
             MaxOutputTokens = llm.MaxTokens
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            request.Instructions = prompt.System;
-
         var content = new List<XContentPart>
         {
             new() { Type = "input_text", Text = prompt.Text }

@@ -252,8 +252,6 @@ public sealed class MistralProvider : IModelProvider
     {
         var messages = new List<MistralRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new MistralRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new MistralRequestMessage { Role = "user", Content = prompt.Text });
 

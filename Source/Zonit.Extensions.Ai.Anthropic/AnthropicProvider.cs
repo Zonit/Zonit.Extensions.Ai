@@ -338,7 +338,7 @@ public sealed class AnthropicProvider : IModelProvider
             MaxTokens = maxTokens
         };
 
-        var systemPrompt = prompt.System ?? "";
+        var systemPrompt = string.Empty;
         string? userJsonReminder = null;
         if (responseType != typeof(string))
         {

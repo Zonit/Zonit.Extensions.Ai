@@ -459,9 +459,6 @@ public sealed class OpenAiProvider : IModelProvider
             MaxOutputTokens = llm.MaxTokens
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            request.Instructions = prompt.System;
-
         var content = new List<OpenAiContentPart>
         {
             new() { Type = "input_text", Text = prompt.Text }

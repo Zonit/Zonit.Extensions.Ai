@@ -74,6 +74,10 @@ public static class AiServiceCollectionExtensions
         // Register core AI provider (TryAdd prevents duplicates)
         services.TryAddSingleton<IAiProvider, AiProvider>();
 
+        // Prompt renderer — Scriban-backed, used by AiProvider to materialize
+        // PromptBase templates into final text before delegating to providers.
+        services.TryAddSingleton<IPromptRenderer, ScribanPromptRenderer>();
+
         // Agent runtime — runner + always-empty registries so the runner can
         // resolve them even if the application never registers any tools/MCP.
         services.TryAddSingleton<AgentRunner>();

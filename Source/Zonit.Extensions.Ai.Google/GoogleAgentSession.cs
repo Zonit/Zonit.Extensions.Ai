@@ -202,11 +202,13 @@ internal sealed class GoogleAgentSession : IAgentSession
             GenerationConfig = config,
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
+        // Chat-seeded agent run: prompt.Text is the system instruction. Standalone
+        // agent run: prompt.Text is already in the initial user message.
+        if (_context.InitialChat is { Count: > 0 } && !string.IsNullOrEmpty(prompt.Text))
         {
             request.SystemInstruction = new GeminiSystemInstruction
             {
-                Parts = new List<GeminiPartItem> { new() { Text = prompt.System! } },
+                Parts = new List<GeminiPartItem> { new() { Text = prompt.Text } },
             };
         }
 

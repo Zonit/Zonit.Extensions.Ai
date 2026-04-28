@@ -213,8 +213,6 @@ public sealed class ZhipuProvider : IModelProvider
     {
         var messages = new List<ZhipuRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new ZhipuRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new ZhipuRequestMessage { Role = "user", Content = prompt.Text });
 

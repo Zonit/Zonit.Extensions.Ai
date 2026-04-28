@@ -211,8 +211,12 @@ internal sealed class AnthropicAgentSession : IAgentSession
             Messages = _messages,
         };
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            request.System = prompt.System!;
+        // When the agent run was seeded from chat[], prompt.Text becomes the system
+        // instruction (per IAiProvider.ChatAsync semantics). For standalone agent runs
+        // (no chat seed), AppendInitialUserMessage already added prompt.Text as the
+        // initial user turn — don't duplicate it as system.
+        if (_context.InitialChat is { Count: > 0 } && !string.IsNullOrEmpty(prompt.Text))
+            request.System = prompt.Text;
 
         if (llm is AnthropicBase anth)
         {

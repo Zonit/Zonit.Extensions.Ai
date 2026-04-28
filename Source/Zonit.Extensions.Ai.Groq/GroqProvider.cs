@@ -215,8 +215,6 @@ public sealed class GroqProvider : IModelProvider
     {
         var messages = new List<GroqRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new GroqRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new GroqRequestMessage { Role = "user", Content = prompt.Text });
 

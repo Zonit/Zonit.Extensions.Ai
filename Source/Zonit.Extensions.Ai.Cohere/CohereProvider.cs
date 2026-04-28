@@ -265,8 +265,6 @@ public sealed class CohereProvider : IModelProvider
     {
         var messages = new List<CohereRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new CohereRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new CohereRequestMessage { Role = "user", Content = prompt.Text });
 

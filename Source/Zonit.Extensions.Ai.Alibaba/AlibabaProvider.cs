@@ -215,8 +215,6 @@ public sealed class AlibabaProvider : IModelProvider
     {
         var messages = new List<AlibabaRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new AlibabaRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new AlibabaRequestMessage { Role = "user", Content = prompt.Text });
 

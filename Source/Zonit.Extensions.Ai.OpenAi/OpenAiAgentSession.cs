@@ -80,11 +80,16 @@ internal sealed class OpenAiAgentSession : IAgentSession
         };
 
         var prompt = _context.Prompt;
-        if (!string.IsNullOrEmpty(prompt.System))
-            request.Instructions = prompt.System!;
 
         var input = new List<OpenAiInputItem>();
         var seededFromChat = SeedInitialChatInto(input, prompt.Files);
+
+        // When seeded from chat[], prompt.Text becomes the system instruction
+        // (per IAiProvider.ChatAsync semantics). Standalone agent runs inject
+        // prompt.Text as the initial user message instead — see the !seededFromChat
+        // branch below.
+        if (seededFromChat && !string.IsNullOrEmpty(prompt.Text))
+            request.Instructions = prompt.Text;
 
         if (!seededFromChat)
         {

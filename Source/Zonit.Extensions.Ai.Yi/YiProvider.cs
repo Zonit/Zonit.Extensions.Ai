@@ -213,8 +213,6 @@ public sealed class YiProvider : IModelProvider
     {
         var messages = new List<YiRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new YiRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new YiRequestMessage { Role = "user", Content = prompt.Text });
 

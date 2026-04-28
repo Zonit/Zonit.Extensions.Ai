@@ -215,8 +215,6 @@ public sealed class TogetherProvider : IModelProvider
     {
         var messages = new List<TogetherRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new TogetherRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new TogetherRequestMessage { Role = "user", Content = prompt.Text });
 

@@ -219,8 +219,6 @@ public sealed class DeepSeekProvider : IModelProvider
     {
         var messages = new List<DeepSeekRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new DeepSeekRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new DeepSeekRequestMessage { Role = "user", Content = prompt.Text });
 

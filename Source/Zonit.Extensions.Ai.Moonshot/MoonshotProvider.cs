@@ -213,8 +213,6 @@ public sealed class MoonshotProvider : IModelProvider
     {
         var messages = new List<MoonshotRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new MoonshotRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new MoonshotRequestMessage { Role = "user", Content = prompt.Text });
 

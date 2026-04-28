@@ -213,8 +213,6 @@ public sealed class PerplexityProvider : IModelProvider
     {
         var messages = new List<PerplexityRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new PerplexityRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new PerplexityRequestMessage { Role = "user", Content = prompt.Text });
 

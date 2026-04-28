@@ -339,7 +339,6 @@ public class AgentRunnerTests
     private sealed class TestPrompt : IPrompt<string>
     {
         public string Text => "hello";
-        public string? System => null;
         public IReadOnlyList<Asset>? Files => null;
     }
 }

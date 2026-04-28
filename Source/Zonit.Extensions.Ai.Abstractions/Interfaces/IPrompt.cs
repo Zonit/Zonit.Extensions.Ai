@@ -14,13 +14,17 @@ namespace Zonit.Extensions.Ai;
 public interface IPrompt
 {
     /// <summary>
-    /// System message/instruction for the AI.
+    /// The prompt text sent to the AI.
     /// </summary>
-    string? System { get; }
-
-    /// <summary>
-    /// The main prompt text sent to the AI.
-    /// </summary>
+    /// <remarks>
+    /// Semantic role depends on the call site:
+    /// <list type="bullet">
+    ///   <item><description><c>GenerateAsync(llm, prompt)</c> single-shot — used as the <b>user</b> message.</description></item>
+    ///   <item><description><c>ChatAsync(llm, prompt, chat)</c> / agent runs — used as the <b>system</b> instruction; the conversation lives in <c>chat[]</c>.</description></item>
+    /// </list>
+    /// For typed prompts inheriting <c>PromptBase&lt;T&gt;</c>, this is the rendered output of the
+    /// raw <c>Prompt</c> template (rendering happens in the application layer, not in abstractions).
+    /// </remarks>
     string Text { get; }
 
     /// <summary>

@@ -51,7 +51,9 @@ public interface IAiProvider
     /// Semantic difference vs <c>GenerateAsync(llm, prompt)</c>: in chat mode
     /// <c>prompt.Text</c> becomes the <b>system</b> message (not the user
     /// message). In single-shot <c>GenerateAsync</c>, <c>prompt.Text</c> is the
-    /// user message and <c>prompt.System</c> the optional system message.
+    /// <b>user</b> message — single-shot calls have no separate system instruction;
+    /// callers needing a system role should use <c>ChatAsync</c> with explicit
+    /// <see cref="User"/> turns in <paramref name="chat"/>.
     /// </para>
     /// <para>
     /// Files on <c>prompt.Files</c> are forwarded as session-level attachments;

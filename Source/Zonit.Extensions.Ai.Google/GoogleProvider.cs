@@ -395,13 +395,6 @@ public sealed class GoogleProvider : IModelProvider
 
         request.GenerationConfig = config;
 
-        if (!string.IsNullOrEmpty(prompt.System))
-        {
-            request.SystemInstruction = new GeminiSystemInstruction
-            {
-                Parts = new List<GeminiPartItem> { new() { Text = prompt.System } }
-            };
-        }
 
         return request;
     }

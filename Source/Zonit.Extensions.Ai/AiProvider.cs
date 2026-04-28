@@ -11,16 +11,42 @@ internal sealed class AiProvider : IAiProvider
 {
     private readonly IEnumerable<IModelProvider> _providers;
     private readonly AgentRunner _agentRunner;
+    private readonly IPromptRenderer _renderer;
     private readonly ILogger<AiProvider> _logger;
 
     public AiProvider(
         IEnumerable<IModelProvider> providers,
         AgentRunner agentRunner,
+        IPromptRenderer renderer,
         ILogger<AiProvider> logger)
     {
         _providers = providers;
         _agentRunner = agentRunner;
+        _renderer = renderer;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Renders <paramref name="prompt"/>'s raw template (if any) and returns a wrapper
+    /// whose <c>Text</c> is the rendered string. Providers always observe rendered text.
+    /// </summary>
+    private IPrompt<TResponse> Materialize<TResponse>(IPrompt<TResponse> prompt)
+    {
+        // Already a non-template prompt (SimplePrompt et al.) — Text is final.
+        if (prompt is not PromptBase)
+            return prompt;
+
+        var rendered = _renderer.Render(prompt);
+        return new RenderedPrompt<TResponse>(rendered, prompt.Files);
+    }
+
+    private IPrompt Materialize(IPrompt prompt)
+    {
+        if (prompt is not PromptBase)
+            return prompt;
+
+        var rendered = _renderer.Render(prompt);
+        return new RenderedPrompt(rendered, prompt.Files);
     }
 
     #region Text Generation
@@ -34,7 +60,7 @@ internal sealed class AiProvider : IAiProvider
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await provider.GenerateAsync(llm, prompt, cancellationToken);
+        return await provider.GenerateAsync(llm, Materialize(prompt), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -78,13 +104,13 @@ internal sealed class AiProvider : IAiProvider
             // / TotalUsage / TotalCost remain accessible via a downcast if the caller
             // wants the full agent trace.
             return await _agentRunner
-                .RunAsync(agentLlm, prompt, tools, mcps, options, cancellationToken, chat)
+                .RunAsync(agentLlm, Materialize(prompt), tools, mcps, options, cancellationToken, chat)
                 .ConfigureAwait(false);
         }
 
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Chat with {Provider}/{Model} ({Turns} messages)", provider.Name, llm.Name, chat.Count);
-        return await provider.ChatAsync(llm, prompt, chat, cancellationToken);
+        return await provider.ChatAsync(llm, Materialize(prompt), chat, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -110,7 +136,7 @@ internal sealed class AiProvider : IAiProvider
 
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Chat stream with {Provider}/{Model} ({Turns} messages)", provider.Name, llm.Name, chat.Count);
-        return provider.ChatStreamAsync(llm, prompt, chat, cancellationToken);
+        return provider.ChatStreamAsync(llm, Materialize(prompt), chat, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -146,7 +172,7 @@ internal sealed class AiProvider : IAiProvider
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await provider.GenerateImageAsync(llm, prompt, cancellationToken);
+        return await provider.GenerateImageAsync(llm, Materialize(prompt), cancellationToken);
     }
 
     #endregion
@@ -174,7 +200,7 @@ internal sealed class AiProvider : IAiProvider
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Generating video with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await provider.GenerateVideoAsync(llm, prompt, cancellationToken);
+        return await provider.GenerateVideoAsync(llm, Materialize(prompt), cancellationToken);
     }
 
     #endregion
@@ -223,7 +249,7 @@ internal sealed class AiProvider : IAiProvider
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Streaming with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return provider.StreamAsync<string>(llm, new SimplePrompt<string>(prompt), cancellationToken);
+        return provider.StreamAsync<string>(llm, Materialize<string>(new SimplePrompt<string>(prompt)), cancellationToken);
     }
 
     #endregion
@@ -240,7 +266,7 @@ internal sealed class AiProvider : IAiProvider
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent run with {Model}", llm.Name);
-        return _agentRunner.RunAsync(llm, prompt, tools, mcps, options, cancellationToken);
+        return _agentRunner.RunAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -265,7 +291,7 @@ internal sealed class AiProvider : IAiProvider
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent stream with {Model}", llm.Name);
-        return _agentRunner.StreamAsync(llm, prompt, tools, mcps, options, cancellationToken);
+        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -279,7 +305,7 @@ internal sealed class AiProvider : IAiProvider
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent stream (chat) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
-        return _agentRunner.StreamAsync(llm, prompt, tools, mcps, options, cancellationToken, chat);
+        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, chat);
     }
 
     #endregion

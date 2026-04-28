@@ -12,10 +12,13 @@ namespace Zonit.Extensions.Ai;
 /// <remarks>
 /// Strategy:
 /// <list type="bullet">
-///   <item><description>System prompt: <c>prompt.Text</c> (rendered template) plus a textual transcript of all but the last <see cref="User"/> message.</description></item>
+///   <item><description>System instruction: <c>prompt.Text</c> (rendered template) plus a textual transcript of all but the last <see cref="User"/> message.</description></item>
 ///   <item><description>User message: text of the last <see cref="User"/> in the chat; empty string if none.</description></item>
 ///   <item><description>Files: last user's files take precedence; otherwise the prompt's own files are forwarded.</description></item>
 /// </list>
+/// The synthetic prompt's <see cref="IPrompt.Text"/> carries the full system instruction
+/// (the original Text + transcript). The last user turn is exposed via a separate field
+/// for providers that consume single-shot inputs.
 /// Tool messages are rendered as <c>[tool {name}]: {json}</c> in the transcript;
 /// fallback does NOT replay tool calls back to the model — for that, use a
 /// provider with native chat support and an <c>IAgentLlm</c>.
@@ -63,33 +66,44 @@ public static class ChatFallback
         }
 
         var systemText = systemPrompt.Text;
+        var lastUser = lastUserIdx >= 0 ? (User)chat[lastUserIdx] : null;
+        var lastUserText = lastUser?.Text ?? string.Empty;
+
+        // Glue everything into a single Text payload — providers that fall back to
+        // single-shot via this helper send Text as the user message. We prepend the
+        // system instruction (rendered Prompt) and any prior turns as transcript,
+        // then append the last user turn as the live request.
+        var sb = new StringBuilder();
+        if (!string.IsNullOrEmpty(systemText))
+        {
+            sb.Append(systemText);
+        }
         if (transcript.Length > 0)
         {
-            systemText = string.IsNullOrEmpty(systemText)
-                ? "Conversation history so far:\n" + transcript
-                : systemText + "\n\nConversation history so far:\n" + transcript;
+            if (sb.Length > 0) sb.Append("\n\n");
+            sb.Append("Conversation history so far:\n").Append(transcript);
         }
-
-        var lastUser = lastUserIdx >= 0 ? (User)chat[lastUserIdx] : null;
-        var userText = lastUser?.Text ?? string.Empty;
+        if (!string.IsNullOrEmpty(lastUserText))
+        {
+            if (sb.Length > 0) sb.Append("\n\n");
+            sb.Append(lastUserText);
+        }
 
         // Per the design decision: Files live on both the system Prompt and on User.
         // Per-message files (last user) take precedence; fall back to prompt-level files.
         var files = lastUser?.Files ?? systemPrompt.Files;
 
-        return new SyntheticPrompt<TResponse>(systemText, userText, files);
+        return new SyntheticPrompt<TResponse>(sb.ToString(), files);
     }
 
     private sealed class SyntheticPrompt<TResponse> : IPrompt<TResponse>
     {
-        public SyntheticPrompt(string? system, string text, IReadOnlyList<Asset>? files)
+        public SyntheticPrompt(string text, IReadOnlyList<Asset>? files)
         {
-            System = system;
             Text = text;
             Files = files;
         }
 
-        public string? System { get; }
         public string Text { get; }
         public IReadOnlyList<Asset>? Files { get; }
     }
@@ -103,7 +117,6 @@ public static class ChatFallback
     {
         private readonly IPrompt _inner;
         public PromptShim(IPrompt inner) => _inner = inner;
-        public string? System => _inner.System;
         public string Text => _inner.Text;
         public IReadOnlyList<Asset>? Files => _inner.Files;
     }

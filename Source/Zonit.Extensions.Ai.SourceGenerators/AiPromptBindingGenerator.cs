@@ -22,10 +22,9 @@ public class AiPromptBindingGenerator : IIncrementalGenerator
 {
     private static readonly string[] ExcludedPropertyNames =
     {
-        "System",   // PromptBase / IPrompt
-        "Text",     // PromptBase / IPrompt
+        "Text",     // PromptBase / IPrompt (computed)
         "Files",    // PromptBase / IPrompt
-        "Prompt",   // PromptBase
+        "Prompt",   // PromptBase (raw template)
     };
 
     public void Initialize(IncrementalGeneratorInitializationContext context)

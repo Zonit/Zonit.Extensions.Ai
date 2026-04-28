@@ -215,8 +215,6 @@ public sealed class FireworksProvider : IModelProvider
     {
         var messages = new List<FireworksRequestMessage>();
 
-        if (!string.IsNullOrEmpty(prompt.System))
-            messages.Add(new FireworksRequestMessage { Role = "system", Content = prompt.System });
 
         messages.Add(new FireworksRequestMessage { Role = "user", Content = prompt.Text });
 
