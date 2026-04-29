@@ -1,6 +1,22 @@
 namespace Zonit.Extensions.Ai.Anthropic;
 
 /// <summary>
+/// Non-generic marker for Anthropic models that support the adaptive-thinking
+/// payload (<c>thinking.type = "adaptive"</c> together with a sibling
+/// <c>output_config.effort</c> hint). Lets the provider branch on capability
+/// without reflecting over the generic <see cref="AnthropicReasoningBase{TReason}"/>.
+/// </summary>
+public abstract class AnthropicAdaptiveBase : AnthropicBase, IReasoningLlm
+{
+    ReasoningEffort? IReasoningLlm.Reason => GetReasonEffort();
+    ReasoningSummary? IReasoningLlm.ReasonSummary => null;
+    Verbosity? IReasoningLlm.OutputVerbosity => null;
+
+    /// <summary>Resolved global effort, or <c>null</c> when thinking is disabled.</summary>
+    protected abstract ReasoningEffort? GetReasonEffort();
+}
+
+/// <summary>
 /// Base class for Anthropic Claude models that support adaptive thinking with
 /// effort control (Sonnet 4.6, Opus 4.7 and newer). Generic over
 /// <typeparamref name="TReason"/> so each derived model can expose only the
@@ -17,18 +33,17 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <remarks>
 /// <para>
 /// Adaptive thinking sends <c>"thinking": { "type": "adaptive" }</c> together
-/// with a top-level <c>"effort"</c> string (e.g. <c>"low"</c>, <c>"medium"</c>,
-/// <c>"high"</c>, <c>"xhigh"</c>, <c>"max"</c>). The model decides how many
-/// thinking tokens to consume. This replaces the legacy <c>budget_tokens</c>
-/// mode (see <see cref="AnthropicBase.ThinkingBudget"/>) which is still
-/// required for older models such as Sonnet 4.5 and Opus 4.5/4.6.
+/// with a sibling <c>"output_config": { "effort": "low|medium|high|max" }</c>.
+/// The model decides how many thinking tokens to consume. This replaces the
+/// legacy <c>budget_tokens</c> mode (see <see cref="AnthropicBase.ThinkingBudget"/>)
+/// which is still required for older models such as Sonnet 4.5 and Opus 4.5/4.6.
 /// </para>
 /// <para>
 /// Set <see cref="Reason"/> to one of the model's nested <c>ReasonType</c>
 /// values. Leaving it <c>null</c> disables thinking entirely.
 /// </para>
 /// </remarks>
-public abstract class AnthropicReasoningBase<TReason> : AnthropicBase, IReasoningLlm
+public abstract class AnthropicReasoningBase<TReason> : AnthropicAdaptiveBase
     where TReason : struct, Enum
 {
     private TReason? _reason;
@@ -36,7 +51,7 @@ public abstract class AnthropicReasoningBase<TReason> : AnthropicBase, IReasonin
     /// <summary>
     /// Adaptive thinking effort level for this model. <c>null</c> disables
     /// thinking; any other value enables adaptive thinking and is forwarded as
-    /// the request-level <c>effort</c> string.
+    /// the request-level <c>output_config.effort</c> string.
     /// </summary>
     /// <example>
     /// <code>
@@ -49,28 +64,12 @@ public abstract class AnthropicReasoningBase<TReason> : AnthropicBase, IReasonin
         init => _reason = value;
     }
 
-    #region IReasoningLlm implementation (internal conversion)
-
     /// <summary>
     /// Bridges the model-specific effort enum to the global
     /// <see cref="ReasoningEffort"/> by numeric cast — relies on each
     /// <typeparamref name="TReason"/> using values aligned with
     /// <see cref="ReasoningEffort"/>.
     /// </summary>
-    ReasoningEffort? IReasoningLlm.Reason
+    protected override ReasoningEffort? GetReasonEffort()
         => _reason.HasValue ? (ReasoningEffort)System.Convert.ToInt32(_reason.Value) : null;
-
-    /// <summary>
-    /// Anthropic does not return a separate reasoning summary stream — the
-    /// <c>thinking</c> content blocks are part of the assistant message and are
-    /// surfaced through the standard response. Always returns <c>null</c>.
-    /// </summary>
-    ReasoningSummary? IReasoningLlm.ReasonSummary => null;
-
-    /// <summary>
-    /// Anthropic does not expose a verbosity knob. Always returns <c>null</c>.
-    /// </summary>
-    Verbosity? IReasoningLlm.OutputVerbosity => null;
-
-    #endregion
 }
