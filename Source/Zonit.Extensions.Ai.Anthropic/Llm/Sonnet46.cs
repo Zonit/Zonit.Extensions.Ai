@@ -3,13 +3,38 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Claude Sonnet 4.6 - Best combination of speed and intelligence.
 /// Near-Opus-level coding with improved instruction-following and tool reliability.
-/// Supports extended thinking and adaptive thinking.
+/// Supports adaptive thinking via the <c>effort</c> parameter — see
+/// <see cref="ReasonType"/> for the levels this model accepts. Note that
+/// <c>XHigh</c> is <b>not</b> supported on Sonnet 4.6 (it is exclusive to
+/// Opus 4.7); the missing enum member makes the omission a compile-time error.
 /// </summary>
 /// <remarks>
 /// 1M token context window at standard pricing (no surcharge for long context).
+/// The legacy <c>budget_tokens</c> mode is deprecated for this model — set
+/// <see cref="AnthropicReasoningBase{TReason}.Reason"/> instead of
+/// <see cref="AnthropicBase.ThinkingBudget"/>.
 /// </remarks>
-public class Sonnet46 : AnthropicBase, IAgentLlm
+public class Sonnet46 : AnthropicReasoningBase<Sonnet46.ReasonType>, IAgentLlm
 {
+    /// <summary>
+    /// Adaptive-thinking effort levels accepted by Claude Sonnet 4.6.
+    /// Numeric values intentionally match <see cref="ReasoningEffort"/> — the
+    /// <c>XHigh</c> slot (<c>4</c>) is skipped because Sonnet 4.6 rejects it.
+    /// </summary>
+    public enum ReasonType
+    {
+        /// <summary>No thinking — model responds directly.</summary>
+        None = 0,
+        /// <summary>Light reasoning — fastest, lowest cost.</summary>
+        Low = 1,
+        /// <summary>Balanced reasoning depth.</summary>
+        Medium = 2,
+        /// <summary>Deep multistep reasoning.</summary>
+        High = 3,
+        /// <summary>Maximum thinking budget — slowest, highest accuracy.</summary>
+        Max = 5,
+    }
+
     /// <inheritdoc />
     public override string Name => "claude-sonnet-4-6";
 

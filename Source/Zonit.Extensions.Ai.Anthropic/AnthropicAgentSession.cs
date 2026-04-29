@@ -197,19 +197,16 @@ internal sealed class AnthropicAgentSession : IAgentSession
         var llm = _context.Llm;
         var prompt = _context.Prompt;
 
-        var maxTokens = llm.MaxTokens;
-        if (llm is AnthropicBase a && a.ThinkingBudget.HasValue)
-        {
-            var required = a.ThinkingBudget.Value + 1024;
-            if (maxTokens < required) maxTokens = required;
-        }
-
         var request = new AnthropicMessagesRequest
         {
             Model = llm.Name,
-            MaxTokens = maxTokens,
+            MaxTokens = llm.MaxTokens,
             Messages = _messages,
         };
+
+        var requiredMinTokens = AnthropicProvider.ApplyThinking(llm, request);
+        if (request.MaxTokens < requiredMinTokens)
+            request.MaxTokens = requiredMinTokens;
 
         // When the agent run was seeded from chat[], prompt.Text becomes the system
         // instruction (per IAiProvider.ChatAsync semantics). For standalone agent runs
@@ -222,15 +219,6 @@ internal sealed class AnthropicAgentSession : IAgentSession
         {
             if (anth.TopP < 1.0) request.TopP = anth.TopP;
             else if (anth.Temperature < 1.0) request.Temperature = anth.Temperature;
-
-            if (anth.ThinkingBudget.HasValue)
-            {
-                request.Thinking = new AnthropicThinking
-                {
-                    Type = "enabled",
-                    BudgetTokens = anth.ThinkingBudget.Value,
-                };
-            }
         }
 
         var tools = new List<AnthropicTool>();

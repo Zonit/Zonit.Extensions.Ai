@@ -56,6 +56,41 @@ public sealed class AnthropicProvider : IModelProvider
     /// <inheritdoc />
     public bool SupportsModel(ILlm llm) => llm is AnthropicBase;
 
+    /// <summary>
+    /// Applies the model's thinking configuration to <paramref name="request"/>.
+    /// Prefers adaptive thinking + request-level <c>effort</c> for
+    /// <see cref="AnthropicReasoningBase{TReason}"/> models that have <c>Reason</c> set;
+    /// falls back to the legacy <c>thinking.type = "enabled"</c> +
+    /// <c>budget_tokens</c> mode for older models that expose
+    /// <see cref="AnthropicBase.ThinkingBudget"/>. Returns the minimum
+    /// <c>max_tokens</c> required to satisfy a budget, or 0 when no minimum is
+    /// imposed (adaptive mode lets the server allocate within max_tokens).
+    /// </summary>
+    internal static int ApplyThinking(ILlm llm, AnthropicMessagesRequest request)
+    {
+        // Adaptive thinking — reserved for AnthropicReasoningBase<TReason> derivatives
+        // (Sonnet 4.6, Opus 4.7, …). The AnthropicBase guard ensures we never match
+        // OpenAI / xAI reasoning models, which also implement IReasoningLlm.
+        if (llm is AnthropicBase
+            && llm is IReasoningLlm rl
+            && rl.Reason is { } effort
+            && effort != ReasoningEffort.None)
+        {
+            request.Thinking = new AnthropicThinking { Type = "adaptive" };
+            request.Effort = effort.ToString().ToLowerInvariant();
+            return 0;
+        }
+
+        if (llm is AnthropicBase legacy && legacy.ThinkingBudget is { } budget)
+        {
+            request.Thinking = new AnthropicThinking { Type = "enabled", BudgetTokens = budget };
+            // Anthropic requires max_tokens > budget_tokens; reserve 1024 tokens for the answer.
+            return budget + 1024;
+        }
+
+        return 0;
+    }
+
     /// <inheritdoc />
     public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
@@ -323,20 +358,15 @@ public sealed class AnthropicProvider : IModelProvider
         IPrompt<TResponse> prompt,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var maxTokens = llm.MaxTokens;
-
-        if (llm is AnthropicBase thinkingLlm && thinkingLlm.ThinkingBudget.HasValue)
-        {
-            var requiredMinTokens = thinkingLlm.ThinkingBudget.Value + 1024;
-            if (maxTokens < requiredMinTokens)
-                maxTokens = requiredMinTokens;
-        }
-
         var request = new AnthropicMessagesRequest
         {
             Model = llm.Name,
-            MaxTokens = maxTokens
+            MaxTokens = llm.MaxTokens,
         };
+
+        var requiredMinTokens = ApplyThinking(llm, request);
+        if (request.MaxTokens < requiredMinTokens)
+            request.MaxTokens = requiredMinTokens;
 
         var systemPrompt = string.Empty;
         string? userJsonReminder = null;
@@ -413,15 +443,6 @@ Remember: Your response must start with the opening curly brace and be a valid J
                 request.TopP = anthropicLlm.TopP;
             else if (anthropicLlm.Temperature < 1.0)
                 request.Temperature = anthropicLlm.Temperature;
-
-            if (anthropicLlm.ThinkingBudget.HasValue)
-            {
-                request.Thinking = new AnthropicThinking
-                {
-                    Type = "enabled",
-                    BudgetTokens = anthropicLlm.ThinkingBudget.Value
-                };
-            }
         }
 
         if (llm.Tools != null && llm.Tools.Length > 0)
@@ -445,18 +466,15 @@ Remember: Your response must start with the opening curly brace and be a valid J
         IReadOnlyList<ChatMessage> chat,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
-        var maxTokens = llm.MaxTokens;
-        if (llm is AnthropicBase thinkingLlm && thinkingLlm.ThinkingBudget.HasValue)
-        {
-            var requiredMinTokens = thinkingLlm.ThinkingBudget.Value + 1024;
-            if (maxTokens < requiredMinTokens) maxTokens = requiredMinTokens;
-        }
-
         var request = new AnthropicMessagesRequest
         {
             Model = llm.Name,
-            MaxTokens = maxTokens
+            MaxTokens = llm.MaxTokens,
         };
+
+        var requiredMinTokens = ApplyThinking(llm, request);
+        if (request.MaxTokens < requiredMinTokens)
+            request.MaxTokens = requiredMinTokens;
 
         // System message: in chat mode the rendered Prompt.Text IS the system
         // instruction (semantic flip vs single-shot GenerateAsync where Text =
@@ -571,11 +589,6 @@ Remember: Your response must start with the opening curly brace and be a valid J
         {
             if (anthropicLlm.TopP < 1.0) request.TopP = anthropicLlm.TopP;
             else if (anthropicLlm.Temperature < 1.0) request.Temperature = anthropicLlm.Temperature;
-
-            if (anthropicLlm.ThinkingBudget.HasValue)
-            {
-                request.Thinking = new AnthropicThinking { Type = "enabled", BudgetTokens = anthropicLlm.ThinkingBudget.Value };
-            }
         }
 
         if (llm.Tools != null && llm.Tools.Length > 0)
@@ -776,6 +789,12 @@ internal sealed class AnthropicMessagesRequest
     public bool? Stream { get; set; }
     public List<AnthropicTool>? Tools { get; set; }
     public AnthropicThinking? Thinking { get; set; }
+    /// <summary>
+    /// Adaptive-thinking effort. Sent at the request root (sibling of <c>thinking</c>)
+    /// when <c>thinking.type == "adaptive"</c>. One of "low", "medium", "high",
+    /// "xhigh", "max". Omitted in legacy <c>budget_tokens</c> mode.
+    /// </summary>
+    public string? Effort { get; set; }
 }
 
 internal sealed class AnthropicMessageItem
@@ -817,6 +836,11 @@ internal sealed class AnthropicTool
 
 internal sealed class AnthropicThinking
 {
+    /// <summary>
+    /// Either <c>"enabled"</c> (legacy budget mode, requires <see cref="BudgetTokens"/>)
+    /// or <c>"adaptive"</c> (Sonnet 4.6 / Opus 4.7+, paired with the request-level
+    /// <c>effort</c> string instead of a token budget).
+    /// </summary>
     public string Type { get; set; } = "";
-    public int BudgetTokens { get; set; }
+    public int? BudgetTokens { get; set; }
 }
