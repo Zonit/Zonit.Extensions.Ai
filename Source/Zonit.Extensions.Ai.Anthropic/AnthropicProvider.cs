@@ -58,26 +58,31 @@ public sealed class AnthropicProvider : IModelProvider
 
     /// <summary>
     /// Applies the model's thinking configuration to <paramref name="request"/>.
-    /// Prefers adaptive thinking + request-level <c>effort</c> for
-    /// <see cref="AnthropicReasoningBase{TReason}"/> models that have <c>Reason</c> set;
-    /// falls back to the legacy <c>thinking.type = "enabled"</c> +
-    /// <c>budget_tokens</c> mode for older models that expose
-    /// <see cref="AnthropicBase.ThinkingBudget"/>. Returns the minimum
-    /// <c>max_tokens</c> required to satisfy a budget, or 0 when no minimum is
-    /// imposed (adaptive mode lets the server allocate within max_tokens).
+    /// <para>
+    /// Three modes mirror the Anthropic Console playground:
+    /// <list type="bullet">
+    ///   <item><description><b>Disabled</b> — <c>Reason == null</c> and no <see cref="AnthropicBase.ThinkingBudget"/>: <c>thinking</c> stays unset.</description></item>
+    ///   <item><description><b>Adaptive</b> — <see cref="AnthropicReasoningBase{TReason}.Reason"/> set: emits <c>thinking: { type: "adaptive", effort: &lt;level&gt; }</c>. The model picks its own budget within <c>max_tokens</c>; we don't reserve extra capacity.</description></item>
+    ///   <item><description><b>Enabled</b> (legacy) — <see cref="AnthropicBase.ThinkingBudget"/> set on a non-reasoning base: emits <c>thinking: { type: "enabled", budget_tokens: N }</c> and bumps <c>max_tokens</c> to <c>N + 1024</c> as required by the API.</description></item>
+    /// </list>
+    /// </para>
+    /// Returns the minimum <c>max_tokens</c> required to satisfy a fixed
+    /// budget, or 0 when no minimum needs to be enforced.
     /// </summary>
     internal static int ApplyThinking(ILlm llm, AnthropicMessagesRequest request)
     {
-        // Adaptive thinking — reserved for AnthropicReasoningBase<TReason> derivatives
-        // (Sonnet 4.6, Opus 4.7, …). The AnthropicBase guard ensures we never match
-        // OpenAI / xAI reasoning models, which also implement IReasoningLlm.
+        // Adaptive thinking — the AnthropicBase guard prevents OpenAI / xAI
+        // reasoning models (which also implement IReasoningLlm) from matching.
         if (llm is AnthropicBase
             && llm is IReasoningLlm rl
             && rl.Reason is { } effort
             && effort != ReasoningEffort.None)
         {
-            request.Thinking = new AnthropicThinking { Type = "adaptive" };
-            request.Effort = effort.ToString().ToLowerInvariant();
+            request.Thinking = new AnthropicThinking
+            {
+                Type = "adaptive",
+                Effort = effort.ToString().ToLowerInvariant(),
+            };
             return 0;
         }
 
@@ -789,12 +794,6 @@ internal sealed class AnthropicMessagesRequest
     public bool? Stream { get; set; }
     public List<AnthropicTool>? Tools { get; set; }
     public AnthropicThinking? Thinking { get; set; }
-    /// <summary>
-    /// Adaptive-thinking effort. Sent at the request root (sibling of <c>thinking</c>)
-    /// when <c>thinking.type == "adaptive"</c>. One of "low", "medium", "high",
-    /// "xhigh", "max". Omitted in legacy <c>budget_tokens</c> mode.
-    /// </summary>
-    public string? Effort { get; set; }
 }
 
 internal sealed class AnthropicMessageItem
@@ -837,10 +836,16 @@ internal sealed class AnthropicTool
 internal sealed class AnthropicThinking
 {
     /// <summary>
-    /// Either <c>"enabled"</c> (legacy budget mode, requires <see cref="BudgetTokens"/>)
-    /// or <c>"adaptive"</c> (Sonnet 4.6 / Opus 4.7+, paired with the request-level
-    /// <c>effort</c> string instead of a token budget).
+    /// <c>"enabled"</c> for fixed-budget thinking (Sonnet 4.5 and earlier, plus
+    /// any Sonnet 4.6 / Opus 4.7 call that does not specify effort) or
+    /// <c>"adaptive"</c> when the model should pick the budget itself.
     /// </summary>
     public string Type { get; set; } = "";
     public int? BudgetTokens { get; set; }
+    /// <summary>
+    /// Effort hint for adaptive-thinking-capable models (Sonnet 4.6, Opus 4.7).
+    /// Sent inside the <c>thinking</c> object — confirmed by the Anthropic
+    /// Console playground UI. One of "low", "medium", "high", "xhigh", "max".
+    /// </summary>
+    public string? Effort { get; set; }
 }
