@@ -68,6 +68,11 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
         if (!_httpClient.DefaultRequestHeaders.Contains("anthropic-version"))
             _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
+        // Opt-in to extended cache TTL beta — no-op unless a request sends
+        // cache_control with ttl="1h" (see AnthropicCacheTtl.OneHour).
+        if (!_httpClient.DefaultRequestHeaders.Contains("anthropic-beta"))
+            _httpClient.DefaultRequestHeaders.Add("anthropic-beta", "extended-cache-ttl-2025-04-11");
+
         if (!string.IsNullOrEmpty(_options.Value.ApiKey)
             && !_httpClient.DefaultRequestHeaders.Contains("x-api-key"))
         {

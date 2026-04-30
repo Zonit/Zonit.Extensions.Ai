@@ -100,6 +100,60 @@ public sealed class AnthropicProvider : IModelProvider
     }
 
     /// <summary>
+    /// Applies prompt caching to <paramref name="request"/> when the model is an
+    /// <see cref="AnthropicBase"/> with <see cref="AnthropicBase.Cache"/>
+    /// enabled. Uses all four available <c>cache_control</c> breakpoints to
+    /// implement a true <i>rolling</i> cache for agent / chat loops:
+    /// <list type="number">
+    ///   <item><description><b>tools[last]</b> — caches the entire tool catalogue (highest leverage for agents with many tools).</description></item>
+    ///   <item><description><b>system[last block]</b> — caches the system prompt on top of tools.</description></item>
+    ///   <item><description><b>messages[2nd-last assistant]</b> — <i>read</i> breakpoint: matches the cache the previous turn wrote at this exact prefix.</description></item>
+    ///   <item><description><b>messages[last assistant]</b> — <i>write</i> breakpoint: caches the latest extended prefix for the next turn to read.</description></item>
+    /// </list>
+    /// <para>
+    /// Per turn the API processes only the delta since the last assistant
+    /// (typically a single <c>tool_result</c> + the new assistant response),
+    /// while the entire conversation up to that point is read from cache.
+    /// </para>
+    /// <para>
+    /// Anthropic silently ignores breakpoints under the per-model token minimum
+    /// (1 024 standard, 2 048 on Haiku), so it is safe to apply them liberally
+    /// even when the prefix is short. Cache TTL is 5 min ephemeral; older
+    /// caches keep paying off until they expire.
+    /// </para>
+    /// </summary>
+    internal static void ApplyCaching(ILlm llm, AnthropicMessagesRequest request)
+    {
+        if (llm is not AnthropicBase anth) return;
+        if (anth.Cache == AnthropicCacheTtl.None) return;
+
+        var ttl = anth.Cache == AnthropicCacheTtl.OneHour ? "1h" : null;
+        AnthropicCacheControl Marker() => new() { Ttl = ttl };
+
+        // BP1: tools.
+        if (request.Tools is { Count: > 0 } tools)
+            tools[^1].CacheControl = Marker();
+
+        // BP2: system prompt.
+        if (request.System is { Count: > 0 } sys)
+            sys[^1].CacheControl = Marker();
+
+        // BP3 + BP4: rolling assistant cache.
+        //   Older marker = read hit (matches what the previous turn wrote).
+        //   Newer marker = write target (read by the next turn).
+        // On turn 1 there is no assistant yet — both skipped. On turn 2 only
+        // one assistant exists — mark it as the write target only.
+        var marked = 0;
+        for (var i = request.Messages.Count - 1; i >= 0 && marked < 2; i--)
+        {
+            var msg = request.Messages[i];
+            if (msg.Role != "assistant" || msg.Content.Count == 0) continue;
+            msg.Content[^1].CacheControl = Marker();
+            marked++;
+        }
+    }
+
+    /// <summary>
     /// Maps <see cref="ReasoningEffort"/> to the wire-level
     /// <c>output_config.effort</c> string accepted by adaptive-thinking models.
     /// </summary>
@@ -366,6 +420,10 @@ public sealed class AnthropicProvider : IModelProvider
         var baseUrl = _options.BaseUrl ?? "https://api.anthropic.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
         _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+        // Always opt-in to the extended cache TTL beta. The flag is a no-op
+        // unless a request actually sends cache_control with ttl="1h", so it
+        // is safe to enable globally and avoids per-request header juggling.
+        _httpClient.DefaultRequestHeaders.Add("anthropic-beta", "extended-cache-ttl-2025-04-11");
 
         if (!string.IsNullOrEmpty(_options.ApiKey))
         {
@@ -414,7 +472,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
         }
 
         if (!string.IsNullOrEmpty(systemPrompt))
-            request.System = systemPrompt;
+            request.System = new List<AnthropicContentBlock> { new() { Type = "text", Text = systemPrompt } };
 
         var userText = prompt.Text;
         if (!string.IsNullOrEmpty(userJsonReminder))
@@ -477,6 +535,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
             }).ToList();
         }
 
+        ApplyCaching(llm, request);
         return request;
     }
 
@@ -525,7 +584,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
         }
 
         if (!string.IsNullOrEmpty(systemPrompt))
-            request.System = systemPrompt;
+            request.System = new List<AnthropicContentBlock> { new() { Type = "text", Text = systemPrompt } };
 
         var messages = new List<AnthropicMessageItem>();
         var idx = 0;
@@ -623,6 +682,7 @@ Remember: Your response must start with the opening curly brace and be a valid J
             }).ToList();
         }
 
+        ApplyCaching(llm, request);
         return request;
     }
 
@@ -804,7 +864,8 @@ internal sealed class AnthropicMessagesRequest
 {
     public string Model { get; set; } = "";
     public int MaxTokens { get; set; }
-    public string? System { get; set; }
+    /// <summary>System prompt as content blocks. Array form is required to attach <c>cache_control</c>; Anthropic accepts it identically to the string form for non-cached requests.</summary>
+    public List<AnthropicContentBlock>? System { get; set; }
     public List<AnthropicMessageItem> Messages { get; set; } = new();
     public double? Temperature { get; set; }
     public double? TopP { get; set; }
@@ -841,6 +902,8 @@ internal sealed class AnthropicContentBlock
     // thinking blocks (extended thinking).
     public string? Thinking { get; set; }
     public string? Signature { get; set; }
+    /// <summary>Optional cache breakpoint marking this block as the end of a cacheable prefix.</summary>
+    public AnthropicCacheControl? CacheControl { get; set; }
 }
 
 internal sealed class AnthropicSource
@@ -855,6 +918,15 @@ internal sealed class AnthropicTool
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public JsonElement InputSchema { get; set; }
+    /// <summary>Marks a cache breakpoint covering this tool and everything before it (system + earlier tools).</summary>
+    public AnthropicCacheControl? CacheControl { get; set; }
+}
+
+internal sealed class AnthropicCacheControl
+{
+    public string Type { get; set; } = "ephemeral";
+    /// <summary><c>"1h"</c> for the 1-hour beta cache; null/omitted for the default 5-minute TTL.</summary>
+    public string? Ttl { get; set; }
 }
 
 internal sealed class AnthropicThinking

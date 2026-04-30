@@ -213,7 +213,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         // (no chat seed), AppendInitialUserMessage already added prompt.Text as the
         // initial user turn — don't duplicate it as system.
         if (_context.InitialChat is { Count: > 0 } && !string.IsNullOrEmpty(prompt.Text))
-            request.System = prompt.Text;
+            request.System = new List<AnthropicContentBlock> { new() { Type = "text", Text = prompt.Text } };
 
         if (llm is AnthropicBase anth)
         {
@@ -246,6 +246,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         if (tools.Count > 0)
             request.Tools = tools;
 
+        AnthropicProvider.ApplyCaching(llm, request);
         return request;
     }
 

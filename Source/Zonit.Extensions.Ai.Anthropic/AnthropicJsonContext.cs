@@ -15,6 +15,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 [JsonSerializable(typeof(AnthropicContentBlock))]
 [JsonSerializable(typeof(AnthropicSource))]
 [JsonSerializable(typeof(AnthropicTool))]
+[JsonSerializable(typeof(AnthropicCacheControl))]
 [JsonSerializable(typeof(AnthropicThinking))]
 [JsonSerializable(typeof(AnthropicOutputConfig))]
 internal sealed partial class AnthropicJsonContext : JsonSerializerContext
