@@ -6,7 +6,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// enables the rolling 4-breakpoint caching strategy on tools, system, and
 /// the two most recent assistant messages.
 /// </summary>
-public enum AnthropicCacheTtl
+public enum Cache
 {
     /// <summary>
     /// Caching disabled — no <c>cache_control</c> markers are added to the

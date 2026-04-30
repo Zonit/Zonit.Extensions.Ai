@@ -117,17 +117,25 @@ public sealed class AnthropicProvider : IModelProvider
     /// </para>
     /// <para>
     /// Anthropic silently ignores breakpoints under the per-model token minimum
-    /// (1 024 standard, 2 048 on Haiku), so it is safe to apply them liberally
-    /// even when the prefix is short. Cache TTL is 5 min ephemeral; older
-    /// caches keep paying off until they expire.
+    /// (Sonnet 4.5 / Opus 4.x = 1 024; Sonnet 4.6 = 2 048; Haiku 4.5 / Opus 4.5+ = 4 096),
+    /// so it is safe to apply them liberally even when the prefix is short.
+    /// Cache TTL is 5 min by default or 1 h via <see cref="Cache.OneHour"/>.
     /// </para>
     /// </summary>
     internal static void ApplyCaching(ILlm llm, AnthropicMessagesRequest request)
     {
         if (llm is not AnthropicBase anth) return;
-        if (anth.Cache == AnthropicCacheTtl.None) return;
 
-        var ttl = anth.Cache == AnthropicCacheTtl.OneHour ? "1h" : null;
+        // Strip stale markers first. The agent session reuses the same
+        // _messages list across turns, so cache_control set on an assistant
+        // block in turn N would still be there in turn N+1; layering 2 fresh
+        // markers on top would push the request over Anthropic's hard limit
+        // of 4 cache_control blocks per request ("Found 5" — invalid request).
+        ClearCacheMarkers(request);
+
+        if (anth.Cache == Cache.None) return;
+
+        var ttl = anth.Cache == Cache.OneHour ? "1h" : null;
         AnthropicCacheControl Marker() => new() { Ttl = ttl };
 
         // BP1: tools.
@@ -143,14 +151,61 @@ public sealed class AnthropicProvider : IModelProvider
         //   Newer marker = write target (read by the next turn).
         // On turn 1 there is no assistant yet — both skipped. On turn 2 only
         // one assistant exists — mark it as the write target only.
+        // Per Anthropic's lookback rules a single message-level breakpoint
+        // would suffice for short conversations (the API walks back 20 blocks
+        // searching for prior writes), but parallel tool calls easily push
+        // the gap past that window — the second marker guarantees a hit.
         var marked = 0;
         for (var i = request.Messages.Count - 1; i >= 0 && marked < 2; i--)
         {
             var msg = request.Messages[i];
-            if (msg.Role != "assistant" || msg.Content.Count == 0) continue;
-            msg.Content[^1].CacheControl = Marker();
+            if (msg.Role != "assistant") continue;
+
+            var target = PickCacheTarget(msg.Content);
+            if (target is null) continue;
+
+            target.CacheControl = Marker();
             marked++;
         }
+    }
+
+    /// <summary>
+    /// Returns the last cache-eligible content block in <paramref name="content"/>,
+    /// or <c>null</c> if the message has nothing markable. Per Anthropic's
+    /// caching spec:
+    /// <list type="bullet">
+    ///   <item><description><c>thinking</c> blocks cannot carry <c>cache_control</c> directly (they are still cached implicitly when a later block in the same prefix is marked).</description></item>
+    ///   <item><description>Empty <c>text</c> blocks cannot be cached.</description></item>
+    /// </list>
+    /// </summary>
+    private static AnthropicContentBlock? PickCacheTarget(List<AnthropicContentBlock> content)
+    {
+        for (var i = content.Count - 1; i >= 0; i--)
+        {
+            var block = content[i];
+            if (block.Type == "thinking") continue;
+            if (block.Type == "text" && string.IsNullOrEmpty(block.Text)) continue;
+            return block;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Removes any <c>cache_control</c> already attached to tools, system or
+    /// message content blocks. Required because the agent loop mutates a
+    /// shared message list across turns and we re-derive breakpoints fresh on
+    /// every call.
+    /// </summary>
+    private static void ClearCacheMarkers(AnthropicMessagesRequest request)
+    {
+        if (request.Tools is { } tools)
+            foreach (var t in tools) t.CacheControl = null;
+
+        if (request.System is { } sys)
+            foreach (var s in sys) s.CacheControl = null;
+
+        foreach (var msg in request.Messages)
+            foreach (var c in msg.Content) c.CacheControl = null;
     }
 
     /// <summary>
