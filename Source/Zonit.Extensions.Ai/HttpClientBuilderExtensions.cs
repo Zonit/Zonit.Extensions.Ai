@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
@@ -39,12 +40,54 @@ public static class HttpClientBuilderExtensions
             client.Timeout = options.Resilience.TotalRequestTimeout + TimeSpan.FromMinutes(5);
         });
 
+        // Tune the underlying socket handler. Without this AI clients sitting
+        // idle behind a CDN/proxy (Cloudflare, corp gateway, Anthropic edge)
+        // routinely pick a "live" pooled connection that the remote already
+        // half-closed, then block on InitialFillAsync until the resilience
+        // timeout fires — even though the request has only been idle for
+        // ~30 seconds.
+        builder.ConfigurePrimaryHttpMessageHandler(_ => CreateAiSocketsHandler());
+
         // Use standard resilience handler and configure from options
         builder.AddStandardResilienceHandler()
             .Configure(ConfigureResilienceFromOptions);
 
         return builder;
     }
+
+    /// <summary>
+    /// Builds a <see cref="SocketsHttpHandler"/> tuned for long-running AI traffic:
+    /// short idle timeout to evict half-dead pooled connections, periodic HTTP/2
+    /// PING frames so an in-flight streaming response never sits silent long
+    /// enough for an intermediary to drop it, and multi-connection fallback so
+    /// a single stuck stream cannot starve subsequent requests.
+    /// </summary>
+    private static SocketsHttpHandler CreateAiSocketsHandler() => new()
+    {
+        // Recycle every connection after 5 min so DNS / TLS / load-balancer
+        // changes propagate and very-long-lived sockets don't accumulate
+        // server-side state we cannot see.
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+
+        // Default is 1 min, but typical edge proxies (Cloudflare ~100s, many
+        // corp NATs ~60s) drop idle connections silently. Closing them on the
+        // client side first means we open a fresh socket on the next request
+        // instead of writing into a black hole.
+        PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
+
+        // HTTP/2 keepalive: send a PING frame every 30 s while a request is
+        // in flight, fail fast if no pong comes back within 15 s. This is the
+        // mechanism that turns "10-minute hang then timeout" into "we notice
+        // the dead connection immediately and the resilience handler retries".
+        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
+        KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
+
+        // Allow opening additional HTTP/2 connections if the existing one is
+        // saturated or stalling — by default a single connection is multiplexed
+        // and a stuck stream blocks unrelated traffic.
+        EnableMultipleHttp2Connections = true,
+    };
 
     /// <summary>
     /// Configures resilience settings from AiOptions.

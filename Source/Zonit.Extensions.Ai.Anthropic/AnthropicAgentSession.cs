@@ -50,22 +50,237 @@ internal sealed class AnthropicAgentSession : IAgentSession
         }
 
         var request = BuildRequest();
+        // Streaming is mandatory for the agent loop. Non-streaming responses on
+        // long agent turns (80+ tools, extended thinking, growing context) leave
+        // the HTTP/2 connection idle for minutes, which routers and proxies
+        // silently drop — the client then waits the full AttemptTimeout for a
+        // response that will never arrive. Anthropic's own docs require
+        // streaming for any request that may take longer than ~10 minutes:
+        // periodic `ping` events keep TCP alive and content deltas arrive
+        // incrementally, eliminating the idle-connection failure mode.
+        request.Stream = true;
+
         var payload = JsonSerializer.Serialize(request, AnthropicJsonContext.Default.AnthropicMessagesRequest);
         _logger.LogDebug("Anthropic agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         var sw = Stopwatch.StartNew();
-        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/messages", content, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        var aggregated = await SendStreamingAsync(payload, cancellationToken).ConfigureAwait(false);
         sw.Stop();
+
+        return BuildTurn(aggregated, sw.Elapsed);
+    }
+
+    [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
+    private async Task<AggregatedTurn> SendStreamingAsync(string payload, CancellationToken cancellationToken)
+    {
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/messages")
+        {
+            Content = new StringContent(payload, Encoding.UTF8, "application/json"),
+        };
+
+        using var response = await _httpClient.SendAsync(
+            requestMessage,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Anthropic agent error: {Status} - {Body}", response.StatusCode, body);
-            throw new HttpRequestException($"Anthropic API failed: {response.StatusCode}: {body}");
+            var errBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            _logger.LogError("Anthropic agent error: {Status} - {Body}", response.StatusCode, errBody);
+            throw new HttpRequestException($"Anthropic API failed: {response.StatusCode}: {errBody}");
         }
 
-        return ParseResponse(body, sw.Elapsed);
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var agg = new AggregatedTurn();
+        var blocks = new SortedDictionary<int, BlockAccumulator>();
+
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            // SSE frames are `event: <name>\ndata: <json>\n\n`. We rely on the
+            // `type` field inside the JSON payload, so the `event:` lines and
+            // blank separators are ignored.
+            if (line.Length == 0 || !line.StartsWith("data: ", StringComparison.Ordinal)) continue;
+            var data = line[6..];
+            if (data == "[DONE]") break;
+
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("type", out var typeEl)) continue;
+            var eventType = typeEl.GetString();
+
+            switch (eventType)
+            {
+                case "message_start":
+                    HandleMessageStart(root, agg);
+                    break;
+                case "content_block_start":
+                    HandleBlockStart(root, blocks);
+                    break;
+                case "content_block_delta":
+                    HandleBlockDelta(root, blocks);
+                    break;
+                case "message_delta":
+                    HandleMessageDelta(root, agg);
+                    break;
+                // Other event types (content_block_stop, message_stop, ping)
+                // require no action — ping in particular is the keep-alive
+                // signal that prevents the idle-drop scenario.
+            }
+        }
+
+        FinalizeBlocks(blocks, agg);
+        return agg;
+    }
+
+    private static void HandleMessageStart(JsonElement root, AggregatedTurn agg)
+    {
+        if (!root.TryGetProperty("message", out var msg)) return;
+        if (msg.TryGetProperty("id", out var idEl)) agg.RequestId = idEl.GetString();
+        if (!msg.TryGetProperty("usage", out var u)) return;
+        if (u.TryGetProperty("input_tokens", out var it)) agg.InputTokens = it.GetInt32();
+        if (u.TryGetProperty("output_tokens", out var ot)) agg.OutputTokens = ot.GetInt32();
+        if (u.TryGetProperty("cache_read_input_tokens", out var cr)) agg.CacheReadTokens = cr.GetInt32();
+        if (u.TryGetProperty("cache_creation_input_tokens", out var cw)) agg.CacheWriteTokens = cw.GetInt32();
+    }
+
+    private static void HandleBlockStart(JsonElement root, SortedDictionary<int, BlockAccumulator> blocks)
+    {
+        if (!root.TryGetProperty("index", out var idxEl)) return;
+        if (!root.TryGetProperty("content_block", out var cbEl)) return;
+        var idx = idxEl.GetInt32();
+        var type = cbEl.GetProperty("type").GetString() ?? "";
+
+        var acc = new BlockAccumulator { Type = type };
+        switch (type)
+        {
+            case "text":
+                if (cbEl.TryGetProperty("text", out var t)) acc.Text.Append(t.GetString());
+                break;
+            case "tool_use":
+                acc.ToolId = cbEl.GetProperty("id").GetString();
+                acc.ToolName = cbEl.GetProperty("name").GetString();
+                break;
+            case "thinking":
+                if (cbEl.TryGetProperty("thinking", out var th)) acc.Text.Append(th.GetString());
+                break;
+        }
+        blocks[idx] = acc;
+    }
+
+    private static void HandleBlockDelta(JsonElement root, SortedDictionary<int, BlockAccumulator> blocks)
+    {
+        if (!root.TryGetProperty("index", out var idxEl)) return;
+        if (!root.TryGetProperty("delta", out var dEl)) return;
+        if (!blocks.TryGetValue(idxEl.GetInt32(), out var acc)) return;
+
+        var deltaType = dEl.GetProperty("type").GetString();
+        switch (deltaType)
+        {
+            case "text_delta":
+                if (dEl.TryGetProperty("text", out var dt)) acc.Text.Append(dt.GetString());
+                break;
+            case "input_json_delta":
+                if (dEl.TryGetProperty("partial_json", out var pj)) acc.ToolInputJson.Append(pj.GetString());
+                break;
+            case "thinking_delta":
+                if (dEl.TryGetProperty("thinking", out var dth)) acc.Text.Append(dth.GetString());
+                break;
+            case "signature_delta":
+                if (dEl.TryGetProperty("signature", out var sig)) acc.Signature = sig.GetString();
+                break;
+        }
+    }
+
+    private static void HandleMessageDelta(JsonElement root, AggregatedTurn agg)
+    {
+        if (!root.TryGetProperty("usage", out var u)) return;
+        // message_delta carries the running totals; output_tokens in particular
+        // converges to its final value here. Cache fields are usually fixed at
+        // message_start but we accept later updates defensively.
+        if (u.TryGetProperty("output_tokens", out var ot)) agg.OutputTokens = ot.GetInt32();
+        if (u.TryGetProperty("input_tokens", out var it)) agg.InputTokens = it.GetInt32();
+        if (u.TryGetProperty("cache_read_input_tokens", out var cr)) agg.CacheReadTokens = cr.GetInt32();
+        if (u.TryGetProperty("cache_creation_input_tokens", out var cw)) agg.CacheWriteTokens = cw.GetInt32();
+    }
+
+    private static void FinalizeBlocks(SortedDictionary<int, BlockAccumulator> blocks, AggregatedTurn agg)
+    {
+        foreach (var (_, acc) in blocks)
+        {
+            switch (acc.Type)
+            {
+                case "text":
+                {
+                    var text = acc.Text.ToString();
+                    agg.FinalText.Append(text);
+                    agg.AssistantContent.Add(new AnthropicContentBlock { Type = "text", Text = text });
+                    break;
+                }
+                case "tool_use":
+                {
+                    // Anthropic streams the tool input as concatenated JSON
+                    // fragments via input_json_delta. An empty tool call is
+                    // represented by zero deltas — default to an empty object.
+                    var json = acc.ToolInputJson.Length == 0 ? "{}" : acc.ToolInputJson.ToString();
+                    using var inputDoc = JsonDocument.Parse(json);
+                    var input = inputDoc.RootElement.Clone();
+                    var id = acc.ToolId ?? string.Empty;
+                    var name = acc.ToolName ?? string.Empty;
+                    agg.ToolCalls.Add(new PendingToolCall { Id = id, Name = name, Arguments = input });
+                    agg.AssistantContent.Add(new AnthropicContentBlock
+                    {
+                        Type = "tool_use",
+                        Id = id,
+                        Name = name,
+                        Input = input,
+                    });
+                    break;
+                }
+                case "thinking":
+                    agg.AssistantContent.Add(new AnthropicContentBlock
+                    {
+                        Type = "thinking",
+                        Thinking = acc.Text.ToString(),
+                        Signature = acc.Signature,
+                    });
+                    break;
+            }
+        }
+    }
+
+    private AgentTurn BuildTurn(AggregatedTurn agg, TimeSpan duration)
+    {
+        _messages.Add(new AnthropicMessageItem { Role = "assistant", Content = agg.AssistantContent });
+
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(_context.Llm, new TokenUsage
+        {
+            InputTokens = agg.InputTokens,
+            OutputTokens = agg.OutputTokens,
+            CachedTokens = agg.CacheReadTokens,
+            CacheWriteTokens = agg.CacheWriteTokens,
+        });
+
+        var usage = new TokenUsage
+        {
+            InputTokens = agg.InputTokens,
+            OutputTokens = agg.OutputTokens,
+            CachedTokens = agg.CacheReadTokens,
+            CacheWriteTokens = agg.CacheWriteTokens,
+            InputCost = inputCost,
+            OutputCost = outputCost,
+        };
+
+        return new AgentTurn
+        {
+            ToolCalls = agg.ToolCalls,
+            FinalText = agg.ToolCalls.Count == 0 ? agg.FinalText.ToString() : null,
+            Usage = usage,
+            Duration = duration,
+            RequestId = agg.RequestId,
+        };
     }
 
     [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
@@ -250,106 +465,33 @@ internal sealed class AnthropicAgentSession : IAgentSession
         return request;
     }
 
-    private AgentTurn ParseResponse(string body, TimeSpan duration)
-    {
-        var root = JsonDocument.Parse(body).RootElement;
-        var requestId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
-
-        var usage = ParseUsage(root);
-
-        var toolCalls = new List<PendingToolCall>();
-        var assistantContent = new List<AnthropicContentBlock>();
-        var finalTextBuilder = new StringBuilder();
-
-        if (root.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in content.EnumerateArray())
-            {
-                if (!block.TryGetProperty("type", out var typeEl)) continue;
-                var type = typeEl.GetString();
-
-                if (type == "tool_use"
-                    && block.TryGetProperty("id", out var useId)
-                    && block.TryGetProperty("name", out var useName)
-                    && block.TryGetProperty("input", out var useInput))
-                {
-                    var id = useId.GetString()!;
-                    var name = useName.GetString()!;
-                    var input = useInput.Clone();
-
-                    toolCalls.Add(new PendingToolCall
-                    {
-                        Id = id,
-                        Name = name,
-                        Arguments = input,
-                    });
-
-                    assistantContent.Add(new AnthropicContentBlock
-                    {
-                        Type = "tool_use",
-                        Id = id,
-                        Name = name,
-                        Input = input,
-                    });
-                }
-                else if (type == "text" && block.TryGetProperty("text", out var textEl))
-                {
-                    var text = textEl.GetString() ?? string.Empty;
-                    finalTextBuilder.Append(text);
-                    assistantContent.Add(new AnthropicContentBlock { Type = "text", Text = text });
-                }
-                else if (type == "thinking" && block.TryGetProperty("thinking", out var thinkEl))
-                {
-                    var signature = block.TryGetProperty("signature", out var sigEl) ? sigEl.GetString() : null;
-                    assistantContent.Add(new AnthropicContentBlock { Type = "thinking", Thinking = thinkEl.GetString(), Signature = signature });
-                }
-            }
-        }
-
-        _messages.Add(new AnthropicMessageItem { Role = "assistant", Content = assistantContent });
-
-        return new AgentTurn
-        {
-            ToolCalls = toolCalls,
-            FinalText = toolCalls.Count == 0 ? finalTextBuilder.ToString() : null,
-            Usage = usage,
-            Duration = duration,
-            RequestId = requestId,
-        };
-    }
-
-    private TokenUsage ParseUsage(JsonElement root)
-    {
-        if (!root.TryGetProperty("usage", out var usage))
-            return new TokenUsage();
-
-        var inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
-        var outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
-        var cacheRead = usage.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : 0;
-        var cacheWrite = usage.TryGetProperty("cache_creation_input_tokens", out var cw) ? cw.GetInt32() : 0;
-
-        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(_context.Llm, new TokenUsage
-        {
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens,
-            CachedTokens = cacheRead,
-            CacheWriteTokens = cacheWrite,
-        });
-
-        return new TokenUsage
-        {
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens,
-            CachedTokens = cacheRead,
-            CacheWriteTokens = cacheWrite,
-            InputCost = inputCost,
-            OutputCost = outputCost,
-        };
-    }
-
     public ValueTask DisposeAsync()
     {
         _messages.Clear();
         return ValueTask.CompletedTask;
+    }
+
+    /// <summary>Per-block streaming accumulator (text / tool_use input JSON / thinking + signature).</summary>
+    private sealed class BlockAccumulator
+    {
+        public string Type { get; set; } = "";
+        public StringBuilder Text { get; } = new();
+        public StringBuilder ToolInputJson { get; } = new();
+        public string? ToolId { get; set; }
+        public string? ToolName { get; set; }
+        public string? Signature { get; set; }
+    }
+
+    /// <summary>Aggregated state assembled from one stream of SSE events.</summary>
+    private sealed class AggregatedTurn
+    {
+        public string? RequestId { get; set; }
+        public int InputTokens { get; set; }
+        public int OutputTokens { get; set; }
+        public int CacheReadTokens { get; set; }
+        public int CacheWriteTokens { get; set; }
+        public List<AnthropicContentBlock> AssistantContent { get; } = new();
+        public List<PendingToolCall> ToolCalls { get; } = new();
+        public StringBuilder FinalText { get; } = new();
     }
 }
