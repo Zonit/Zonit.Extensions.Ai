@@ -32,7 +32,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("Google Gemini 2.5 - Text", async ct => await TestTextGeneration(new Gemini25Flash(), "Google", ct)),
             ("Mistral Large - Text", async ct => await TestTextGeneration(new MistralLarge(), "Mistral", ct)),
             ("DeepSeek V3 - Text", async ct => await TestTextGeneration(new DeepSeekV3(), "DeepSeek", ct)),
-            ("X Grok 3 - Text", async ct => await TestTextGeneration(new Grok3(), "X/Grok", ct)),
+            ("X Grok 4.3 - Text", async ct => await TestTextGeneration(new Grok43(), "X/Grok", ct)),
 
             // Structured output (JSON Schema) tests
             ("OpenAI - Structured Output", async ct => await TestStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
@@ -46,7 +46,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             // Comprehensive value types test (DateTime, int, string, enum, double, decimal, Guid, bool, nullable, arrays)
             ("OpenAI - All Value Types", async ct => await TestAllValueTypes(new GPT41Mini(), "OpenAI", ct)),
             ("Anthropic - All Value Types", async ct => await TestAllValueTypesAnthropic(ct)),
-            ("X Grok - All Value Types", async ct => await TestAllValueTypes(new Grok3(), "X/Grok", ct)),
+            ("X Grok - All Value Types", async ct => await TestAllValueTypes(new Grok43(), "X/Grok", ct)),
 
             // Image analysis tests (using URL instead of bytes for reliability)
             ("OpenAI - Image Analysis", async ct => await TestImageAnalysisUrl(new GPT41(), "OpenAI", ct)),
@@ -304,7 +304,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
     private async Task TestGrokWebSearch(CancellationToken ct)
     {
-        var model = new Grok4 // Grok-4 required for tools (web_search/x_search)
+        var model = new Grok43 // Grok 4.3 — xAI's recommended general-purpose model with native tools.
         {
             WebSearch = new Search { Mode = ModeType.Auto }
         };

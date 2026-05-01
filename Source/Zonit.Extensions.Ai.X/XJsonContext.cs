@@ -21,6 +21,7 @@ namespace Zonit.Extensions.Ai.X;
 [JsonSerializable(typeof(XVideoData))]
 [JsonSerializable(typeof(XVideoOutput))]
 [JsonSerializable(typeof(XResponsesRequest))]
+[JsonSerializable(typeof(XReasoningSpec))]
 [JsonSerializable(typeof(XInputItem))]
 [JsonSerializable(typeof(XContentPart))]
 [JsonSerializable(typeof(XResponseFormat))]

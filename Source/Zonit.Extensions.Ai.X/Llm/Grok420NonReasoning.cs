@@ -6,22 +6,22 @@ namespace Zonit.Extensions.Ai.X;
 /// </summary>
 /// <remarks>
 /// For more information, see: https://docs.x.ai/docs/models/grok-4.20-non-reasoning
-/// Pricing: $2.00/$6.00 per 1M tokens, $0.20 cached input.
+/// Pricing: $1.25/$2.50 per 1M tokens, $0.3125 cached input.
 /// Higher context pricing applies above 200K tokens.
 /// </remarks>
 public class Grok420NonReasoning : XChatBase
 {
     /// <inheritdoc />
-    public override string Name => "grok-4.20-beta-0309-non-reasoning";
+    public override string Name => "grok-4.20-0309-non-reasoning";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.00m;
+    public override decimal PriceInput => 1.25m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedInputValue => 0.20m;
+    public override decimal PriceCachedInputValue => 0.3125m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 6.00m;
+    public override decimal PriceOutput => 2.50m;
 
     /// <inheritdoc />
     /// <remarks>2M context window.</remarks>

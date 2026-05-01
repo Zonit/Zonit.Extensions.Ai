@@ -26,6 +26,12 @@ internal sealed class XAgentSession : IAgentSession
     private readonly List<XInputItem> _input = new();
     private int _turnIndex;
 
+    // Stable per-session cache key. xAI uses this to route every turn to the
+    // same server, which is the only way to reliably reuse the prefix prompt
+    // cache across iterations of an agent loop
+    // (https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits).
+    private readonly string _cacheKey = Guid.NewGuid().ToString("N");
+
     public XAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
     {
         _httpClient = httpClient;
@@ -55,6 +61,7 @@ internal sealed class XAgentSession : IAgentSession
         }
 
         var request = BuildRequest();
+        request.PromptCacheKey = _cacheKey;
         var payload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
         _logger.LogDebug("X agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
@@ -185,8 +192,12 @@ internal sealed class XAgentSession : IAgentSession
             if (chatLlm.TopP < 1.0) request.TopP = chatLlm.TopP;
         }
 
-        if (llm is XReasoningBase { Reason: not null } reasoning)
-            request.ReasoningEffort = reasoning.Reason.Value.ToString().ToLowerInvariant();
+        // Only grok-4.20-multi-agent accepts the reasoning parameter on the
+        // Responses API; every other Grok reasoning model returns HTTP 400 if
+        // we send it. We also have to use the nested shape (`reasoning.effort`),
+        // not the legacy flat `reasoning_effort` field.
+        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoning)
+            request.Reasoning = new XReasoningSpec { Effort = reasoning.Reason.Value.ToString().ToLowerInvariant() };
 
         if (_context.ResponseType is { } responseType)
         {

@@ -49,6 +49,15 @@ public abstract class XReasoningBase : XChatBase, IReasoningLlm
 
     #endregion
 
+    /// <summary>
+    /// Whether this model accepts an explicit <c>reasoning.effort</c> parameter
+    /// on the Responses API. Most current Grok reasoning models (grok-4.3,
+    /// grok-4-1-fast-reasoning, grok-4.20-0309-reasoning) reason automatically
+    /// and reject the parameter with an API error. Only <c>grok-4.20-multi-agent</c>
+    /// accepts it — and there it picks the agent count, not the thinking depth.
+    /// </summary>
+    internal virtual bool EmitsReasoningEffort => false;
+
     #region Nested types for model configuration
 
     /// <summary>
@@ -64,6 +73,11 @@ public abstract class XReasoningBase : XChatBase, IReasoningLlm
         Medium = 2,
         /// <summary>High reasoning effort.</summary>
         High = 3,
+        /// <summary>
+        /// Extra-high effort. Currently only valid for <c>grok-4.20-multi-agent</c>,
+        /// where it controls the number of collaborating agents (xhigh = max).
+        /// </summary>
+        XHigh = 4,
     }
 
     /// <summary>

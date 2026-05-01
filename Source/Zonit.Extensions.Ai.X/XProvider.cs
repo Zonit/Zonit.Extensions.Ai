@@ -551,8 +551,8 @@ public sealed class XProvider : IModelProvider
             }
         }
 
-        if (llm is XReasoningBase { Reason: not null } reasoningLlm)
-            request.ReasoningEffort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoningLlm)
+            request.Reasoning = new XReasoningSpec { Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant() };
 
         if (responseType != typeof(string))
         {
@@ -658,8 +658,8 @@ public sealed class XProvider : IModelProvider
             }
         }
 
-        if (llm is XReasoningBase { Reason: not null } reasoningLlm)
-            request.ReasoningEffort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoningLlm)
+            request.Reasoning = new XReasoningSpec { Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant() };
 
         if (responseType != typeof(string))
         {
@@ -940,9 +940,26 @@ internal sealed class XResponsesRequest
     public double? Temperature { get; set; }
     public double? TopP { get; set; }
     public bool? Stream { get; set; }
-    public string? ReasoningEffort { get; set; }
+    /// <summary>
+    /// Nested reasoning spec used by the Responses API. xAI rejects requests
+    /// that send a flat <c>reasoning_effort</c> field on this endpoint, and
+    /// any reasoning model other than grok-4.20-multi-agent rejects the
+    /// parameter altogether — keep this <c>null</c> for those models.
+    /// </summary>
+    public XReasoningSpec? Reasoning { get; set; }
     public List<XTool>? Tools { get; set; }
     public XResponseFormat? ResponseFormat { get; set; }
+    /// <summary>
+    /// Conversation-scoped cache key. Routes consecutive requests to the
+    /// same xAI server so the prefix prompt-cache stays warm across an agent
+    /// session (per <see href="https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits"/>).
+    /// </summary>
+    public string? PromptCacheKey { get; set; }
+}
+
+internal sealed class XReasoningSpec
+{
+    public string? Effort { get; set; }
 }
 
 internal sealed class XInputItem

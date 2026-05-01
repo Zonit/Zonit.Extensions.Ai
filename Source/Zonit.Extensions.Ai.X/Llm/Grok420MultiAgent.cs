@@ -1,25 +1,36 @@
 namespace Zonit.Extensions.Ai.X;
 
 /// <summary>
-/// Grok 4.20 Multi-Agent - Multi-agent variant of Grok 4.20 with parallel agent coordination.
+/// Grok 4.20 Multi-Agent - Multi-agent variant of Grok 4.20 with parallel agent
+/// coordination. The <see cref="XReasoningBase.Reason"/> property selects the
+/// number of collaborating agents (low / medium / high / xhigh) — it does not
+/// control thinking depth. This is the only Grok model that accepts the
+/// <c>reasoning.effort</c> parameter; sending it to grok-4.3 / grok-4.20
+/// reasoning / grok-4-1-fast returns an API error.
 /// </summary>
 /// <remarks>
-/// Pricing: $2.00/$6.00 per 1M tokens.
+/// Pricing: $1.25/$2.50 per 1M tokens, $0.3125 cached input.
 /// Higher context pricing applies above 200K tokens.
 /// </remarks>
 public class Grok420MultiAgent : XReasoningBase
 {
     /// <inheritdoc />
-    public override string Name => "grok-4.20-multi-agent-beta-0309";
+    public override string Name => "grok-4.20-multi-agent-0309";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.00m;
+    public override decimal PriceInput => 1.25m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedInputValue => 0.20m;
+    public override decimal PriceCachedInputValue => 0.3125m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 6.00m;
+    public override decimal PriceOutput => 2.50m;
+
+    /// <summary>
+    /// Multi-agent is the sole Grok model that accepts <c>reasoning.effort</c>
+    /// on the wire — every other reasoning model rejects it.
+    /// </summary>
+    internal override bool EmitsReasoningEffort => true;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 2_000_000;
