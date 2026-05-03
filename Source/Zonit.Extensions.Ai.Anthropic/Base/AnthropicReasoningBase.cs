@@ -35,7 +35,7 @@ public abstract class AnthropicAdaptiveBase : AnthropicBase, IReasoningLlm
 /// Adaptive thinking sends <c>"thinking": { "type": "adaptive" }</c> together
 /// with a sibling <c>"output_config": { "effort": "low|medium|high|max" }</c>.
 /// The model decides how many thinking tokens to consume. This replaces the
-/// legacy <c>budget_tokens</c> mode (see <see cref="AnthropicBase.ThinkingBudget"/>)
+/// legacy <c>budget_tokens</c> mode (see <see cref="AnthropicLegacyThinkingBase.ThinkingBudget"/>)
 /// which is still required for older models such as Sonnet 4.5 and Opus 4.5/4.6.
 /// </para>
 /// <para>

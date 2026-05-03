@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Grok 4.1 Fast Reasoning - Fast model with full reasoning capabilities.
 /// Reasoning is always enabled (cannot be disabled).
 /// </summary>
-public class Grok41FastReasoning : XReasoningBase
+public class Grok41FastReasoning : XChatBase
 {
     /// <inheritdoc />
     public override string Name => "grok-4-1-fast-reasoning";
@@ -33,6 +33,7 @@ public class Grok41FastReasoning : XReasoningBase
     /// <inheritdoc />
     public override ToolsType SupportedTools =>
         ToolsType.WebSearch |
+        ToolsType.XSearch |
         ToolsType.CodeExecution;
 
     /// <inheritdoc />

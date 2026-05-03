@@ -12,7 +12,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// 1M token context window at standard pricing (no surcharge for long context).
 /// The legacy <c>budget_tokens</c> mode is deprecated for this model — set
 /// <see cref="AnthropicReasoningBase{TReason}.Reason"/> instead of
-/// <see cref="AnthropicBase.ThinkingBudget"/>.
+/// <see cref="AnthropicLegacyThinkingBase.ThinkingBudget"/>.
 /// </remarks>
 public class Sonnet46 : AnthropicReasoningBase<Sonnet46.ReasonType>, IAgentLlm
 {

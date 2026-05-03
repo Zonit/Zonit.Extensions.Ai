@@ -19,16 +19,16 @@ public class GPT5Mini : OpenAiReasoningBase, IAgentLlm
     public override decimal? PriceCachedInput => 0.025m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 0.25m;
+    public override decimal? BatchPriceInput => 0.125m;
 
     /// <inheritdoc />
     public override decimal? BatchPriceOutput => 1.00m;
 
     /// <inheritdoc />
-    public override int MaxInputTokens => 256_000;
+    public override int MaxInputTokens => 400_000;
 
     /// <inheritdoc />
-    public override int MaxOutputTokens => 64_000;
+    public override int MaxOutputTokens => 128_000;
 
     /// <inheritdoc />
     public override ChannelType Input => ChannelType.Text | ChannelType.Image;

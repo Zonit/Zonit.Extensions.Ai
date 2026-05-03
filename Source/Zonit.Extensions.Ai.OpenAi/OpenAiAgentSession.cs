@@ -163,10 +163,10 @@ internal sealed class OpenAiAgentSession : IAgentSession
             request.Store = true;
 
         var tools = new List<OpenAiToolItem>();
-        if (llm.Tools is { Length: > 0 } native)
+        if (llm is OpenAiBase ob && ob.Tools is { Length: > 0 } native)
         {
             foreach (var t in native)
-                tools.Add(BuildNativeTool(t));
+                tools.Add(OpenAiProvider.BuildToolItem(llm, t));
         }
         foreach (var custom in _context.Tools)
         {
@@ -276,25 +276,6 @@ internal sealed class OpenAiAgentSession : IAgentSession
                 content.Add(new OpenAiContentPart { Type = "input_file", FileData = file.DataUrl, Filename = file.OriginalName.Value });
         }
     }
-
-    private static OpenAiToolItem BuildNativeTool(IToolBase tool) => tool switch
-    {
-        FunctionTool f => new OpenAiToolItem
-        {
-            Type = "function",
-            Name = f.Name,
-            Description = f.Description,
-            Parameters = f.Parameters,
-            Strict = f.Strict,
-        },
-        WebSearchTool w => new OpenAiToolItem
-        {
-            Type = "web_search",
-            SearchContextSize = w.ContextSize.ToString().ToLowerInvariant(),
-        },
-        CodeInterpreterTool => new OpenAiToolItem { Type = "code_interpreter" },
-        _ => new OpenAiToolItem { Type = "unknown" },
-    };
 
     private AgentTurn ParseResponse(string body, TimeSpan duration)
     {

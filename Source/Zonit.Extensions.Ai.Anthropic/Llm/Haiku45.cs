@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Claude 4.5 Haiku - Fast and cost-effective.
 /// </summary>
-public class Haiku45 : AnthropicBase, IAgentLlm
+public class Haiku45 : AnthropicLegacyThinkingBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-haiku-4-5-20251001";

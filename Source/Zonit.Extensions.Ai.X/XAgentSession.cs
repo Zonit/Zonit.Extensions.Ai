@@ -192,12 +192,12 @@ internal sealed class XAgentSession : IAgentSession
             if (chatLlm.TopP < 1.0) request.TopP = chatLlm.TopP;
         }
 
-        // Only grok-4.20-multi-agent accepts the reasoning parameter on the
-        // Responses API; every other Grok reasoning model returns HTTP 400 if
-        // we send it. We also have to use the nested shape (`reasoning.effort`),
-        // not the legacy flat `reasoning_effort` field.
-        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoning)
-            request.Reasoning = new XReasoningSpec { Effort = reasoning.Reason.Value.ToString().ToLowerInvariant() };
+        // grok-4.20-multi-agent is the only Grok model that accepts the
+        // `reasoning.effort` field on the Responses API — and even there it
+        // selects the agent count, not thinking depth (per xAI docs). Every
+        // other Grok reasoning model returns HTTP 400 if we send it.
+        if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
+            request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
 
         if (_context.ResponseType is { } responseType)
         {
@@ -213,45 +213,52 @@ internal sealed class XAgentSession : IAgentSession
             };
         }
 
+        // Multi-agent rejects user-defined function tools without beta access
+        // ("Client-side tools for multi-agent models require beta access"),
+        // so for that model we skip every client-side function tool and pass
+        // through only built-in server-side tools (web_search, etc.).
+        var isMultiAgent = llm is Grok420MultiAgent;
+
         var tools = new List<XTool>();
-        if (llm.Tools is { Length: > 0 } native)
+        if (llm is XBase xb && xb.Tools is { Length: > 0 } native)
         {
             foreach (var t in native)
-                tools.Add(BuildNativeTool(t));
-        }
-        foreach (var custom in _context.Tools)
-        {
-            tools.Add(new XTool
             {
-                Type = "function",
-                Name = custom.Name,
-                Description = custom.Description,
-                Parameters = custom.InputSchema,
-                Strict = true,
-            });
+                if (isMultiAgent && t is Tools.FunctionTool ft)
+                {
+                    _logger.LogWarning(
+                        "Skipping client-side function tool {Tool} because grok-4.20-multi-agent requires beta access for client-side tools.",
+                        ft.Name);
+                    continue;
+                }
+                tools.Add(XProvider.BuildToolForRequest(llm, t));
+            }
+        }
+        if (!isMultiAgent)
+        {
+            foreach (var custom in _context.Tools)
+            {
+                tools.Add(new XTool
+                {
+                    Type = "function",
+                    Name = custom.Name,
+                    Description = custom.Description,
+                    Parameters = custom.InputSchema,
+                    Strict = true,
+                });
+            }
+        }
+        else if (_context.Tools.Count > 0)
+        {
+            _logger.LogWarning(
+                "Skipping {Count} agent-registered tool(s) because grok-4.20-multi-agent requires beta access for client-side tools.",
+                _context.Tools.Count);
         }
         if (tools.Count > 0)
             request.Tools = tools;
 
         return request;
     }
-
-    private static XTool BuildNativeTool(IToolBase tool) => tool switch
-    {
-        FunctionTool f => new XTool
-        {
-            Type = "function",
-            Name = f.Name,
-            Description = f.Description,
-            Parameters = f.Parameters,
-            Strict = f.Strict,
-        },
-        WebSearchTool w => new XTool
-        {
-            Type = "web_search",
-        },
-        _ => new XTool { Type = "unknown" },
-    };
 
     private AgentTurn ParseResponse(string body, TimeSpan duration)
     {

@@ -28,7 +28,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             // Text generation tests
             ("OpenAI GPT-4.1 - Text", async ct => await TestTextGeneration(new GPT41(), "OpenAI", ct)),
             ("OpenAI GPT-4.1 Mini - Text", async ct => await TestTextGeneration(new GPT41Mini(), "OpenAI Mini", ct)),
-            ("Anthropic Claude 4 - Text", async ct => await TestTextGeneration(new Sonnet4(), "Anthropic", ct)),
+            ("Anthropic Claude 4 - Text", async ct => await TestTextGeneration(new Sonnet45(), "Anthropic", ct)),
             ("Google Gemini 2.5 - Text", async ct => await TestTextGeneration(new Gemini25Flash(), "Google", ct)),
             ("Mistral Large - Text", async ct => await TestTextGeneration(new MistralLarge(), "Mistral", ct)),
             ("DeepSeek V3 - Text", async ct => await TestTextGeneration(new DeepSeekV3(), "DeepSeek", ct)),
@@ -36,12 +36,12 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
             // Structured output (JSON Schema) tests
             ("OpenAI - Structured Output", async ct => await TestStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
-            ("Anthropic - Structured Output", async ct => await TestStructuredOutput(new Sonnet4(), "Anthropic", ct)),
+            ("Anthropic - Structured Output", async ct => await TestStructuredOutput(new Sonnet45(), "Anthropic", ct)),
             ("Google - Structured Output", async ct => await TestStructuredOutput(new Gemini25Flash(), "Google", ct)),
 
             // Structured output with enums, decimals, guids
             ("OpenAI - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
-            ("Anthropic - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new Sonnet4(), "Anthropic", ct)),
+            ("Anthropic - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new Sonnet45(), "Anthropic", ct)),
 
             // Comprehensive value types test (DateTime, int, string, enum, double, decimal, Guid, bool, nullable, arrays)
             ("OpenAI - All Value Types", async ct => await TestAllValueTypes(new GPT41Mini(), "OpenAI", ct)),
@@ -50,11 +50,11 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
 
             // Image analysis tests (using URL instead of bytes for reliability)
             ("OpenAI - Image Analysis", async ct => await TestImageAnalysisUrl(new GPT41(), "OpenAI", ct)),
-            ("Anthropic - Image Analysis", async ct => await TestImageAnalysisUrl(new Sonnet4(), "Anthropic", ct)),
+            ("Anthropic - Image Analysis", async ct => await TestImageAnalysisUrl(new Sonnet45(), "Anthropic", ct)),
             ("Google - Image Analysis", async ct => await TestImageAnalysisUrl(new Gemini25Flash(), "Google", ct)),
 
             // Streaming tests
-            ("Anthropic - Streaming", async ct => await TestStreaming(new Sonnet4(), "Anthropic", ct)),
+            ("Anthropic - Streaming", async ct => await TestStreaming(new Sonnet45(), "Anthropic", ct)),
 
             // Embedding tests
             ("OpenAI - Embeddings", async ct => await TestEmbeddings(new TextEmbedding3Small(), "OpenAI", ct)),
@@ -62,16 +62,16 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("Mistral - Embeddings", async ct => await TestEmbeddings(new MistralEmbed(), "Mistral", ct)),
 
             // Web search tests
-            ("OpenAI - Web Search", async ct => await TestWebSearch(new GPT41 { Tools = [new WebSearchTool()] }, "OpenAI", ct)),
+            ("OpenAI - Web Search", async ct => await TestWebSearch(new GPT41 { Tools = [new Zonit.Extensions.Ai.OpenAi.Tools.WebSearchTool()] }, "OpenAI", ct)),
             ("X Grok - Web Search", async ct => await TestGrokWebSearch(ct)),
 
             // Reasoning tests
-            ("OpenAI o3-mini - Reasoning", async ct => await TestReasoning(new O3Mini(), "OpenAI o3", ct)),
+            ("OpenAI o3-mini - Reasoning", async ct => await TestReasoning(new O3(), "OpenAI o3", ct)),
             ("Anthropic Claude - Extended Thinking", async ct => await TestAnthropicThinking(ct)),
             ("DeepSeek R1 - Reasoning", async ct => await TestReasoning(new DeepSeekR1(), "DeepSeek R1", ct)),
 
             // Image generation tests
-            ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage1 { Quality = GPTImage1.QualityType.Medium, Size = GPTImage1.SizeType.Square }, "OpenAI", ct)),
+            ("OpenAI - Image Generation", async ct => await TestImageGeneration(new GPTImage15 { Quality = GPTImage15.QualityType.Medium, Size = GPTImage15.SizeType.Square }, "OpenAI", ct)),
             ("OpenAI - Image Generation Mini", async ct => await TestImageGenerationMini(ct)),
             ("X Grok - Image Generation (Imagine)", async ct => await TestGrokImageGeneration(ct)),
 
@@ -146,14 +146,14 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
     }
 
     /// <summary>
-    /// Test image generation with GPTImage1Mini using IPrompt&lt;Asset&gt; to ensure correct routing.
+    /// Test image generation with GPTImage15 using IPrompt&lt;Asset&gt; to ensure correct routing.
     /// This simulates how ArticleImageGenerator in Stand project calls the API.
     /// </summary>
     private async Task TestImageGenerationMini(CancellationToken ct)
     {
         // This is exactly how Stand project calls it - with IPrompt<Asset> and Landscape size
         IPrompt<Asset> prompt = new SimpleImagePrompt("A professional business meeting in a modern office");
-        IImageLlm model = new GPTImage1Mini { Quality = GPTImage1Mini.QualityType.Medium, Size = GPTImage1Mini.SizeType.Landscape };
+        IImageLlm model = new GPTImage15 { Quality = GPTImage15.QualityType.Medium, Size = GPTImage15.SizeType.Landscape };
 
         // This should route to GenerateAsync(IImageLlm, IPrompt<Asset>) not GenerateAsync<Asset>(ILlm, IPrompt<Asset>)
         var result = await provider.GenerateAsync(model, prompt, ct);
@@ -328,7 +328,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
     private async Task TestAnthropicThinking(CancellationToken ct)
     {
         // ThinkingBudget must be less than MaxOutputTokens (64000 for Sonnet4)
-        var model = new Sonnet4
+        var model = new Sonnet45
         {
             ThinkingBudget = 2048
         };
@@ -348,7 +348,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
     {
         try
         {
-            await TestAllValueTypes(new Sonnet4(), "Anthropic", ct);
+            await TestAllValueTypes(new Sonnet45(), "Anthropic", ct);
         }
         catch (JsonException ex)
         {

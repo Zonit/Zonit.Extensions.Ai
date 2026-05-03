@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Hosting;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.OpenAi;
 
@@ -47,7 +47,7 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
         try
         {
             var image = await provider.GenerateAsync(
-                new GPTImage1 { Quality = GPTImage1.QualityType.Medium, Size = GPTImage1.SizeType.Square },
+                new GPTImage15 { Quality = GPTImage15.QualityType.Medium, Size = GPTImage15.SizeType.Square },
                 "A cute robot reading a book in a cozy library.",
                 stoppingToken);
 
@@ -77,7 +77,7 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
         Console.WriteLine("\n5. Testing streaming...\n");
 
         Console.Write("Streaming: ");
-        await foreach (var chunk in provider.StreamAsync(new GPT41Nano(), "Count from 1 to 5, one number per line.", stoppingToken))
+        await foreach (var chunk in provider.StreamAsync(new GPT54Nano(), "Count from 1 to 5, one number per line.", stoppingToken))
         {
             Console.Write(chunk);
         }
@@ -88,7 +88,7 @@ internal class TextBackground(IAiProvider provider) : BackgroundService
 
         var searchModel = new GPT41
         {
-            Tools = [new WebSearchTool { ContextSize = WebSearchTool.ContextSizeType.Medium }]
+            Tools = [new Zonit.Extensions.Ai.OpenAi.Tools.WebSearchTool { ContextSize = Zonit.Extensions.Ai.OpenAi.Tools.WebSearchTool.ContextSizeType.Medium }]
         };
 
         var newsPrompt = new SimplePrompt<NewsResponse>("What are the latest AI news today?");

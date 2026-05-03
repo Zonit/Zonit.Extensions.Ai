@@ -1,30 +1,30 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-5.4 - OpenAI's flagship model for complex reasoning and coding.
-/// Incorporates frontier coding capabilities of GPT-5.3-Codex.
+/// GPT-5.5 — OpenAI's current flagship model for complex reasoning, coding and
+/// professional work. Supersedes GPT-5.4 on the <c>gpt-5.5</c> alias.
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
-/// input cost doubles beyond 272K.
+/// input doubles and output is 1.5× beyond 272K (per OpenAI pricing notes).
 /// </summary>
-public class GPT54 : OpenAiReasoningBase, IAgentLlm
+public class GPT55 : OpenAiReasoningBase, IAgentLlm
 {
     /// <inheritdoc />
-    public override string Name => "gpt-5.4";
+    public override string Name => "gpt-5.5";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.50m;
+    public override decimal PriceInput => 5.00m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 15.00m;
+    public override decimal PriceOutput => 30.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.25m;
+    public override decimal? PriceCachedInput => 0.50m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 1.25m;
+    public override decimal? BatchPriceInput => 2.50m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceOutput => 7.50m;
+    public override decimal? BatchPriceOutput => 15.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_050_000;
@@ -51,19 +51,17 @@ public class GPT54 : OpenAiReasoningBase, IAgentLlm
         FeaturesType.Streaming |
         FeaturesType.FunctionCalling |
         FeaturesType.StructuredOutputs |
-        FeaturesType.FineTuning |
-        FeaturesType.Distillation |
         FeaturesType.PredictedOutputs;
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints =>
         EndpointsType.Chat |
         EndpointsType.Response |
-        EndpointsType.Assistant |
         EndpointsType.Batch;
 
     /// <summary>
-    /// Extended context pricing: input cost doubles above 272K tokens.
+    /// Extended-context pricing: inputs beyond 272K tokens are billed at 2×
+    /// the base rate for the remainder of the session (standard, batch, flex).
     /// </summary>
     public override decimal GetInputPrice(long tokenCount)
     {

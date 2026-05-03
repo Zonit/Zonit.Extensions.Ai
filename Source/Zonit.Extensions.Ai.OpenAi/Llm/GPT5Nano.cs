@@ -25,7 +25,7 @@ public class GPT5Nano : OpenAiReasoningBase, IAgentLlm
     public override decimal? BatchPriceOutput => 0.20m;
 
     /// <inheritdoc />
-    public override int MaxInputTokens => 128_000;
+    public override int MaxInputTokens => 400_000;
 
     /// <inheritdoc />
     public override int MaxOutputTokens => 32_000;

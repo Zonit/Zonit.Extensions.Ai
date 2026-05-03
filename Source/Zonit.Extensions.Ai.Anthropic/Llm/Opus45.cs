@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude Opus 4.5 - Premium model combining maximum intelligence with practical performance.
 /// Most capable Anthropic model.
 /// </summary>
-public class Opus45 : AnthropicBase, IAgentLlm
+public class Opus45 : AnthropicLegacyThinkingBase, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "claude-opus-4-5-20251101";

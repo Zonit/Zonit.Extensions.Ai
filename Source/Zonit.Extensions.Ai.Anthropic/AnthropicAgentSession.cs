@@ -437,17 +437,14 @@ internal sealed class AnthropicAgentSession : IAgentSession
         }
 
         var tools = new List<AnthropicTool>();
-        if (llm.Tools is { Length: > 0 } native)
+        if (llm is AnthropicBase ab && ab.Tools is { Length: > 0 } native)
         {
-            foreach (var ft in native.OfType<FunctionTool>())
-            {
-                tools.Add(new AnthropicTool
-                {
-                    Name = ft.Name,
-                    Description = ft.Description,
-                    InputSchema = ft.Parameters,
-                });
-            }
+            // Delegates to the central builder so FunctionTool + WebSearchTool
+            // (and any future server tool we wire up) share the same validation
+            // path with single-shot calls. Throws NotSupportedException when a
+            // model's SupportedTools mask does not advertise the requested
+            // capability.
+            tools.AddRange(AnthropicProvider.BuildToolsForRequest(llm, native));
         }
         foreach (var custom in _context.Tools)
         {

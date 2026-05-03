@@ -6,6 +6,20 @@ namespace Zonit.Extensions.Ai.Anthropic;
 public abstract class AnthropicBase : LlmBase, ITextLlm
 {
     /// <summary>
+    /// Provider-typed tool collection. Shadows <see cref="LlmBase.Tools"/>
+    /// so the type system rejects cross-provider tool assignments at compile
+    /// time — for example
+    /// <c>new Sonnet46 { Tools = [new OpenAi.Tools.WebSearchTool()] }</c>
+    /// will not compile.
+    /// </summary>
+    public new Anthropic.Tools.IAnthropicTool[]? Tools { get; init; }
+
+    /// <inheritdoc />
+    IToolBase[]? ILlm.Tools => Tools is null
+        ? null
+        : Array.ConvertAll(Tools, static t => (IToolBase)t);
+
+    /// <summary>
     /// Price per 1M cached write tokens.
     /// </summary>
     public abstract decimal PriceCachedWrite { get; }
@@ -26,11 +40,6 @@ public abstract class AnthropicBase : LlmBase, ITextLlm
 
     /// <inheritdoc />
     public virtual double TopP { get; set; } = 1.0;
-
-    /// <summary>
-    /// Thinking budget in tokens for extended thinking (Claude 3.7+).
-    /// </summary>
-    public int? ThinkingBudget { get; set; } = null;
 
     /// <summary>
     /// Selects the Anthropic prompt-cache TTL applied to up to four rolling

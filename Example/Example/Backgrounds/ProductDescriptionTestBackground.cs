@@ -52,7 +52,7 @@ public class ProductDescriptionTestBackground : BackgroundService
                 ?? throw new InvalidOperationException("AnthropicProvider not registered");
             Console.WriteLine($"Using provider: {provider.GetType().Name}");
 
-            var llm = new Sonnet4();
+            var llm = new Sonnet45();
             var response = await provider.GenerateAsync<ProductDescriptionResult>(llm, prompt, ct);
 
             var result = response.Value;

@@ -25,7 +25,7 @@ public class GPT54Pro : OpenAiReasoningBase, IAgentLlm
     public override decimal? BatchPriceOutput => 90.00m;
 
     /// <inheritdoc />
-    public override int MaxInputTokens => 1_100_000;
+    public override int MaxInputTokens => 1_050_000;
 
     /// <inheritdoc />
     public override int MaxOutputTokens => 128_000;
@@ -52,8 +52,6 @@ public class GPT54Pro : OpenAiReasoningBase, IAgentLlm
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints =>
-        EndpointsType.Chat |
         EndpointsType.Response |
-        EndpointsType.Assistant |
         EndpointsType.Batch;
 }

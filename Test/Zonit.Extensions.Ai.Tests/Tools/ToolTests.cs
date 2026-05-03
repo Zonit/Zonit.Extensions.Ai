@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Xunit;
+using WebSearchTool = Zonit.Extensions.Ai.OpenAi.Tools.WebSearchTool;
+using FileSearchTool = Zonit.Extensions.Ai.OpenAi.Tools.FileSearchTool;
+using CodeInterpreterTool = Zonit.Extensions.Ai.OpenAi.Tools.CodeInterpreterTool;
 
 namespace Zonit.Extensions.Ai.Tests.Tools;
 

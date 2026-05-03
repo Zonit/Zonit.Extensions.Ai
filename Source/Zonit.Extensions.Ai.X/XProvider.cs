@@ -551,8 +551,10 @@ public sealed class XProvider : IModelProvider
             }
         }
 
-        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoningLlm)
-            request.Reasoning = new XReasoningSpec { Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant() };
+        // Only grok-4.20-multi-agent accepts the `reasoning.effort` field on
+        // this endpoint, and there it selects agent count, not thinking depth.
+        if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
+            request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
 
         if (responseType != typeof(string))
         {
@@ -658,8 +660,10 @@ public sealed class XProvider : IModelProvider
             }
         }
 
-        if (llm is XReasoningBase { Reason: not null, EmitsReasoningEffort: true } reasoningLlm)
-            request.Reasoning = new XReasoningSpec { Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant() };
+        // Only grok-4.20-multi-agent accepts the `reasoning.effort` field on
+        // this endpoint, and there it selects agent count, not thinking depth.
+        if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
+            request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
 
         if (responseType != typeof(string))
         {
@@ -675,25 +679,83 @@ public sealed class XProvider : IModelProvider
             };
         }
 
-        if (llm.Tools is { Length: > 0 } native)
+        if (llm is XBase xb && xb.Tools is { Length: > 0 } native)
         {
+            var isMultiAgent = llm is Grok420MultiAgent;
             var tools = request.Tools ?? new List<XTool>();
-            foreach (var t in native.OfType<FunctionTool>())
+            foreach (var t in native)
             {
-                tools.Add(new XTool
-                {
-                    Type = "function",
-                    Name = t.Name,
-                    Description = t.Description,
-                    Parameters = t.Parameters,
-                    Strict = t.Strict
-                });
+                if (isMultiAgent && t is Tools.FunctionTool)
+                    continue; // multi-agent rejects client-side function tools without beta access
+                tools.Add(BuildToolForRequest(llm, t));
             }
             if (tools.Count > 0)
                 request.Tools = tools;
         }
 
         return request;
+    }
+
+    /// <summary>
+    /// Materialises an <see cref="Tools.IXTool"/> as an xAI Responses API
+    /// tool descriptor. Each case validates against the model's
+    /// <see cref="ILlm.SupportedTools"/> mask so a request build fails fast
+    /// when the chosen Grok variant does not advertise the capability
+    /// (e.g. <c>Grok41FastNonReasoning</c> exposes WebSearch + XSearch but
+    /// not CodeExecution).
+    /// </summary>
+    internal static XTool BuildToolForRequest(ILlm llm, Tools.IXTool tool) => tool switch
+    {
+        Tools.FunctionTool f => new XTool
+        {
+            Type = "function",
+            Name = f.Name,
+            Description = f.Description,
+            Parameters = f.Parameters,
+            Strict = f.Strict,
+        },
+        Tools.WebSearchTool w => RequireFlag(llm, ToolsType.WebSearch, w) is var _
+            ? new XTool
+            {
+                Type = "web_search",
+                AllowedDomains = w.AllowedDomains is null ? null : new List<string>(w.AllowedDomains),
+                ExcludedDomains = w.ExcludedDomains is null ? null : new List<string>(w.ExcludedDomains),
+                EnableImageUnderstanding = w.EnableImageUnderstanding ? true : null,
+            }
+            : throw new InvalidOperationException("unreachable"),
+        Tools.XSearchTool x => RequireFlag(llm, ToolsType.XSearch, x) is var _
+            ? new XTool
+            {
+                Type = "x_search",
+                AllowedXHandles = x.IncludedHandles is null ? null : new List<string>(x.IncludedHandles),
+                ExcludedXHandles = x.ExcludedHandles is null ? null : new List<string>(x.ExcludedHandles),
+                FromDate = x.FromDate?.ToString("yyyy-MM-dd"),
+                ToDate = x.ToDate?.ToString("yyyy-MM-dd"),
+            }
+            : throw new InvalidOperationException("unreachable"),
+        Tools.CodeExecutionTool ce when RequireFlag(llm, ToolsType.CodeExecution, ce) is var _
+            => new XTool { Type = "code_interpreter" },
+        _ => throw new NotSupportedException(
+            $"xAI provider does not yet wire tool '{tool.GetType().FullName}'."),
+    };
+
+    /// <summary>
+    /// Asserts the model advertises <paramref name="required"/> in its
+    /// <see cref="ILlm.SupportedTools"/> mask; throws otherwise. Returns the
+    /// flag itself so the caller can use the call inside a switch expression
+    /// pattern guard.
+    /// </summary>
+    private static ToolsType RequireFlag(ILlm llm, ToolsType required, IToolBase tool)
+    {
+        if (!llm.SupportedTools.HasFlag(required))
+        {
+            throw new NotSupportedException(
+                $"Model '{llm.Name}' does not support tool '{tool.GetType().Name}' "
+                + $"(required capability: {required}). The model advertises "
+                + $"SupportedTools = {llm.SupportedTools}. Pick a model that lists "
+                + $"the required flag, or remove the tool from llm.Tools.");
+        }
+        return required;
     }
 
     private static void AppendFiles(List<XContentPart> content, IReadOnlyList<Asset> files)
@@ -1004,6 +1066,11 @@ internal sealed class XTool
     public List<string>? ExcludedXHandles { get; set; }
     public string? FromDate { get; set; }
     public string? ToDate { get; set; }
+    /// <summary>
+    /// When set on a <c>web_search</c> tool, lets Grok download and reason
+    /// over images attached to result pages. Adds image-token cost.
+    /// </summary>
+    public bool? EnableImageUnderstanding { get; set; }
 }
 
 internal sealed class XImageRequest

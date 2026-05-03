@@ -15,7 +15,7 @@ namespace Zonit.Extensions.Ai.X;
 /// See <see href="https://docs.x.ai/developers/models/grok-4.3"/>.
 /// </para>
 /// </remarks>
-public class Grok43 : XReasoningBase
+public class Grok43 : XChatBase
 {
     /// <inheritdoc />
     public override string Name => "grok-4.3";
@@ -45,6 +45,7 @@ public class Grok43 : XReasoningBase
     /// <inheritdoc />
     public override ToolsType SupportedTools =>
         ToolsType.WebSearch |
+        ToolsType.XSearch |
         ToolsType.CodeExecution;
 
     /// <inheritdoc />

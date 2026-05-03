@@ -8,6 +8,8 @@ using System.Text.Json;
 using Xunit;
 using Zonit.Extensions;
 using Zonit.Extensions.Ai.OpenAi;
+using WebSearchTool = Zonit.Extensions.Ai.OpenAi.Tools.WebSearchTool;
+using FileSearchTool = Zonit.Extensions.Ai.OpenAi.Tools.FileSearchTool;
 
 namespace Zonit.Extensions.Ai.Tests.Providers;
 

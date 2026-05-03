@@ -66,7 +66,7 @@ public sealed class AnthropicProvider : IModelProvider
     ///   <c>output_config.effort</c> hint (<c>low|medium|high|xhigh|max</c>).
     ///   No <c>budget_tokens</c>.</description></item>
     ///   <item><description><b>Legacy enabled</b> (Sonnet 4.5, Opus 4.5/4.6 with explicit
-    ///   <see cref="AnthropicBase.ThinkingBudget"/>): sends
+    ///   <see cref="AnthropicLegacyThinkingBase.ThinkingBudget"/>): sends
     ///   <c>thinking.type = "enabled"</c> with a numeric <c>budget_tokens</c>.</description></item>
     ///   <item><description><b>Disabled</b>: <c>thinking</c> stays unset.</description></item>
     /// </list>
@@ -88,8 +88,8 @@ public sealed class AnthropicProvider : IModelProvider
             return 0;
         }
 
-        // Legacy fixed-budget path: Sonnet 4.5 etc.
-        if (llm is AnthropicBase legacy && legacy.ThinkingBudget is { } budget)
+        // Legacy fixed-budget path: Sonnet 4.5, Opus 4.5/4.6, Haiku 4.5.
+        if (llm is AnthropicLegacyThinkingBase legacy && legacy.ThinkingBudget is { } budget)
         {
             request.Thinking = new AnthropicThinking { Type = "enabled", BudgetTokens = budget };
             // Anthropic requires max_tokens > budget_tokens; reserve 1024 tokens for the answer.
@@ -580,19 +580,86 @@ Remember: Your response must start with the opening curly brace and be a valid J
                 request.Temperature = anthropicLlm.Temperature;
         }
 
-        if (llm.Tools != null && llm.Tools.Length > 0)
+        if (llm is AnthropicBase ab && ab.Tools is { Length: > 0 } typedTools)
         {
-            request.Tools = llm.Tools.OfType<FunctionTool>().Select(f => new AnthropicTool
-            {
-                Name = f.Name,
-                Description = f.Description,
-                InputSchema = f.Parameters
-            }).ToList();
+            request.Tools = BuildToolsForRequest(llm, typedTools);
         }
 
         ApplyCaching(llm, request);
         return request;
     }
+
+    /// <summary>
+    /// Translates <see cref="AnthropicBase.Tools"/> entries into Anthropic
+    /// tool descriptors. <see cref="Tools.FunctionTool"/> becomes a function
+    /// block; <see cref="Tools.WebSearchTool"/> becomes the
+    /// <c>web_search_20250305</c> server tool with native <c>max_uses</c>,
+    /// <c>allowed_domains</c>, <c>blocked_domains</c> and approximate
+    /// <c>user_location</c> fields. Each case validates against
+    /// <see cref="ILlm.SupportedTools"/>; a Haiku without WebSearch in its
+    /// mask fails the build with a clear message instead of a 400 from the
+    /// API.
+    /// </summary>
+    internal static List<AnthropicTool> BuildToolsForRequest(ILlm llm, IReadOnlyList<Tools.IAnthropicTool> tools)
+    {
+        var result = new List<AnthropicTool>(tools.Count);
+        foreach (var t in tools)
+            result.Add(BuildTool(llm, t));
+        return result;
+    }
+
+    private static AnthropicTool BuildTool(ILlm llm, Tools.IAnthropicTool tool) => tool switch
+    {
+        Tools.FunctionTool f => new AnthropicTool
+        {
+            Name = f.Name,
+            Description = f.Description,
+            InputSchema = f.Parameters,
+        },
+        Tools.WebSearchTool w => RequireFlag(llm, ToolsType.WebSearch, w) is var _
+            ? new AnthropicTool
+            {
+                Type = "web_search_20250305",
+                Name = "web_search",
+                MaxUses = w.MaxUses,
+                AllowedDomains = w.AllowedDomains is null ? null : new List<string>(w.AllowedDomains),
+                BlockedDomains = w.BlockedDomains is null ? null : new List<string>(w.BlockedDomains),
+                UserLocation = HasLocation(w)
+                    ? new AnthropicUserLocation
+                    {
+                        City = w.City,
+                        Region = w.Region,
+                        Country = w.Country,
+                        Timezone = w.TimeZone,
+                    }
+                    : null,
+            }
+            : throw new InvalidOperationException("unreachable"),
+        _ => throw new NotSupportedException(
+            $"Anthropic provider does not yet wire tool '{tool.GetType().FullName}'. "
+            + "Supported entries: FunctionTool, WebSearchTool. Code execution "
+            + "(code_execution_20250522) and computer use require additional "
+            + "beta headers and request shapes that this SDK has not modelled."),
+    };
+
+    private static ToolsType RequireFlag(ILlm llm, ToolsType required, IToolBase tool)
+    {
+        if (!llm.SupportedTools.HasFlag(required))
+        {
+            throw new NotSupportedException(
+                $"Model '{llm.Name}' does not support tool '{tool.GetType().Name}' "
+                + $"(required capability: {required}). The model advertises "
+                + $"SupportedTools = {llm.SupportedTools}. Pick a model that lists "
+                + $"the required flag, or remove the tool from llm.Tools.");
+        }
+        return required;
+    }
+
+    private static bool HasLocation(Tools.WebSearchTool w) =>
+        !string.IsNullOrEmpty(w.City)
+        || !string.IsNullOrEmpty(w.Region)
+        || !string.IsNullOrEmpty(w.Country)
+        || !string.IsNullOrEmpty(w.TimeZone);
 
     [RequiresUnreferencedCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
     [RequiresDynamicCode("JsonSchemaGenerator.Generate uses reflection over the response type.")]
@@ -727,14 +794,9 @@ Remember: Your response must start with the opening curly brace and be a valid J
             else if (anthropicLlm.Temperature < 1.0) request.Temperature = anthropicLlm.Temperature;
         }
 
-        if (llm.Tools != null && llm.Tools.Length > 0)
+        if (llm is AnthropicBase ab && ab.Tools is { Length: > 0 } typedTools)
         {
-            request.Tools = llm.Tools.OfType<FunctionTool>().Select(f => new AnthropicTool
-            {
-                Name = f.Name,
-                Description = f.Description,
-                InputSchema = f.Parameters
-            }).ToList();
+            request.Tools = BuildToolsForRequest(llm, typedTools);
         }
 
         ApplyCaching(llm, request);
@@ -970,11 +1032,43 @@ internal sealed class AnthropicSource
 
 internal sealed class AnthropicTool
 {
+    /// <summary>
+    /// Optional discriminator for server-side tools (e.g. <c>web_search_20250305</c>,
+    /// <c>code_execution_20250522</c>, <c>computer_20250124</c>). Function tools
+    /// leave this null — Anthropic infers them by the presence of <c>input_schema</c>.
+    /// </summary>
+    public string? Type { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
+    /// <summary>
+    /// JSON Schema describing the function arguments. Required for function
+    /// tools; left as <see cref="JsonElement"/> default for server tools where
+    /// the field is omitted by the AOT serializer.
+    /// </summary>
     public JsonElement InputSchema { get; set; }
     /// <summary>Marks a cache breakpoint covering this tool and everything before it (system + earlier tools).</summary>
     public AnthropicCacheControl? CacheControl { get; set; }
+
+    // ---- Server-tool parameters (web_search_20250305) ----
+
+    /// <summary>Maximum search invocations allowed in a single request.</summary>
+    public int? MaxUses { get; set; }
+    /// <summary>Optional allow-list filter; results outside this list are dropped.</summary>
+    public List<string>? AllowedDomains { get; set; }
+    /// <summary>Optional block-list filter; results from these domains are dropped.</summary>
+    public List<string>? BlockedDomains { get; set; }
+    /// <summary>Approximate user location passed through to the search engine.</summary>
+    public AnthropicUserLocation? UserLocation { get; set; }
+}
+
+/// <summary>Anthropic <c>user_location</c> hint for server-side web search.</summary>
+internal sealed class AnthropicUserLocation
+{
+    public string Type { get; set; } = "approximate";
+    public string? City { get; set; }
+    public string? Region { get; set; }
+    public string? Country { get; set; }
+    public string? Timezone { get; set; }
 }
 
 internal sealed class AnthropicCacheControl

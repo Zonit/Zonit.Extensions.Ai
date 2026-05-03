@@ -532,37 +532,78 @@ public sealed class OpenAiProvider : IModelProvider
             }
         }
 
-        if (llm.Tools != null && llm.Tools.Length > 0)
-            request.Tools = llm.Tools.Select(BuildToolItem).ToList();
+        if (llm is OpenAiBase ob && ob.Tools is { Length: > 0 } typedTools)
+            request.Tools = BuildValidatedTools(llm, typedTools);
 
         return request;
     }
 
+    /// <summary>
+    /// Materialises every entry on <see cref="OpenAiBase.Tools"/> as the
+    /// matching Responses API tool block. Each case validates against the
+    /// model's <see cref="ILlm.SupportedTools"/> mask first so a model whose
+    /// declared capabilities exclude (say) <c>WebSearch</c> fails the request
+    /// build with a clear error instead of an opaque API 400.
+    /// </summary>
     [RequiresUnreferencedCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
     [RequiresDynamicCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
-    private static OpenAiToolItem BuildToolItem(IToolBase tool) => tool switch
+    internal static List<OpenAiToolItem> BuildValidatedTools(ILlm llm, IReadOnlyList<Tools.IOpenAiTool> tools)
     {
-        FunctionTool f => new OpenAiToolItem
+        var result = new List<OpenAiToolItem>(tools.Count);
+        foreach (var t in tools)
+            result.Add(BuildToolItem(llm, t));
+        return result;
+    }
+
+    [RequiresUnreferencedCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    [RequiresDynamicCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
+    internal static OpenAiToolItem BuildToolItem(ILlm llm, Tools.IOpenAiTool tool) => tool switch
+    {
+        Tools.FunctionTool f => new OpenAiToolItem
         {
             Type = "function",
             Name = f.Name,
             Description = f.Description,
             Parameters = f.Parameters,
-            Strict = f.Strict
+            Strict = f.Strict,
         },
-        WebSearchTool w => new OpenAiToolItem
-        {
-            Type = "web_search",
-            SearchContextSize = w.ContextSize.ToString().ToLowerInvariant()
-        },
-        CodeInterpreterTool => new OpenAiToolItem { Type = "code_interpreter" },
-        FileSearchTool fs => BuildFileSearchToolItem(fs),
-        _ => new OpenAiToolItem { Type = "unknown" }
+        Tools.WebSearchTool w => RequireFlag(llm, ToolsType.WebSearch, w) is { } _
+            ? new OpenAiToolItem
+            {
+                Type = "web_search",
+                SearchContextSize = w.ContextSize.ToString().ToLowerInvariant(),
+            }
+            : throw new InvalidOperationException("unreachable"),
+        Tools.CodeInterpreterTool ci when RequireFlag(llm, ToolsType.CodeInterpreter, ci) is var _
+            => new OpenAiToolItem { Type = "code_interpreter" },
+        Tools.FileSearchTool fs when RequireFlag(llm, ToolsType.FileSearch, fs) is var _
+            => BuildFileSearchToolItem(fs),
+        _ => throw new NotSupportedException(
+            $"OpenAI provider does not yet wire tool '{tool.GetType().FullName}'."),
     };
+
+    /// <summary>
+    /// Asserts the model advertises <paramref name="required"/> in its
+    /// <see cref="ILlm.SupportedTools"/> mask; throws otherwise. Returns the
+    /// flag itself so the caller can chain it inside a switch expression
+    /// pattern guard.
+    /// </summary>
+    private static ToolsType RequireFlag(ILlm llm, ToolsType required, IToolBase tool)
+    {
+        if (!llm.SupportedTools.HasFlag(required))
+        {
+            throw new NotSupportedException(
+                $"Model '{llm.Name}' does not support tool '{tool.GetType().Name}' "
+                + $"(required capability: {required}). The model advertises "
+                + $"SupportedTools = {llm.SupportedTools}. Pick a model that lists "
+                + $"the required flag, or remove the tool from llm.Tools.");
+        }
+        return required;
+    }
 
     [RequiresUnreferencedCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
     [RequiresDynamicCode("FileSearchTool.Filters may be a user-supplied object that requires reflection-based serialization.")]
-    private static OpenAiToolItem BuildFileSearchToolItem(FileSearchTool fs)
+    private static OpenAiToolItem BuildFileSearchToolItem(Tools.FileSearchTool fs)
     {
         var tool = new OpenAiToolItem { Type = "file_search" };
 
@@ -710,8 +751,8 @@ public sealed class OpenAiProvider : IModelProvider
             }
         }
 
-        if (llm.Tools != null && llm.Tools.Length > 0)
-            request.Tools = llm.Tools.Select(BuildToolItem).ToList();
+        if (llm is OpenAiBase ob && ob.Tools is { Length: > 0 } typedTools)
+            request.Tools = BuildValidatedTools(llm, typedTools);
 
         return request;
     }

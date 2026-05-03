@@ -10,7 +10,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Pricing: $1.25/$2.50 per 1M tokens, $0.3125 cached input.
 /// Higher context pricing applies above 200K tokens.
 /// </remarks>
-public class Grok420Reasoning : XReasoningBase
+public class Grok420Reasoning : XChatBase
 {
     /// <inheritdoc />
     public override string Name => "grok-4.20-0309-reasoning";
@@ -40,6 +40,7 @@ public class Grok420Reasoning : XReasoningBase
     /// <inheritdoc />
     public override ToolsType SupportedTools =>
         ToolsType.WebSearch |
+        ToolsType.XSearch |
         ToolsType.CodeExecution;
 
     /// <inheritdoc />

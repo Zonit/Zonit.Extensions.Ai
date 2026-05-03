@@ -39,6 +39,7 @@ public class Grok420NonReasoning : XChatBase
     /// <inheritdoc />
     public override ToolsType SupportedTools =>
         ToolsType.WebSearch |
+        ToolsType.XSearch |
         ToolsType.CodeExecution;
 
     /// <inheritdoc />
