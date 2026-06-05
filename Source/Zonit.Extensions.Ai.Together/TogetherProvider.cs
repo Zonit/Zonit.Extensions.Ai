@@ -1,0 +1,310 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using System.Text.Unicode;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Zonit.Extensions;
+using Zonit.Extensions.Ai.Converters;
+
+namespace Zonit.Extensions.Ai.Together;
+
+/// <summary>
+/// Together AI provider implementation.
+/// Uses OpenAI-compatible API for open-source models.
+/// </summary>
+[AiProvider("together")]
+public sealed class TogetherProvider : IModelProvider
+{
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<TogetherProvider> _logger;
+    private readonly TogetherOptions _options;
+
+    public TogetherProvider(
+        HttpClient httpClient,
+        IOptions<TogetherOptions> options,
+        ILogger<TogetherProvider> logger)
+    {
+        _httpClient = httpClient;
+        _logger = logger;
+        _options = options.Value;
+
+        ConfigureHttpClient();
+    }
+
+    /// <inheritdoc />
+    public string Name => "Together";
+
+    /// <inheritdoc />
+    public bool SupportsModel(ILlm llm) => llm is TogetherBase;
+
+    /// <inheritdoc />
+    public async Task<Result<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        var request = BuildRequest(llm, prompt, typeof(TResponse));
+        var jsonPayload = JsonSerializer.Serialize(request, TogetherJsonContext.Default.TogetherChatRequest);
+
+        _logger.LogDebug("Together request: {Payload}", jsonPayload);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/chat/completions", content, cancellationToken);
+
+        stopwatch.Stop();
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Together error: {Status} - {Response}", response.StatusCode, responseJson);
+            throw new HttpRequestException($"Together API failed: {response.StatusCode}: {responseJson}");
+        }
+
+        var togetherResponse = JsonSerializer.Deserialize(responseJson, TogetherJsonContext.Default.TogetherResponse)!;
+
+        var textContent = togetherResponse.Choices?.FirstOrDefault()?.Message?.Content;
+
+        if (string.IsNullOrEmpty(textContent))
+            throw new InvalidOperationException("No text in Together response");
+
+        var result = ParseResponse<TResponse>(textContent);
+
+        var inputTokens = togetherResponse.Usage?.PromptTokens ?? 0;
+        var outputTokens = togetherResponse.Usage?.CompletionTokens ?? 0;
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
+        {
+            InputTokens = inputTokens,
+            OutputTokens = outputTokens
+        });
+
+        return new Result<TResponse>
+        {
+            Value = result,
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = PromptNameResolver.Resolve(prompt),
+                Duration = stopwatch.Elapsed,
+                RequestId = togetherResponse.Id,
+                Usage = new TokenUsage
+                {
+                    InputTokens = inputTokens,
+                    OutputTokens = outputTokens,
+                    InputCost = inputCost,
+                    OutputCost = outputCost
+                }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    public Task<Result<Asset>> GenerateImageAsync(
+        IImageLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Together does not support image generation via this interface");
+    }
+
+    /// <inheritdoc />
+    public Task<Result<Asset>> GenerateVideoAsync(
+        IVideoLlm llm,
+        IPrompt<Asset> prompt,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Together does not support video generation");
+    }
+
+    /// <inheritdoc />
+    public Task<Result<float[]>> EmbedAsync(
+        IEmbeddingLlm llm,
+        string input,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Together embeddings not implemented yet");
+    }
+
+    /// <inheritdoc />
+    public async IAsyncEnumerable<string> StreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var request = BuildRequest(llm, prompt, typeof(TResponse));
+        request.Stream = true;
+
+        var jsonPayload = JsonSerializer.Serialize(request, TogetherJsonContext.Default.TogetherChatRequest);
+
+        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/chat/completions") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        while (await reader.ReadLineAsync(cancellationToken) is { } line)
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            if (string.IsNullOrEmpty(line) || !line.StartsWith("data: ")) continue;
+
+            var data = line[6..];
+            if (data == "[DONE]") break;
+
+            var chunk = JsonSerializer.Deserialize(data, TogetherJsonContext.Default.TogetherStreamChunk);
+            var text = chunk?.Choices?.FirstOrDefault()?.Delta?.Content;
+
+            if (text != null)
+                yield return text;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<Result<string>> TranscribeAsync(
+        IAudioLlm llm,
+        Asset audioFile,
+        string? language = null,
+        CancellationToken cancellationToken = default)
+    {
+        throw new NotSupportedException("Together does not support audio transcription");
+    }
+
+    private void ConfigureHttpClient()
+    {
+        var baseUrl = _options.BaseUrl ?? "https://api.together.xyz";
+        _httpClient.BaseAddress = new Uri(baseUrl);
+
+        if (!string.IsNullOrEmpty(_options.ApiKey))
+        {
+            _httpClient.DefaultRequestHeaders.Authorization =
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        }
+    }
+
+    private static TogetherChatRequest BuildRequest<TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
+    {
+        var messages = new List<TogetherRequestMessage>();
+
+
+        messages.Add(new TogetherRequestMessage { Role = "user", Content = prompt.Text });
+
+        var request = new TogetherChatRequest
+        {
+            Model = llm.Name,
+            Messages = messages,
+            MaxTokens = llm.MaxTokens
+        };
+
+        if (llm is TogetherBase togetherLlm)
+        {
+            if (togetherLlm.Temperature < 1.0)
+                request.Temperature = togetherLlm.Temperature;
+            if (togetherLlm.TopP < 1.0)
+                request.TopP = togetherLlm.TopP;
+        }
+
+        if (responseType != typeof(string))
+        {
+            request.ResponseFormat = new TogetherResponseFormat
+            {
+                Type = "json_schema",
+                JsonSchema = new TogetherJsonSchemaSpec
+                {
+                    Name = "response",
+                    Schema = AiSchemaRegistry.GetSchema(responseType),
+                    Strict = true
+                }
+            };
+        }
+
+        return request;
+    }
+
+    private static TResponse ParseResponse<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(string json)
+        => JsonResponseParser.DeserializeStructured<TResponse>(json);
+}
+
+// Response models
+internal sealed class TogetherResponse
+{
+    public string? Id { get; set; }
+    public TogetherChoice[]? Choices { get; set; }
+    public TogetherUsage? Usage { get; set; }
+}
+
+internal sealed class TogetherChoice
+{
+    public TogetherMessage? Message { get; set; }
+}
+
+internal sealed class TogetherMessage
+{
+    public string? Content { get; set; }
+}
+
+internal sealed class TogetherUsage
+{
+    public int PromptTokens { get; set; }
+    public int CompletionTokens { get; set; }
+}
+
+internal sealed class TogetherStreamChunk
+{
+    public TogetherStreamChoice[]? Choices { get; set; }
+}
+
+internal sealed class TogetherStreamChoice
+{
+    public TogetherStreamDelta? Delta { get; set; }
+}
+
+internal sealed class TogetherStreamDelta
+{
+    public string? Content { get; set; }
+}
+
+// Request models (AOT-safe DTO).
+internal sealed class TogetherChatRequest
+{
+    public string Model { get; set; } = "";
+    public List<TogetherRequestMessage> Messages { get; set; } = new();
+    public int? MaxTokens { get; set; }
+    public double? Temperature { get; set; }
+    public double? TopP { get; set; }
+    public bool? Stream { get; set; }
+    public TogetherResponseFormat? ResponseFormat { get; set; }
+}
+
+internal sealed class TogetherRequestMessage
+{
+    public string Role { get; set; } = "";
+    public string Content { get; set; } = "";
+}
+
+internal sealed class TogetherResponseFormat
+{
+    public string Type { get; set; } = "";
+    public TogetherJsonSchemaSpec? JsonSchema { get; set; }
+}
+
+internal sealed class TogetherJsonSchemaSpec
+{
+    public string Name { get; set; } = "";
+    public JsonElement Schema { get; set; }
+    public bool Strict { get; set; }
+}

@@ -1,0 +1,54 @@
+<Project>
+  <!-- Common NuGet Package Metadata for all Zonit.Extensions.Ai packages -->
+  <PropertyGroup>
+    <!--
+      Stable 10.0.0 release (out of preview). Kept as VersionPrefix (not a single
+      <Version>) so MSBuild derives a numeric AssemblyVersion/FileVersion and does
+      not trip CS7034 on the netstandard2.0 source generators. To ship a future
+      prerelease, set <VersionSuffix> (e.g. preview.1) and it becomes 10.0.0-preview.1.
+    -->
+    <VersionPrefix>10.0.0</VersionPrefix>
+    <!-- Out of preview: suffix commented so the build is a stable 10.0.0.
+         Uncomment / bump for the next prerelease (e.g. set VersionPrefix 11.0.0 + preview.1). -->
+    <!--<VersionSuffix>preview.16</VersionSuffix>-->
+    <Authors>Zonit</Authors>
+    <Company>Zonit</Company>
+    <Product>Zonit.Extensions.Ai</Product>
+    <Copyright>Copyright (c) Zonit</Copyright>
+    
+    <!-- Repository and Project URLs -->
+    <PackageProjectUrl>https://github.com/Zonit/Zonit.Extensions.Ai</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Zonit/Zonit.Extensions.Ai</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    
+    <!-- License -->
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    
+    <!-- Package Assets -->
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageReleaseNotes>See https://github.com/Zonit/Zonit.Extensions.Ai/releases</PackageReleaseNotes>
+    
+    <!-- Build settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    
+    <!-- AOT and Trimming support (net10.0 only). SourceGenerators (netstandard2.0) opt-out below. -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+
+    <!-- Suppress the "you're using a .NET preview SDK" info banner. -->
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+  </PropertyGroup>
+  
+  <!-- Language settings -->
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+</Project>

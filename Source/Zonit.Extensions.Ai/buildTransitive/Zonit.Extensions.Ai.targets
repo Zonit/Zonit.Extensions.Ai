@@ -1,0 +1,313 @@
+<Project>
+
+  <!--
+    ============================================================================
+    Zonit.Extensions.Ai AI context installer  (standalone)
+    ============================================================================
+    SINGLE SOURCE, COMPILED PER EDITOR. The authored docs live in the repo's
+    Instruction/ folder and are packed into this package under
+    Instruction/extensions/ai/*.md (what this file reads). At consumer build time
+    this "compiles" them into each detected editor's native format:
+
+        .zonit/extensions/ai/*.md            copied as-is (neutral, human/agent readable)
+        .zonit/index.md                      generated map (anchored block)
+        .cursor/rules/zonit-ai*.mdc          generated: frontmatter (globs) + doc content
+        .github/instructions/zonit-ai*.md    generated: frontmatter (applyTo) + doc content
+        .github/copilot-instructions.md      generated umbrella (anchored block)
+        CLAUDE.md                            generated umbrella (anchored block)
+
+    REPO-ROOT ANCHORED. Detection and output are anchored at the workspace root,
+    not at the building project's directory. In a real solution the editor folders
+    (.claude/.cursor/.vscode/.github) live next to the .git/.sln at the repo root,
+    several levels above any individual .csproj. We walk up from the project to the
+    nearest ancestor holding .git / a solution file / an editor folder and treat
+    that as the root (override via <ZonitAiInstructionsAnchor>). Earlier versions
+    looked only next to the .csproj, so nested multi-project repos detected nothing.
+
+    NO SPAM: a given editor's files are produced ONLY if that editor is detected
+    at the root (or forced via <ZonitAiEditors>). No editor detected -> nothing.
+
+      Editor   Detected when (at the resolved root)                 Gets
+      Claude   .claude/ or CLAUDE.md                                .claude/skills/ Skill + CLAUDE.md pointer
+      Cursor   .cursor/                                             .cursor/rules/*.mdc
+      Copilot  .vscode/ or .github/copilot-instructions.md          .github/instructions/* +
+               or .github/instructions/  (NOT bare .github/ = CI)   copilot-instructions.md block
+
+    Knobs:
+      <ZonitAiEditors>auto|all|none|cursor;claude</ZonitAiEditors>   (default auto)
+      <ZonitAiInstructions>false</ZonitAiInstructions>               master off switch
+      <ZonitAiInstructionsRoot>.zonit</ZonitAiInstructionsRoot>      relocate the tree (under the root)
+      <ZonitAiInstructionsAnchor>path</ZonitAiInstructionsAnchor>    force the workspace root explicitly
+    Safety: skipped on CI (ContinuousIntegrationBuild=true). Generated files are
+    rewritten only when content changes; umbrella blocks are injected between the
+    ZONIT:ai START / END markers and never touch anything outside them.
+
+    Ships in buildTransitive/ so it fires even when core arrives transitively via a
+    provider package (e.g. Zonit.Extensions.Ai.OpenAi).
+    ============================================================================
+  -->
+
+  <PropertyGroup>
+    <ZonitAiInstructions Condition="'$(ZonitAiInstructions)' == ''">true</ZonitAiInstructions>
+    <ZonitAiInstructionsRoot Condition="'$(ZonitAiInstructionsRoot)' == ''">.zonit</ZonitAiInstructionsRoot>
+    <ZonitAiEditors Condition="'$(ZonitAiEditors)' == ''">auto</ZonitAiEditors>
+    <_ZonitAiContentRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..', 'Instruction'))</_ZonitAiContentRoot>
+    <_ZonitAiDocsDir>$([System.IO.Path]::Combine('$(_ZonitAiContentRoot)', 'extensions', 'ai'))</_ZonitAiDocsDir>
+  </PropertyGroup>
+
+  <!-- The single-source doc map: base name + optional file-pattern Glob + one-line Summary.
+       Order here is the order shown in the generated index/umbrella. -->
+  <ItemGroup>
+    <ZonitAiDoc Include="usage">        <Summary>Getting started, the unified API, calling each modality.</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="providers">    <Summary>Which provider NuGet to install for a capability (images, audio, embeddings).</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="configuration"><Summary>DI registration, appsettings.json, resilience.</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="models">       <Summary>Capability interfaces, picking a model, reasoning, fast mode.</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="prompts">      <Glob>**/*Prompt.cs</Glob><Summary>How to write a prompt class (PromptBase, Scriban, structured output).</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="prompt-library"><Summary>Ready-made prompts from Zonit.Extensions.Ai.Prompts (e.g. translation).</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="tools">        <Glob>**/*Tool.cs</Glob><Summary>How to write an agent tool (ToolBase).</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="chat">         <Summary>Multi-turn chat (ChatAsync, ChatStreamAsync).</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="agents">       <Summary>Agents: tool-calling, MCP, streaming, ResultAgent audit.</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="results">      <Summary>Result, MetaData, token usage and cost, ResultAgent roll-ups.</Summary></ZonitAiDoc>
+  </ItemGroup>
+
+  <!-- Resolve the workspace root: walk up from the building project to the nearest
+       ancestor that holds a repo marker (.git), a solution file, or an AI-editor
+       folder. .git is the definitive boundary; editor folders are the fallback for
+       non-git workspaces. Falls back to the start directory (old behavior) when
+       nothing is found. Done in C# because MSBuild's upward-search intrinsics match
+       files only (they miss the .git *directory*) and cannot loop. -->
+  <UsingTask TaskName="ZonitFindRoot" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <StartDir ParameterType="System.String" Required="true" />
+      <Root ParameterType="System.String" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        string Combine(string a, string b) { return System.IO.Path.Combine(a, b); }
+        var dir = new System.IO.DirectoryInfo(StartDir);
+        string repoRoot = null, editorRoot = null;
+        while (dir != null)
+        {
+            string p = dir.FullName;
+            try
+            {
+                if (repoRoot == null &&
+                    (System.IO.Directory.Exists(Combine(p, ".git"))
+                  || System.IO.File.Exists(Combine(p, ".git"))
+                  || System.IO.Directory.GetFiles(p, "*.sln").Length > 0
+                  || System.IO.Directory.GetFiles(p, "*.slnx").Length > 0))
+                    repoRoot = p;
+
+                if (editorRoot == null &&
+                    (System.IO.Directory.Exists(Combine(p, ".claude"))
+                  || System.IO.Directory.Exists(Combine(p, ".cursor"))
+                  || System.IO.Directory.Exists(Combine(p, ".vscode"))
+                  || System.IO.Directory.Exists(Combine(p, ".github"))
+                  || System.IO.File.Exists(Combine(p, "CLAUDE.md"))))
+                    editorRoot = p;
+            }
+            catch { /* unreadable ancestor: keep walking */ }
+
+            if (repoRoot != null) break;  // the repo root is the definitive boundary
+            dir = dir.Parent;
+        }
+        Root = repoRoot ?? editorRoot ?? StartDir;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- The "compiler": projects the single-source docs into one editor's native files. -->
+  <UsingTask TaskName="ZonitEmit" TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Editor ParameterType="System.String" Required="true" />
+      <Docs ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <DocsDir ParameterType="System.String" Required="true" />
+      <ProjectRoot ParameterType="System.String" Required="true" />
+      <Root ParameterType="System.String" Required="true" />
+      <Changed ParameterType="System.Boolean" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Changed = false;
+        const string NL = "\n";
+        const string BEGIN = "<!-- ZONIT:ai START -->";
+        const string END = "<!-- ZONIT:ai END -->";
+
+        bool WriteIfChanged(string path, string text)
+        {
+            string ex = System.IO.File.Exists(path) ? System.IO.File.ReadAllText(path) : null;
+            if (string.Equals(ex, text, System.StringComparison.Ordinal)) return false;
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+            System.IO.File.WriteAllText(path, text);
+            return true;
+        }
+
+        bool Inject(string file, string content, string header)
+        {
+            string block = BEGIN + NL + content.Trim() + NL + END;
+            string ex = System.IO.File.Exists(file) ? System.IO.File.ReadAllText(file) : null;
+            string res;
+            if (ex == null)
+                res = (string.IsNullOrEmpty(header) ? "" : header.Trim() + NL + NL) + block + NL;
+            else
+            {
+                int b = ex.IndexOf(BEGIN, System.StringComparison.Ordinal);
+                int e = ex.IndexOf(END, System.StringComparison.Ordinal);
+                res = (b >= 0 && e > b)
+                    ? ex.Substring(0, b) + block + ex.Substring(e + END.Length)
+                    : ex.TrimEnd() + NL + NL + block + NL;
+            }
+            return WriteIfChanged(file, res);
+        }
+
+        // Always-on umbrella text (short, generated from the doc map).
+        var sb = new System.Text.StringBuilder();
+        sb.Append("## Zonit.Extensions.Ai (AI / LLM)" + NL + NL);
+        sb.Append("For any AI/LLM, text/image/embedding/audio, or agent work, use **`IAiProvider`** " +
+                  "(never a raw provider SDK). `Result<T>` exposes `.Value` and `.MetaData`, not `IsSuccess`. Guides:" + NL + NL);
+        foreach (var d in Docs)
+            sb.Append("- `" + Root + "/extensions/ai/" + d.ItemSpec + ".md`: " + d.GetMetadata("Summary") + NL);
+        sb.Append(NL + "Need a capability/provider that isn't installed (e.g. image generation)? Read `" +
+                  Root + "/extensions/ai/providers.md`, install that NuGet, then implement.");
+        string umbrella = sb.ToString().Trim();
+
+        bool ch = false;
+        if (Editor == "index")
+        {
+            ch = Inject(System.IO.Path.Combine(ProjectRoot, Root, "index.md"), umbrella,
+                "# Zonit AI assistant instructions (map)" + NL + NL +
+                "> Auto-managed by Zonit packages; each library owns one anchored block.");
+        }
+        else if (Editor == "cursor")
+        {
+            string dir = System.IO.Path.Combine(ProjectRoot, ".cursor", "rules");
+            ch |= WriteIfChanged(System.IO.Path.Combine(dir, "zonit-ai.mdc"),
+                "---" + NL + "description: Zonit.Extensions.Ai: use IAiProvider; install the right provider package" +
+                NL + "alwaysApply: true" + NL + "---" + NL + NL + umbrella + NL);
+            foreach (var d in Docs)
+            {
+                string glob = d.GetMetadata("Glob");
+                if (string.IsNullOrEmpty(glob)) continue;
+                string body = System.IO.File.ReadAllText(System.IO.Path.Combine(DocsDir, d.ItemSpec + ".md"));
+                string front = "---" + NL + "description: " + d.GetMetadata("Summary") + NL +
+                               "globs: " + glob + NL + "alwaysApply: false" + NL + "---" + NL + NL;
+                ch |= WriteIfChanged(System.IO.Path.Combine(dir, "zonit-ai-" + d.ItemSpec + ".mdc"), front + body);
+            }
+        }
+        else if (Editor == "copilot")
+        {
+            ch |= Inject(System.IO.Path.Combine(ProjectRoot, ".github", "copilot-instructions.md"), umbrella, "# Copilot instructions");
+            string dir = System.IO.Path.Combine(ProjectRoot, ".github", "instructions");
+            foreach (var d in Docs)
+            {
+                string glob = d.GetMetadata("Glob");
+                if (string.IsNullOrEmpty(glob)) continue;
+                string body = System.IO.File.ReadAllText(System.IO.Path.Combine(DocsDir, d.ItemSpec + ".md"));
+                string front = "---" + NL + "applyTo: \"" + glob + "\"" + NL + "---" + NL + NL;
+                ch |= WriteIfChanged(System.IO.Path.Combine(dir, "zonit-ai-" + d.ItemSpec + ".instructions.md"), front + body);
+            }
+        }
+        else if (Editor == "claude")
+        {
+            // Claude Code is the priority. Ship a Skill (loaded on demand via its description)
+            // plus a thin always-on pointer in CLAUDE.md, so Claude knows the library and the
+            // skill exist even before the skill triggers.
+            string skillDesc =
+                "Use when doing any AI or LLM work in this .NET repo with Zonit.Extensions.Ai. "
+              + "Covers calling a model; generating text, images, embeddings or audio transcription; "
+              + "writing a prompt class (a *Prompt.cs file) or an agent tool (a *Tool.cs file); "
+              + "building an agent with tools or MCP; choosing which provider NuGet to install; and "
+              + "reading result metadata and cost via IAiProvider, PromptBase, ToolBase and ResultAgent.";
+            string skill =
+                "---" + NL + "name: zonit-extensions-ai" + NL + "description: \"" + skillDesc + "\"" + NL + "---" + NL + NL
+              + umbrella + NL + NL
+              + "When creating or editing a `*Prompt.cs` file, follow `" + Root + "/extensions/ai/prompts.md`; "
+              + "for a `*Tool.cs` file, follow `" + Root + "/extensions/ai/tools.md`." + NL;
+            ch |= WriteIfChanged(
+                System.IO.Path.Combine(ProjectRoot, ".claude", "skills", "zonit-extensions-ai", "SKILL.md"), skill);
+
+            string pointer =
+                "## Zonit.Extensions.Ai (AI / LLM)" + NL + NL
+              + "This repo uses **Zonit.Extensions.Ai** for all AI and LLM work. For any AI task "
+              + "(calling a model, generating text, images, embeddings or audio, writing a `*Prompt.cs` "
+              + "or `*Tool.cs`, building an agent, or choosing a provider package), use the "
+              + "**`zonit-extensions-ai`** skill and the guides under `" + Root + "/extensions/ai/`. "
+              + "Use `IAiProvider`; `Result<T>` has `.Value` and `.MetaData`, not `IsSuccess`." + NL + NL
+              + "File patterns: for `*Prompt.cs` follow `" + Root + "/extensions/ai/prompts.md`; "
+              + "for `*Tool.cs` follow `" + Root + "/extensions/ai/tools.md`.";
+            ch |= Inject(System.IO.Path.Combine(ProjectRoot, "CLAUDE.md"), pointer,
+                "# CLAUDE.md" + NL + NL + "Guidance for Claude Code in this repository.");
+        }
+        Changed = ch;
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="ZonitAiInstallInstructions"
+          AfterTargets="Build"
+          Condition="'$(ZonitAiInstructions)' != 'false'
+                     and '$(ZonitAiEditors)' != 'none'
+                     and '$(ContinuousIntegrationBuild)' != 'true'
+                     and Exists('$(_ZonitAiDocsDir)')">
+
+    <!-- 1. Resolve the workspace root (explicit anchor, else upward search). -->
+    <ZonitFindRoot Condition="'$(ZonitAiInstructionsAnchor)' == ''" StartDir="$(MSBuildProjectDirectory)">
+      <Output TaskParameter="Root" PropertyName="_ZonitRoot" />
+    </ZonitFindRoot>
+    <PropertyGroup>
+      <_ZonitRoot Condition="'$(ZonitAiInstructionsAnchor)' != ''">$(ZonitAiInstructionsAnchor)</_ZonitRoot>
+      <_ZonitRoot>$([MSBuild]::EnsureTrailingSlash('$(_ZonitRoot)'))</_ZonitRoot>
+    </PropertyGroup>
+
+    <!-- 2. Detect editors at that root (override | auto-detect existing editor folders). -->
+    <PropertyGroup>
+      <_ZonitClaude>false</_ZonitClaude>
+      <_ZonitClaude Condition="'$(ZonitAiEditors)' == 'all'
+          or ('$(ZonitAiEditors)' == 'auto' and (Exists('$(_ZonitRoot).claude') or Exists('$(_ZonitRoot)CLAUDE.md')))
+          or $(ZonitAiEditors.Contains('claude'))">true</_ZonitClaude>
+
+      <_ZonitCursor>false</_ZonitCursor>
+      <_ZonitCursor Condition="'$(ZonitAiEditors)' == 'all'
+          or ('$(ZonitAiEditors)' == 'auto' and Exists('$(_ZonitRoot).cursor'))
+          or $(ZonitAiEditors.Contains('cursor'))">true</_ZonitCursor>
+
+      <_ZonitCopilot>false</_ZonitCopilot>
+      <_ZonitCopilot Condition="'$(ZonitAiEditors)' == 'all'
+          or ('$(ZonitAiEditors)' == 'auto' and (Exists('$(_ZonitRoot).vscode') or Exists('$(_ZonitRoot).github\copilot-instructions.md') or Exists('$(_ZonitRoot).github\instructions')))
+          or $(ZonitAiEditors.Contains('copilot'))">true</_ZonitCopilot>
+
+      <_ZonitAnyEditor>false</_ZonitAnyEditor>
+      <_ZonitAnyEditor Condition="'$(_ZonitClaude)' == 'true' or '$(_ZonitCursor)' == 'true' or '$(_ZonitCopilot)' == 'true'">true</_ZonitAnyEditor>
+    </PropertyGroup>
+
+    <!-- Materialize the single source tree (neutral, readable by humans + Claude). -->
+    <ItemGroup Condition="'$(_ZonitAnyEditor)' == 'true'">
+      <_ZonitTreeFile Include="$(_ZonitAiContentRoot)**\*" />
+    </ItemGroup>
+    <Copy Condition="'$(_ZonitAnyEditor)' == 'true'"
+          SourceFiles="@(_ZonitTreeFile)"
+          DestinationFiles="@(_ZonitTreeFile->'$(_ZonitRoot)$(ZonitAiInstructionsRoot)\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" OverwriteReadOnlyFiles="true" />
+
+    <!-- Compile the docs into each surface (index always; editors only when detected). -->
+    <ZonitEmit Condition="'$(_ZonitAnyEditor)' == 'true'" Editor="index" Docs="@(ZonitAiDoc)" DocsDir="$(_ZonitAiDocsDir)" ProjectRoot="$(_ZonitRoot)" Root="$(ZonitAiInstructionsRoot)">
+      <Output TaskParameter="Changed" PropertyName="_ZonitChIndex" />
+    </ZonitEmit>
+    <ZonitEmit Condition="'$(_ZonitCursor)' == 'true'" Editor="cursor" Docs="@(ZonitAiDoc)" DocsDir="$(_ZonitAiDocsDir)" ProjectRoot="$(_ZonitRoot)" Root="$(ZonitAiInstructionsRoot)">
+      <Output TaskParameter="Changed" PropertyName="_ZonitChCursor" />
+    </ZonitEmit>
+    <ZonitEmit Condition="'$(_ZonitCopilot)' == 'true'" Editor="copilot" Docs="@(ZonitAiDoc)" DocsDir="$(_ZonitAiDocsDir)" ProjectRoot="$(_ZonitRoot)" Root="$(ZonitAiInstructionsRoot)">
+      <Output TaskParameter="Changed" PropertyName="_ZonitChCopilot" />
+    </ZonitEmit>
+    <ZonitEmit Condition="'$(_ZonitClaude)' == 'true'" Editor="claude" Docs="@(ZonitAiDoc)" DocsDir="$(_ZonitAiDocsDir)" ProjectRoot="$(_ZonitRoot)" Root="$(ZonitAiInstructionsRoot)">
+      <Output TaskParameter="Changed" PropertyName="_ZonitChClaude" />
+    </ZonitEmit>
+
+    <Message Importance="high"
+             Condition="'$(_ZonitChIndex)' == 'true' or '$(_ZonitChCursor)' == 'true' or '$(_ZonitChCopilot)' == 'true' or '$(_ZonitChClaude)' == 'true'"
+             Text="Zonit.Extensions.Ai: compiled AI instructions to '$(_ZonitRoot)$(ZonitAiInstructionsRoot)/' for detected editors (Claude=$(_ZonitClaude), Cursor=$(_ZonitCursor), Copilot=$(_ZonitCopilot)). Override root with &lt;ZonitAiInstructionsAnchor&gt; / editors with &lt;ZonitAiEditors&gt; / disable with &lt;ZonitAiInstructions&gt;false&lt;/ZonitAiInstructions&gt;." />
+  </Target>
+
+</Project>

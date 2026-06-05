@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>Zonit.Extensions.Ai.Prompts</PackageId>
+    <Description>Production-ready prompt templates for Zonit.Extensions.Ai (translation and more).</Description>
+    <PackageTags>$(PackageTags);prompts;templates</PackageTags>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+  </ItemGroup>
+</Project>

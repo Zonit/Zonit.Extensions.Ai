@@ -1,0 +1,449 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
+using System.Text.RegularExpressions;
+using System.Text.Unicode;
+using Zonit.Extensions.Ai.Converters;
+
+namespace Zonit.Extensions.Ai;
+
+/// <summary>
+/// Resilient JSON response parser that handles various AI response formats.
+/// Supports String, Int, Bool, List, and complex object types.
+/// Handles common issues like markdown code blocks, partial JSON, and type mismatches.
+/// </summary>
+public static partial class JsonResponseParser
+{
+    // .NET 10 change: JsonSerializerOptions must specify a TypeInfoResolver
+    // before being marked read-only, otherwise the very first Deserialize call
+    // throws "JsonSerializerOptions instance must specify a TypeInfoResolver
+    // setting before being marked as read-only." We combine the AOT-safe
+    // resolver populated by AiJsonTypeInfoGenerator with DefaultJsonTypeInfoResolver
+    // for the reflection fallback path (which is gated by [RequiresUnreferencedCode]
+    // / [RequiresDynamicCode] on Parse<T>).
+    //
+    // The factories below are wrapped in methods (not field initialisers) so the
+    // [UnconditionalSuppressMessage] attributes actually cover the DefaultJsonTypeInfoResolver
+    // constructor call — suppress-on-field does NOT propagate to the synthesised
+    // static constructor (.cctor) in which field initialisers run, and would leave
+    // IL2026/IL3050 unsuppressed at publish time.
+
+    private static readonly JsonSerializerOptions DefaultOptions = CreateDefaultOptions();
+
+    /// <summary>
+    /// Cached <see cref="JsonSerializerOptions"/> shared by every concrete
+    /// provider's <c>ParseResponse&lt;TResponse&gt;</c> implementation.
+    /// Configures permissive deserialisation (case-insensitive properties,
+    /// case-insensitive enum + DateOnly/TimeOnly converters, full-Unicode
+    /// encoder) and — critically for .NET 10 — a non-null
+    /// <see cref="JsonSerializerOptions.TypeInfoResolver"/> so the options
+    /// can be marked read-only on first use without throwing.
+    /// </summary>
+    /// <remarks>
+    /// Routes through <see cref="AiJsonTypeInfoResolver"/> first so any
+    /// source-generated <c>JsonTypeInfo&lt;T&gt;</c> is preferred under AOT;
+    /// falls back to <see cref="DefaultJsonTypeInfoResolver"/> for shapes the
+    /// generator did not emit. The fallback is gated by the provider's own
+    /// <c>[RequiresUnreferencedCode]</c> / <c>[RequiresDynamicCode]</c> on
+    /// <c>ParseResponse</c>.
+    /// </remarks>
+    public static readonly JsonSerializerOptions ProviderResponseOptions = CreateProviderResponseOptions();
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresUnreferencedCode].")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted on the reflection fallback path, which the Parse<T> entry point already declares via [RequiresDynamicCode].")]
+    private static JsonSerializerOptions CreateDefaultOptions() => new()
+    {
+        PropertyNameCaseInsensitive = true,
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver()),
+    };
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresUnreferencedCode].")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "DefaultJsonTypeInfoResolver is only consulted for types not picked up by the source generator; provider ParseResponse methods declare [RequiresDynamicCode].")]
+    private static JsonSerializerOptions CreateProviderResponseOptions() => new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        Converters =
+        {
+            new CaseInsensitiveEnumConverterFactory(),
+            new DateTimeConverterFactory(),
+        },
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(
+            AiJsonTypeInfoResolver.Instance,
+            new DefaultJsonTypeInfoResolver()),
+    };
+
+    /// <summary>
+    /// Parses AI response to the expected type with resilient error handling.
+    /// </summary>
+    /// <typeparam name="T">Expected return type.</typeparam>
+    /// <param name="response">Raw AI response string.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>Parsed value of type T.</returns>
+    /// <exception cref="JsonException">When parsing fails after all recovery attempts.</exception>
+    /// <remarks>
+    /// Routes through <see cref="AiJsonTypeInfoResolver"/> when an AOT-safe
+    /// binding is registered for <typeparamref name="T"/>; falls back to
+    /// reflection-based deserialisation otherwise.
+    /// </remarks>
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for the target type.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
+    public static T Parse<T>(string response, JsonSerializerOptions? options = null)
+    {
+        if (string.IsNullOrWhiteSpace(response))
+            throw new JsonException("Response is empty or whitespace");
+
+        var targetType = typeof(T);
+        var opts = options ?? DefaultOptions;
+
+        // Handle primitive types directly
+        if (targetType == typeof(string))
+            return (T)(object)ExtractTextContent(response);
+
+        if (targetType == typeof(int))
+            return (T)(object)ParseInt(response);
+
+        if (targetType == typeof(long))
+            return (T)(object)ParseLong(response);
+
+        if (targetType == typeof(double))
+            return (T)(object)ParseDouble(response);
+
+        if (targetType == typeof(decimal))
+            return (T)(object)ParseDecimal(response);
+
+        if (targetType == typeof(bool))
+            return (T)(object)ParseBool(response);
+
+        // For complex types, extract JSON and parse
+        var json = ExtractJson(response);
+
+        // Prefer the AOT-safe path when a JsonTypeInfo<T> is available.
+        if (AiJsonTypeInfoResolver.Instance.GetTypeInfo(targetType, opts) is JsonTypeInfo<T> aotInfo)
+        {
+            return DeserializeWithTypeInfo(json, aotInfo);
+        }
+
+        return DeserializeWithReflection<T>(json, opts, targetType);
+    }
+
+    private static T DeserializeWithTypeInfo<T>(string json, JsonTypeInfo<T> typeInfo)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize(json, typeInfo)
+                ?? throw new JsonException($"Deserialization returned null for type {typeof(T).Name}");
+        }
+        catch (JsonException ex)
+        {
+            var cleanedJson = CleanJson(json);
+            try
+            {
+                return JsonSerializer.Deserialize(cleanedJson, typeInfo)
+                    ?? throw new JsonException($"Deserialization returned null for type {typeof(T).Name}");
+            }
+            catch
+            {
+                throw new JsonException($"Failed to parse response as {typeof(T).Name}: {ex.Message}", ex);
+            }
+        }
+    }
+
+    [RequiresUnreferencedCode("Reflection-based JSON deserialization is not AOT-safe.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
+    private static T DeserializeWithReflection<T>(string json, JsonSerializerOptions opts, Type targetType)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<T>(json, opts)
+                ?? throw new JsonException($"Deserialization returned null for type {targetType.Name}");
+        }
+        catch (JsonException ex)
+        {
+            var cleanedJson = CleanJson(json);
+            try
+            {
+                return JsonSerializer.Deserialize<T>(cleanedJson, opts)
+                    ?? throw new JsonException($"Deserialization returned null for type {targetType.Name}");
+            }
+            catch
+            {
+                throw new JsonException($"Failed to parse response as {targetType.Name}: {ex.Message}", ex);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tries to parse AI response to the expected type.
+    /// </summary>
+    /// <typeparam name="T">Expected return type.</typeparam>
+    /// <param name="response">Raw AI response string.</param>
+    /// <param name="result">Parsed value if successful.</param>
+    /// <param name="options">Optional JSON serializer options.</param>
+    /// <returns>True if parsing succeeded, false otherwise.</returns>
+    [RequiresUnreferencedCode("Falls back to reflection-based JSON deserialization when no AOT binding is registered for the target type.")]
+    [RequiresDynamicCode("Reflection-based JSON deserialization may require runtime code generation.")]
+    public static bool TryParse<T>(string response, [NotNullWhen(true)] out T? result, JsonSerializerOptions? options = null)
+    {
+        try
+        {
+            result = Parse<T>(response, options);
+            return result is not null;
+        }
+        catch
+        {
+            result = default;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Deserializes a provider's structured-output text into <typeparamref name="TResponse"/>
+    /// using the source-generated <see cref="JsonTypeInfo{T}"/> registered for the type —
+    /// i.e. <b>AOT-safe with no reflection</b> for the documented
+    /// <see cref="PromptBase{TResponse}"/> pattern. Unwraps an optional top-level
+    /// <c>{ "result": … }</c> envelope some providers add.
+    /// </summary>
+    /// <remarks>
+    /// Routes through <see cref="ProviderResponseOptions"/>, whose resolver chain prefers the
+    /// AOT-safe <see cref="AiJsonTypeInfoResolver"/> and only falls back to
+    /// <see cref="DefaultJsonTypeInfoResolver"/> (reflection) for types the source generator
+    /// did not see — that fallback resolver is constructed in one well-justified place
+    /// (<see cref="CreateProviderResponseOptions"/>). Because this method consults the
+    /// resolver via <see cref="JsonSerializerOptions.GetTypeInfo(Type)"/> and deserializes
+    /// through the resulting <see cref="JsonTypeInfo{T}"/>, it needs no
+    /// <c>[RequiresUnreferencedCode]</c> of its own.
+    /// </remarks>
+    public static TResponse DeserializeStructured<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(string json)
+    {
+        if (typeof(TResponse) == typeof(string))
+            return (TResponse)(object)json;
+
+        var payload = UnwrapResultEnvelope(json);
+
+        var info = (JsonTypeInfo<TResponse>)ProviderResponseOptions.GetTypeInfo(typeof(TResponse));
+        return JsonSerializer.Deserialize(payload, info)
+            ?? throw new JsonException($"Deserialization returned null for type {typeof(TResponse).Name}");
+    }
+
+    /// <summary>
+    /// Returns the inner JSON of a <c>{ "result": … }</c> envelope when present; otherwise the
+    /// input unchanged. Uses <see cref="JsonDocument"/> only (AOT-safe).
+    /// </summary>
+    private static string UnwrapResultEnvelope(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("result", out var result))
+            {
+                return result.GetRawText();
+            }
+        }
+        catch (JsonException)
+        {
+            // Not parseable as an envelope — let the typed deserialize surface the error.
+        }
+        return json;
+    }
+
+    /// <summary>
+    /// Extracts JSON from a response that might contain markdown or other formatting.
+    /// </summary>
+    public static string ExtractJson(string response)
+    {
+        var trimmed = response.Trim();
+
+        // Remove markdown code blocks
+        trimmed = RemoveMarkdownCodeBlocks(trimmed);
+
+        // If it looks like JSON, return as-is
+        if (trimmed.StartsWith('{') || trimmed.StartsWith('['))
+            return trimmed;
+
+        // Try to find JSON object or array in the response
+        var jsonMatch = JsonPattern().Match(trimmed);
+        if (jsonMatch.Success)
+            return jsonMatch.Value;
+
+        // Last resort: wrap string in quotes if not JSON
+        return $"\"{EscapeJsonString(trimmed)}\"";
+    }
+
+    /// <summary>
+    /// Extracts plain text content, removing any JSON wrapper.
+    /// </summary>
+    public static string ExtractTextContent(string response)
+    {
+        var trimmed = response.Trim();
+
+        // Remove markdown code blocks
+        trimmed = RemoveMarkdownCodeBlocks(trimmed);
+
+        // If it's a JSON string literal, extract the content (AOT-safe — uses JsonDocument,
+        // not JsonSerializer.Deserialize<string> which would warn under trimming).
+        if (trimmed.StartsWith('"') && trimmed.EndsWith('"'))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                if (doc.RootElement.ValueKind == JsonValueKind.String)
+                    return doc.RootElement.GetString() ?? trimmed;
+            }
+            catch
+            {
+                // Fallthrough to manual unquote below.
+            }
+            return trimmed.Trim('"');
+        }
+
+        // If it's a JSON object with common text fields, extract them
+        if (trimmed.StartsWith('{'))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                var root = doc.RootElement;
+
+                // Try common text field names
+                string[] textFields = ["text", "content", "message", "result", "response", "answer", "output"];
+                foreach (var field in textFields)
+                {
+                    if (root.TryGetProperty(field, out var prop) && prop.ValueKind == JsonValueKind.String)
+                        return prop.GetString() ?? "";
+                }
+            }
+            catch
+            {
+                // Not valid JSON, return as-is
+            }
+        }
+
+        return trimmed;
+    }
+
+    private static string RemoveMarkdownCodeBlocks(string text)
+    {
+        // Remove ```json ... ``` or ``` ... ```
+        var pattern = MarkdownCodeBlockPattern();
+        var match = pattern.Match(text);
+        return match.Success ? match.Groups[1].Value.Trim() : text;
+    }
+
+    private static string CleanJson(string json)
+    {
+        // Remove trailing commas before } or ]
+        json = TrailingCommaPattern().Replace(json, "$1");
+
+        // Fix common escape issues
+        json = json.Replace("\\'", "'");
+
+        return json;
+    }
+
+    private static int ParseInt(string response)
+    {
+        var text = ExtractTextContent(response);
+
+        // Try direct parse
+        if (int.TryParse(text, out var result))
+            return result;
+
+        // Extract first number from text
+        var match = IntegerPattern().Match(text);
+        if (match.Success && int.TryParse(match.Value, out result))
+            return result;
+
+        throw new JsonException($"Cannot parse '{text}' as integer");
+    }
+
+    private static long ParseLong(string response)
+    {
+        var text = ExtractTextContent(response);
+
+        if (long.TryParse(text, out var result))
+            return result;
+
+        var match = IntegerPattern().Match(text);
+        if (match.Success && long.TryParse(match.Value, out result))
+            return result;
+
+        throw new JsonException($"Cannot parse '{text}' as long");
+    }
+
+    private static double ParseDouble(string response)
+    {
+        var text = ExtractTextContent(response);
+
+        if (double.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        var match = NumberPattern().Match(text);
+        if (match.Success && double.TryParse(match.Value, System.Globalization.CultureInfo.InvariantCulture, out result))
+            return result;
+
+        throw new JsonException($"Cannot parse '{text}' as double");
+    }
+
+    private static decimal ParseDecimal(string response)
+    {
+        var text = ExtractTextContent(response);
+
+        if (decimal.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var result))
+            return result;
+
+        var match = NumberPattern().Match(text);
+        if (match.Success && decimal.TryParse(match.Value, System.Globalization.CultureInfo.InvariantCulture, out result))
+            return result;
+
+        throw new JsonException($"Cannot parse '{text}' as decimal");
+    }
+
+    private static bool ParseBool(string response)
+    {
+        var text = ExtractTextContent(response).ToLowerInvariant();
+
+        return text switch
+        {
+            "true" or "yes" or "1" or "tak" or "prawda" => true,
+            "false" or "no" or "0" or "nie" or "fałsz" => false,
+            _ => throw new JsonException($"Cannot parse '{text}' as boolean")
+        };
+    }
+
+    private static string EscapeJsonString(string text)
+    {
+        return text
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r")
+            .Replace("\t", "\\t");
+    }
+
+    [GeneratedRegex(@"```(?:json)?\s*([\s\S]*?)\s*```", RegexOptions.IgnoreCase)]
+    private static partial Regex MarkdownCodeBlockPattern();
+
+    [GeneratedRegex(@"[\[{][\s\S]*[\]}]")]
+    private static partial Regex JsonPattern();
+
+    [GeneratedRegex(@",\s*([}\]])")]
+    private static partial Regex TrailingCommaPattern();
+
+    [GeneratedRegex(@"-?\d+")]
+    private static partial Regex IntegerPattern();
+
+    [GeneratedRegex(@"-?\d+\.?\d*")]
+    private static partial Regex NumberPattern();
+}

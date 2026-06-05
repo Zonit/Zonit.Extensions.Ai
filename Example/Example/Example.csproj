@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TargetFramework>net10.0</TargetFramework>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      Attach the Roslyn source generator directly to the Example project so that any
+      breaking change in the emitted code (e.g. STJ metadata API drift) surfaces during
+      the in-repo build instead of only when a downstream consumer pulls the NuGet
+      package. ReferenceOutputAssembly=false keeps the generator DLL out of the
+      runtime output; it is used at compile time only.
+    -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.SourceGenerators\Zonit.Extensions.Ai.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+
+    <!-- Reference all AI providers -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Google\Zonit.Extensions.Ai.Google.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Mistral\Zonit.Extensions.Ai.Mistral.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.DeepSeek\Zonit.Extensions.Ai.DeepSeek.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.X\Zonit.Extensions.Ai.X.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    
+    <!-- Package-specific metadata -->
+    <PackageId>Zonit.Extensions.Ai</PackageId>
+    <Title>Zonit.Extensions.Ai</Title>
+    <Description>Core AI integration library for .NET. Features Scriban templating, structured outputs, and auto-discovery of providers. Install provider packages (OpenAi, Anthropic, Google, X) separately.</Description>
+    <PackageTags>ai;llm;text-generation;structured-output;scriban;templating</PackageTags>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
+    <PackageReference Include="Scriban" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <ProjectReference Include="..\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <!--
+      Source generator is wired as a Roslyn analyzer so every consumer of
+      Zonit.Extensions.Ai automatically benefits from AddAiTools() auto-registration
+      without having to reference the generator package explicitly.
+      ReferenceOutputAssembly=false keeps the generator off the runtime binary surface.
+    -->
+    <ProjectReference Include="..\Zonit.Extensions.Ai.SourceGenerators\Zonit.Extensions.Ai.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <!--
+    Ship the source-generator DLL inside the Zonit.Extensions.Ai NuGet package
+    under `analyzers/dotnet/cs`, mirroring the pattern used by
+    Microsoft.Extensions.Logging.Generators, etc.
+  -->
+  <ItemGroup>
+    <None Include="..\Zonit.Extensions.Ai.SourceGenerators\bin\$(Configuration)\netstandard2.0\Zonit.Extensions.Ai.SourceGenerators.dll"
+          Pack="true"
+          PackagePath="analyzers/dotnet/cs"
+          Visible="false" />
+  </ItemGroup>
+
+  <!--
+    AI context delivery: ship the MSBuild installer + the instruction docs inside the
+    package so consumers' AI assistants auto-learn this library.
+    See buildTransitive/Zonit.Extensions.Ai.targets for how they are unpacked.
+  -->
+  <ItemGroup Label="AI context delivery">
+    <None Include="buildTransitive\Zonit.Extensions.Ai.targets"
+          Pack="true"
+          PackagePath="buildTransitive\Zonit.Extensions.Ai.targets" />
+    <!--
+      The instruction docs live in the repo's Instruction/ folder (browsable on GitHub and
+      the single source). They are packed under Instruction/extensions/ai/, where the
+      installer reads them. Instruction/README.md is the human index, not shipped or projected.
+    -->
+    <None Include="..\..\Instruction\*.md"
+          Exclude="..\..\Instruction\README.md"
+          Pack="true"
+          PackagePath="Instruction\extensions\ai" />
+  </ItemGroup>
+</Project>

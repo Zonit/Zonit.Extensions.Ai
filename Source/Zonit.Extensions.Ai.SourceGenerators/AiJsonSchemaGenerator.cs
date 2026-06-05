@@ -1,0 +1,514 @@
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+
+namespace Zonit.Extensions.Ai.SourceGenerators;
+
+/// <summary>
+/// Emits AOT-safe JSON Schemas at build time for every structured-output response
+/// type (<c>T</c> of <c>PromptBase&lt;T&gt;</c>) and tool input type (<c>TInput</c>
+/// of <c>ToolBase&lt;TInput, TOutput&gt;</c>) in the consumer compilation. The
+/// schemas are registered with <c>AiSchemaRegistry</c> through a
+/// <c>[ModuleInitializer]</c>, replacing the per-call reflection in
+/// <c>JsonSchemaGenerator.Generate</c> on the happy path.
+/// </summary>
+/// <remarks>
+/// The emitted schema mirrors <c>JsonSchemaGenerator.GenerateSchema</c> byte-for-byte
+/// semantics (OpenAI strict shape: <c>additionalProperties:false</c>, every property in
+/// <c>required</c>, camelCase names, <c>[Description]</c> forwarding, enums as lowercase
+/// strings). The generator is deliberately conservative: it only emits a schema for type
+/// graphs built exclusively from shapes it can reproduce identically to the reflection
+/// version (primitives, the same collection set, enums, nullable value types and
+/// non-generic POCOs). For anything else it emits nothing and
+/// <c>AiSchemaRegistry.GetSchema</c> falls back to reflection — so there is never a
+/// divergence between the generated schema and the reflection schema.
+/// </remarks>
+[Generator]
+public class AiJsonSchemaGenerator : IIncrementalGenerator
+{
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        var rootTypes = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                predicate: static (node, _) => IsCandidateClass(node),
+                transform: static (ctx, _) => GetRootType(ctx))
+            .Where(static t => t is not null);
+
+        var combined = context.CompilationProvider.Combine(rootTypes.Collect());
+        context.RegisterSourceOutput(combined, static (spc, source) => Execute(source.Right, spc));
+    }
+
+    private static bool IsCandidateClass(SyntaxNode node)
+        => node is ClassDeclarationSyntax { BaseList.Types.Count: > 0 };
+
+    /// <summary>
+    /// Returns the schema root type for a candidate class:
+    /// the response type of <c>PromptBase&lt;T&gt;</c> or the input type of
+    /// <c>ToolBase&lt;TInput, TOutput&gt;</c>; otherwise <c>null</c>.
+    /// </summary>
+    private static INamedTypeSymbol? GetRootType(GeneratorSyntaxContext context)
+    {
+        var classDecl = (ClassDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(classDecl) is not INamedTypeSymbol classSymbol)
+            return null;
+        if (classSymbol.IsAbstract)
+            return null;
+
+        for (var baseType = classSymbol.BaseType; baseType is not null; baseType = baseType.BaseType)
+        {
+            if (!baseType.IsGenericType)
+                continue;
+            var ns = baseType.ContainingNamespace?.ToDisplayString();
+            if (ns != "Zonit.Extensions.Ai")
+                continue;
+
+            var name = baseType.ConstructedFrom.Name;
+            if (name == "PromptBase" && baseType.TypeArguments.Length == 1
+                && baseType.TypeArguments[0] is INamedTypeSymbol responseType)
+                return responseType;
+
+            if (name == "ToolBase" && baseType.TypeArguments.Length == 2
+                && baseType.TypeArguments[0] is INamedTypeSymbol inputType)
+                return inputType;
+        }
+
+        return null;
+    }
+
+    private static void Execute(ImmutableArray<INamedTypeSymbol?> rootTypes, SourceProductionContext context)
+    {
+        var roots = rootTypes
+            .Where(t => t is not null)
+            .Cast<INamedTypeSymbol>()
+            .GroupBy(Fq, System.StringComparer.Ordinal)
+            .Select(g => g.First())
+            .OrderBy(Fq, System.StringComparer.Ordinal)
+            .ToList();
+
+        if (roots.Count == 0)
+            return;
+
+        var entries = new List<(string TypeFq, string SchemaJson)>();
+        foreach (var root in roots)
+        {
+            // The registry key is emitted as typeof(root); skip roots the generated code
+            // cannot name (private/protected nested types) — they fall back to reflection.
+            if (!SymbolAccessibility.IsAccessibleToAssembly(root))
+                continue;
+
+            var sb = new StringBuilder();
+            if (TryWriteSchema(sb, root, isNullable: false, new HashSet<string>(System.StringComparer.Ordinal)))
+                entries.Add((Fq(root), sb.ToString()));
+        }
+
+        if (entries.Count == 0)
+            return;
+
+        context.AddSource("AiJsonSchema.g.cs", Render(entries));
+    }
+
+    private static string Render(List<(string TypeFq, string SchemaJson)> entries)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("// <auto-generated/>");
+        sb.AppendLine("#nullable enable");
+        sb.AppendLine();
+        sb.AppendLine("using System.Runtime.CompilerServices;");
+        sb.AppendLine();
+        sb.AppendLine("namespace Zonit.Extensions.Ai.Generated;");
+        sb.AppendLine();
+        sb.AppendLine("/// <summary>");
+        sb.AppendLine("/// AOT-safe JSON schemas registered with AiSchemaRegistry at module load.");
+        sb.AppendLine("/// </summary>");
+        sb.AppendLine("internal static class __AiJsonSchemas");
+        sb.AppendLine("{");
+        sb.AppendLine("    [ModuleInitializer]");
+        sb.AppendLine("    internal static void Init()");
+        sb.AppendLine("    {");
+        foreach (var (typeFq, schemaJson) in entries)
+        {
+            sb.AppendLine(
+                $"        global::Zonit.Extensions.Ai.AiSchemaRegistry.Register(typeof({typeFq}), {CSharpStringLiteral(schemaJson)});");
+        }
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    // ------------------------------------------------------------------
+    // Schema builder — mirrors JsonSchemaGenerator.GenerateSchema exactly.
+    // Returns false (and leaves sb in an undefined state, discarded by caller)
+    // when the type graph contains a shape the reflection version handles
+    // differently, so the runtime falls back to reflection for that root.
+    // ------------------------------------------------------------------
+    private static bool TryWriteSchema(StringBuilder sb, ITypeSymbol type, bool isNullable, HashSet<string> path)
+    {
+        type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+
+        // Nullable<T> (value-type nullable) — reference-type nullability is erased at
+        // runtime, exactly as reflection sees it via Nullable.GetUnderlyingType.
+        if (type is INamedTypeSymbol nn && nn.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+            return TryWriteSchema(sb, nn.TypeArguments[0], isNullable: true, path);
+
+        // Special framework types (string + description).
+        var special = SpecialDescription(type);
+        if (special is not null)
+        {
+            sb.Append('{');
+            AppendTypeField(sb, "string", isNullable);
+            sb.Append(',');
+            AppendKey(sb, "description");
+            sb.Append(JsonString(special));
+            sb.Append('}');
+            return true;
+        }
+
+        switch (type.SpecialType)
+        {
+            case SpecialType.System_String:
+                sb.Append('{');
+                AppendTypeField(sb, "string", isNullable);
+                sb.Append('}');
+                return true;
+            case SpecialType.System_Int16:
+            case SpecialType.System_UInt16:
+            case SpecialType.System_Int32:
+            case SpecialType.System_UInt32:
+            case SpecialType.System_Int64:
+            case SpecialType.System_UInt64:
+            case SpecialType.System_Byte:
+            case SpecialType.System_SByte:
+                sb.Append('{');
+                AppendTypeField(sb, "integer", isNullable);
+                sb.Append('}');
+                return true;
+            case SpecialType.System_Single:
+            case SpecialType.System_Double:
+            case SpecialType.System_Decimal:
+                sb.Append('{');
+                AppendTypeField(sb, "number", isNullable);
+                sb.Append('}');
+                return true;
+            case SpecialType.System_Boolean:
+                sb.Append('{');
+                AppendTypeField(sb, "boolean", isNullable);
+                sb.Append('}');
+                return true;
+        }
+
+        // Array T[] (rank 1).
+        if (type is IArrayTypeSymbol { Rank: 1 } arr)
+        {
+            sb.Append('{');
+            AppendTypeField(sb, "array", isNullable);
+            sb.Append(',');
+            AppendKey(sb, "items");
+            if (!TryWriteSchema(sb, arr.ElementType, isNullable: false, path))
+                return false;
+            sb.Append('}');
+            return true;
+        }
+
+        // Enum.
+        if (type.TypeKind == TypeKind.Enum)
+        {
+            sb.Append('{');
+            AppendTypeField(sb, "string", isNullable);
+            sb.Append(',');
+            AppendKey(sb, "enum");
+            sb.Append('[');
+            var names = type.GetMembers().OfType<IFieldSymbol>()
+                .Where(f => f.IsStatic && f.HasConstantValue)
+                .Select(f => f.Name)
+                .ToList();
+            for (var i = 0; i < names.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(JsonString(names[i].ToLowerInvariant()));
+            }
+            if (isNullable)
+            {
+                if (names.Count > 0) sb.Append(',');
+                sb.Append("null");
+            }
+            sb.Append(']');
+            sb.Append('}');
+            return true;
+        }
+
+        // Generic collections — exactly the set the reflection version recognises
+        // (List<>, IList<>, ICollection<>, IEnumerable<>). Anything else generic
+        // (Dictionary<,>, IReadOnlyList<>, tuples, generic POCOs, …) is deferred to
+        // the reflection fallback so the schema can never diverge.
+        if (type is INamedTypeSymbol named && named.IsGenericType)
+        {
+            if (IsListLikeCollection(named))
+            {
+                sb.Append('{');
+                AppendTypeField(sb, "array", isNullable);
+                sb.Append(',');
+                AppendKey(sb, "items");
+                if (!TryWriteSchema(sb, named.TypeArguments[0], isNullable: false, path))
+                    return false;
+                sb.Append('}');
+                return true;
+            }
+            return false; // unsupported generic → reflection fallback
+        }
+
+        // Plain (non-generic) object — class or struct with public instance properties.
+        if (type is INamedTypeSymbol obj
+            && (obj.TypeKind == TypeKind.Class || obj.TypeKind == TypeKind.Struct))
+        {
+            var key = Fq(obj);
+            if (!path.Add(key))
+                return false; // cycle → reflection fallback
+            try
+            {
+                return TryWriteObject(sb, obj, path);
+            }
+            finally
+            {
+                path.Remove(key);
+            }
+        }
+
+        return false; // interfaces, type parameters, pointers, … → reflection fallback
+    }
+
+    private static bool TryWriteObject(StringBuilder sb, INamedTypeSymbol type, HashSet<string> path)
+    {
+        var props = CollectProperties(type);
+
+        sb.Append('{');
+        AppendKey(sb, "type");
+        sb.Append("\"object\",");
+        AppendKey(sb, "properties");
+        sb.Append('{');
+
+        var names = new List<string>(props.Count);
+        for (var i = 0; i < props.Count; i++)
+        {
+            var prop = props[i];
+            var camel = CamelCase(prop.Name);
+            if (i > 0) sb.Append(',');
+            AppendKey(sb, camel);
+
+            // Build the property schema into a temp buffer so we can splice in a
+            // property-level [Description] the same way the reflection version does.
+            var propSb = new StringBuilder();
+            if (!TryWriteSchema(propSb, prop.Type, isNullable: false, path))
+                return false;
+
+            var desc = GetDescription(prop);
+            if (desc is null)
+            {
+                sb.Append(propSb);
+            }
+            else
+            {
+                // Insert "description" before the closing brace of the property schema.
+                var raw = propSb.ToString();
+                if (raw.Length >= 2 && raw[raw.Length - 1] == '}')
+                {
+                    sb.Append(raw, 0, raw.Length - 1);
+                    if (raw.Length > 2 && raw[1] != '}') sb.Append(','); // there is at least one field
+                    AppendKey(sb, "description");
+                    sb.Append(JsonString(desc));
+                    sb.Append('}');
+                }
+                else
+                {
+                    sb.Append(raw);
+                }
+            }
+
+            names.Add(camel);
+        }
+        sb.Append("},"); // end properties
+
+        AppendKey(sb, "additionalProperties");
+        sb.Append("false,");
+
+        AppendKey(sb, "required");
+        sb.Append('[');
+        for (var i = 0; i < names.Count; i++)
+        {
+            if (i > 0) sb.Append(',');
+            sb.Append(JsonString(names[i]));
+        }
+        sb.Append(']');
+
+        var typeDesc = GetDescription(type);
+        if (typeDesc is not null)
+        {
+            sb.Append(',');
+            AppendKey(sb, "description");
+            sb.Append(JsonString(typeDesc));
+        }
+
+        sb.Append('}');
+        return true;
+    }
+
+    /// <summary>Public instance properties with a public getter, most-derived first, deduped by name.</summary>
+    private static List<IPropertySymbol> CollectProperties(INamedTypeSymbol type)
+    {
+        var result = new List<IPropertySymbol>();
+        var seen = new HashSet<string>(System.StringComparer.Ordinal);
+        for (var current = (INamedTypeSymbol?)type;
+             current is not null && current.SpecialType != SpecialType.System_Object;
+             current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers())
+            {
+                if (member is not IPropertySymbol prop) continue;
+                if (prop.IsStatic || prop.IsIndexer) continue;
+                if (prop.DeclaredAccessibility != Accessibility.Public) continue;
+                if (prop.GetMethod is null || prop.GetMethod.DeclaredAccessibility != Accessibility.Public) continue;
+                if (!seen.Add(prop.Name)) continue;
+                result.Add(prop);
+            }
+        }
+        return result;
+    }
+
+    private static bool IsListLikeCollection(INamedTypeSymbol named)
+    {
+        switch (named.ConstructedFrom.ToDisplayString())
+        {
+            case "System.Collections.Generic.List<T>":
+            case "System.Collections.Generic.IList<T>":
+            case "System.Collections.Generic.ICollection<T>":
+            case "System.Collections.Generic.IEnumerable<T>":
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>Description text the reflection version emits for special framework types.</summary>
+    private static string? SpecialDescription(ITypeSymbol type) => type.ToDisplayString() switch
+    {
+        "System.Guid" => "A globally unique identifier (UUID) in format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+        "System.DateTime" => "Date and time in ISO 8601 format: YYYY-MM-DDTHH:mm:ss",
+        "System.DateTimeOffset" => "Date and time with offset in ISO 8601 format: YYYY-MM-DDTHH:mm:ss±HH:mm",
+        "System.DateOnly" => "Date in ISO 8601 format: YYYY-MM-DD",
+        "System.TimeOnly" => "Time in format: HH:mm:ss",
+        "System.TimeSpan" => "Duration/time span in format: d.hh:mm:ss or hh:mm:ss",
+        "System.Uri" => "A valid URI/URL string",
+        _ => null,
+    };
+
+    private static string? GetDescription(ISymbol symbol)
+    {
+        foreach (var attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() != "System.ComponentModel.DescriptionAttribute")
+                continue;
+            if (attr.ConstructorArguments.Length == 1 && attr.ConstructorArguments[0].Value is string s)
+                return s;
+        }
+        return null;
+    }
+
+    private static void AppendTypeField(StringBuilder sb, string jsonType, bool isNullable)
+    {
+        AppendKey(sb, "type");
+        if (isNullable)
+            sb.Append('[').Append(JsonString(jsonType)).Append(',').Append("\"null\"").Append(']');
+        else
+            sb.Append(JsonString(jsonType));
+    }
+
+    private static void AppendKey(StringBuilder sb, string key)
+    {
+        sb.Append(JsonString(key));
+        sb.Append(':');
+    }
+
+    /// <summary>Serialises a string as a JSON string literal (value, with quotes).</summary>
+    private static string JsonString(string value)
+    {
+        var sb = new StringBuilder(value.Length + 2);
+        sb.Append('"');
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\b': sb.Append("\\b"); break;
+                case '\f': sb.Append("\\f"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                        sb.Append("\\u").Append(((int)c).ToString("x4"));
+                    else
+                        sb.Append(c);
+                    break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    /// <summary>Wraps an arbitrary string as a C# double-quoted string literal for emission.</summary>
+    private static string CSharpStringLiteral(string value)
+    {
+        var sb = new StringBuilder(value.Length + 2);
+        sb.Append('"');
+        foreach (var c in value)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\n': sb.Append("\\n"); break;
+                default: sb.Append(c); break;
+            }
+        }
+        sb.Append('"');
+        return sb.ToString();
+    }
+
+    /// <summary>Exact port of System.Text.Json's JsonNamingPolicy.CamelCase.</summary>
+    private static string CamelCase(string name)
+    {
+        if (string.IsNullOrEmpty(name) || !char.IsUpper(name[0]))
+            return name;
+
+        var chars = name.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (i == 1 && !char.IsUpper(chars[i]))
+                break;
+
+            var hasNext = i + 1 < chars.Length;
+            if (i > 0 && hasNext && !char.IsUpper(chars[i + 1]))
+            {
+                if (chars[i + 1] == ' ')
+                    chars[i] = char.ToLowerInvariant(chars[i]);
+                break;
+            }
+
+            chars[i] = char.ToLowerInvariant(chars[i]);
+        }
+        return new string(chars);
+    }
+
+    private static readonly SymbolDisplayFormat FqFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat
+            .WithMiscellaneousOptions(
+                SymbolDisplayFormat.FullyQualifiedFormat.MiscellaneousOptions
+                & ~SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    private static string Fq(ITypeSymbol t) =>
+        t.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString(FqFormat);
+}
