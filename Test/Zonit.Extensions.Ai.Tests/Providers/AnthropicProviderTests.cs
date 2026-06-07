@@ -224,31 +224,46 @@ public class AnthropicProviderTests
     }
 
     [Fact]
-    public async Task GenerateAsync_StructuredOutput_DoesNotPrefillAssistant_AndEndsWithUser()
+    public async Task GenerateAsync_StructuredOutput_ForcesRespondJsonTool_AndParsesToolInput()
     {
-        // Regression: Claude Sonnet 4.6+ rejects assistant-message prefill
-        // ("This model does not support assistant message prefill. The
-        // conversation must end with a user message."). Structured output must
-        // NOT append an assistant "{" turn — the request must end on the user
-        // message. See AnthropicProvider.BuildRequest.
+        // Regression: structured output must go through a forced tool call so the
+        // model returns schema-valid, well-formed JSON (Anthropic constrains the
+        // tool input) — instead of free-text JSON that breaks on e.g. an
+        // unescaped quote inside a translated phrase. Also: no assistant "{"
+        // prefill (Sonnet 4.6+ rejects it). The mocked response carries a quote
+        // inside a string value, which the tool path handles safely.
         string? capturedRequest = null;
         SetupMockResponse(
-            """{"id":"msg_1","content":[{"type":"text","text":"{\"name\":\"Ada\",\"age\":36,\"active\":true,\"score\":9.5,\"note\":\"hi\",\"tag\":\"PIONEER\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}""",
+            """{"id":"msg_1","stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu_1","name":"respond_json","input":{"name":"Ada","age":36,"active":true,"score":9.5,"note":"wyżej na \"dłużej\"","tag":"PIONEER"}}],"usage":{"input_tokens":1,"output_tokens":1}}""",
             r => capturedRequest = r);
 
         var provider = CreateProvider();
-        await provider.GenerateAsync(new Sonnet46(), new FlatPrompt(), CancellationToken.None);
+        var result = await provider.GenerateAsync(new Sonnet46(), new FlatPrompt(), CancellationToken.None);
 
+        // Request shape: forced respond_json tool with a schema, conversation ends on user.
         capturedRequest.Should().NotBeNull();
         using var doc = JsonDocument.Parse(capturedRequest!);
-        var messages = doc.RootElement.GetProperty("messages").EnumerateArray().ToList();
+        var root = doc.RootElement;
+
+        var messages = root.GetProperty("messages").EnumerateArray().ToList();
         messages.Should().NotBeEmpty();
         messages[^1].GetProperty("role").GetString().Should().Be(
-            "user",
-            "Sonnet 4.6+ requires the conversation to end with a user message (no assistant prefill)");
+            "user", "Sonnet 4.6+ requires the conversation to end with a user message (no assistant prefill)");
         messages.Should().NotContain(
-            m => m.GetProperty("role").GetString() == "assistant",
-            "structured output must not use assistant-message prefill");
+            m => m.GetProperty("role").GetString() == "assistant", "structured output must not use assistant-message prefill");
+
+        var tools = root.GetProperty("tools").EnumerateArray().ToList();
+        tools.Should().Contain(t => t.GetProperty("name").GetString() == "respond_json");
+        tools.First(t => t.GetProperty("name").GetString() == "respond_json")
+            .TryGetProperty("input_schema", out _).Should().BeTrue("the schema must travel in the tool, not free text");
+
+        var toolChoice = root.GetProperty("tool_choice");
+        toolChoice.GetProperty("type").GetString().Should().Be("tool", "thinking is off, so the tool is forced");
+        toolChoice.GetProperty("name").GetString().Should().Be("respond_json");
+
+        // Parsed from the tool input — including the quote that would break free-text JSON.
+        result.Value.Name.Should().Be("Ada");
+        result.Value.Note.Should().Be("wyżej na \"dłużej\"");
     }
 
     private AnthropicProvider CreateProvider()

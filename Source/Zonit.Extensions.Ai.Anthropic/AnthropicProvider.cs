@@ -303,12 +303,9 @@ public sealed class AnthropicProvider : IModelProvider
 
         var anthropicResponse = JsonSerializer.Deserialize(responseJson, AnthropicJsonContext.Default.AnthropicResponse)!;
 
-        var textContent = anthropicResponse.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        var payload = ExtractPayloadOrThrow(anthropicResponse, typeof(TResponse), "GenerateAsync", llm);
 
-        if (string.IsNullOrEmpty(textContent))
-            throw BuildEmptyResponseError("GenerateAsync", anthropicResponse, llm);
-
-        var result = ParseResponse<TResponse>(textContent);
+        var result = ParseResponse<TResponse>(payload);
 
         var cachedReadTokens = anthropicResponse.Usage?.CacheReadInputTokens ?? 0;
         var cacheWriteTokens = anthropicResponse.Usage?.CacheCreationInputTokens ?? 0;
@@ -421,12 +418,9 @@ public sealed class AnthropicProvider : IModelProvider
 
         var anthropicResponse = JsonSerializer.Deserialize(responseJson, AnthropicJsonContext.Default.AnthropicResponse)!;
 
-        var textContent = anthropicResponse.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        var payload = ExtractPayloadOrThrow(anthropicResponse, typeof(TResponse), "ChatAsync", llm);
 
-        if (string.IsNullOrEmpty(textContent))
-            throw BuildEmptyResponseError("ChatAsync", anthropicResponse, llm);
-
-        var result = ParseResponse<TResponse>(textContent);
+        var result = ParseResponse<TResponse>(payload);
 
         var cachedReadTokens = anthropicResponse.Usage?.CacheReadInputTokens ?? 0;
         var cacheWriteTokens = anthropicResponse.Usage?.CacheCreationInputTokens ?? 0;
@@ -642,6 +636,69 @@ public sealed class AnthropicProvider : IModelProvider
         }
     }
 
+    /// <summary>Name of the synthetic tool used to force schema-valid structured output.</summary>
+    private const string StructuredToolName = "respond_json";
+
+    /// <summary>
+    /// Routes structured output (<paramref name="responseType"/> != <c>string</c>)
+    /// through a tool call instead of free-text JSON. Anthropic constrains a
+    /// tool's <c>input</c> to its <c>input_schema</c> and always emits
+    /// well-formed JSON — this eliminates the malformed-JSON failures (e.g. an
+    /// unescaped <c>"</c> inside a translated phrase) that plague the
+    /// "reply with raw JSON" technique on models without a native JSON mode.
+    /// <para>
+    /// With extended thinking on, Anthropic forbids forcing <c>tool_choice</c>,
+    /// so we use <c>auto</c> and rely on the instruction (plus the free-text
+    /// parser as a last-resort fallback). With thinking off we force the tool,
+    /// which makes valid structured JSON guaranteed.
+    /// </para>
+    /// </summary>
+    private static void ApplyStructuredOutputTool(
+        AnthropicMessagesRequest request,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
+    {
+        if (responseType == typeof(string)) return;
+
+        (request.Tools ??= new List<AnthropicTool>()).Add(new AnthropicTool
+        {
+            Name = StructuredToolName,
+            Description = "Return the final answer as structured data. Call this tool exactly once with arguments that match its input schema.",
+            InputSchema = AiSchemaRegistry.GetSchema(responseType),
+        });
+
+        request.ToolChoice = request.Thinking is null
+            ? new AnthropicToolChoice { Type = "tool", Name = StructuredToolName }
+            : new AnthropicToolChoice { Type = "auto" };
+    }
+
+    /// <summary>
+    /// Returns the JSON payload to parse for a response: the structured tool
+    /// call's <c>input</c> when present (the robust path), otherwise the first
+    /// text block (free-text fallback for plain-string responses and for the
+    /// thinking + <c>auto</c> case where the model may answer in prose).
+    /// Throws <see cref="BuildEmptyResponseError"/> when neither is available.
+    /// </summary>
+    private string ExtractPayloadOrThrow(
+        AnthropicResponse response,
+        Type responseType,
+        string operation,
+        ILlm llm)
+    {
+        if (responseType != typeof(string))
+        {
+            var toolInput = response.Content?
+                .FirstOrDefault(c => c.Type == "tool_use" && c.Name == StructuredToolName)?
+                .Input;
+            if (toolInput is { ValueKind: not JsonValueKind.Undefined and not JsonValueKind.Null } el)
+                return el.GetRawText();
+        }
+
+        var text = response.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        if (string.IsNullOrEmpty(text))
+            throw BuildEmptyResponseError(operation, response, llm);
+        return text;
+    }
+
     private static AnthropicMessagesRequest BuildRequest<TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
@@ -661,34 +718,19 @@ public sealed class AnthropicProvider : IModelProvider
             request.Speed = "fast";
 
         var systemPrompt = string.Empty;
-        string? userJsonReminder = null;
         if (responseType != typeof(string))
         {
-            var schema = AiSchemaRegistry.GetSchema(responseType);
-            var schemaJson = schema.ToString();
-            var jsonInstruction = $@"
-
-CRITICAL JSON OUTPUT REQUIREMENTS:
-1. You MUST respond with a SINGLE JSON OBJECT (starting with a curly brace)
-2. Do NOT respond with a JSON array []
-3. Do NOT wrap response in markdown code blocks
-4. Do NOT add any explanation or text before/after the JSON
-5. The JSON object MUST match this exact schema:
-
-{schemaJson}
-
-Remember: Your response must start with the opening curly brace and be a valid JSON object matching the schema above.
-";
-            systemPrompt = string.IsNullOrEmpty(systemPrompt) ? jsonInstruction.Trim() : systemPrompt + jsonInstruction;
-            userJsonReminder = "\n\nRespond with a JSON object matching the schema. Start your response with {";
+            // Structured output is enforced via a forced tool call (see
+            // ApplyStructuredOutputTool); the schema travels in the tool's
+            // input_schema, so the prompt only needs to point the model at it.
+            systemPrompt = "When you have the final answer, return it by calling the `respond_json` "
+                + "tool with arguments matching its input schema. Do not also write the answer as plain text.";
         }
 
         if (!string.IsNullOrEmpty(systemPrompt))
             request.System = new List<AnthropicContentBlock> { new() { Type = "text", Text = systemPrompt } };
 
         var userText = prompt.Text;
-        if (!string.IsNullOrEmpty(userJsonReminder))
-            userText += userJsonReminder;
 
         var content = new List<AnthropicContentBlock>
         {
@@ -720,13 +762,9 @@ Remember: Your response must start with the opening curly brace and be a valid J
         }
 
         request.Messages.Add(new AnthropicMessageItem { Role = "user", Content = content });
-        // Structured output: do NOT prefill the assistant turn with "{".
-        // Newer Claude models (Sonnet 4.6+) reject assistant-message prefill
-        // outright ("This model does not support assistant message prefill. The
-        // conversation must end with a user message.") — and prefill is also
-        // illegal whenever extended thinking is enabled. The strong JSON
-        // contract injected into the system prompt above, plus ExtractJson's
-        // brace-scan on the response, recover the object without prefill.
+        // No assistant "{" prefill (Sonnet 4.6+ rejects it; illegal with
+        // extended thinking). Structured output is enforced by a forced tool
+        // call instead — see ApplyStructuredOutputTool below.
 
         if (llm is AnthropicBase anthropicLlm)
         {
@@ -740,6 +778,8 @@ Remember: Your response must start with the opening curly brace and be a valid J
         {
             request.Tools = BuildToolsForRequest(llm, typedTools);
         }
+
+        ApplyStructuredOutputTool(request, responseType);
 
         ApplyCaching(llm, request);
         return request;
@@ -840,26 +880,18 @@ Remember: Your response must start with the opening curly brace and be a valid J
         // instruction (semantic flip vs single-shot GenerateAsync where Text =
         // user message). For structured output append the JSON schema clause.
         var systemPrompt = prompt.Text ?? string.Empty;
+        // Retained because the message-assembly loop below references it; left
+        // null because structured output now travels through a forced tool call,
+        // not a free-text "reply with JSON" reminder.
         string? userJsonReminder = null;
         if (responseType != typeof(string))
         {
-            var schema = AiSchemaRegistry.GetSchema(responseType);
-            var schemaJson = schema.ToString();
-            var jsonInstruction = $@"
-
-CRITICAL JSON OUTPUT REQUIREMENTS:
-1. You MUST respond with a SINGLE JSON OBJECT (starting with a curly brace)
-2. Do NOT respond with a JSON array []
-3. Do NOT wrap response in markdown code blocks
-4. Do NOT add any explanation or text before/after the JSON
-5. The JSON object MUST match this exact schema:
-
-{schemaJson}
-
-Remember: Your response must start with the opening curly brace and be a valid JSON object matching the schema above.
-";
-            systemPrompt = string.IsNullOrEmpty(systemPrompt) ? jsonInstruction.Trim() : systemPrompt + jsonInstruction;
-            userJsonReminder = "\n\nRespond with a JSON object matching the schema. Start your response with {";
+            // Structured output is enforced via a forced tool call (see
+            // ApplyStructuredOutputTool); the schema travels in the tool's
+            // input_schema. Append only a short pointer to the system message.
+            var toolInstruction = "When you have the final answer, return it by calling the `respond_json` "
+                + "tool with arguments matching its input schema. Do not also write the answer as plain text.";
+            systemPrompt = string.IsNullOrEmpty(systemPrompt) ? toolInstruction : systemPrompt + "\n\n" + toolInstruction;
         }
 
         if (!string.IsNullOrEmpty(systemPrompt))
@@ -934,10 +966,9 @@ Remember: Your response must start with the opening curly brace and be a valid J
                 last.Content.Add(new AnthropicContentBlock { Type = "text", Text = userJsonReminder });
         }
 
-        // Structured output: no assistant "{" prefill — Sonnet 4.6+ rejects it
-        // and it is incompatible with extended thinking. The conversation ends
-        // on the user turn; the system-prompt JSON contract + ExtractJson handle
-        // parsing. (See the matching note in the single-shot builder above.)
+        // No assistant "{" prefill (Sonnet 4.6+ rejects it; illegal with
+        // extended thinking). Structured output is enforced by a forced tool
+        // call instead — see ApplyStructuredOutputTool below.
 
         request.Messages = messages;
 
@@ -951,6 +982,8 @@ Remember: Your response must start with the opening curly brace and be a valid J
         {
             request.Tools = BuildToolsForRequest(llm, typedTools);
         }
+
+        ApplyStructuredOutputTool(request, responseType);
 
         ApplyCaching(llm, request);
         return request;
@@ -1118,6 +1151,11 @@ internal sealed class AnthropicContent
 {
     public string? Type { get; set; }
     public string? Text { get; set; }
+    // tool_use blocks: the model's structured answer arrives as the tool's
+    // `input` — Anthropic constrains it to the tool's input_schema and emits
+    // well-formed JSON, so it parses safely even when free text would not.
+    public string? Name { get; set; }
+    public JsonElement? Input { get; set; }
 }
 
 internal sealed class AnthropicUsage
@@ -1161,8 +1199,20 @@ internal sealed class AnthropicMessagesRequest
     public double? TopP { get; set; }
     public bool? Stream { get; set; }
     public List<AnthropicTool>? Tools { get; set; }
+    public AnthropicToolChoice? ToolChoice { get; set; }
     public AnthropicThinking? Thinking { get; set; }
     public AnthropicOutputConfig? OutputConfig { get; set; }
+}
+
+/// <summary>
+/// Controls tool selection. <c>type</c>: <c>auto</c> (model decides — the only
+/// value Anthropic allows while extended thinking is enabled), <c>tool</c>
+/// (force the tool named by <see cref="Name"/>), <c>any</c>, or <c>none</c>.
+/// </summary>
+internal sealed class AnthropicToolChoice
+{
+    public string Type { get; set; } = "";
+    public string? Name { get; set; }
 }
 
 internal sealed class AnthropicOutputConfig
