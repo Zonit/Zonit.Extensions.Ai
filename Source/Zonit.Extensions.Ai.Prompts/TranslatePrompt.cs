@@ -1,31 +1,6 @@
-using System.ComponentModel;
 using Zonit.Extensions;
 
 namespace Zonit.Extensions.Ai.Prompts;
-
-/// <summary>
-/// Response for the translation prompt.
-/// </summary>
-public class TranslateResponse
-{
-    /// <summary>
-    /// The translated text.
-    /// </summary>
-    [Description("Translated text in the target language")]
-    public required string TranslatedText { get; set; }
-
-    /// <summary>
-    /// Detected source language (ISO 639-1 code).
-    /// </summary>
-    [Description("Detected source language ISO 639-1 code (e.g., 'en', 'pl', 'de')")]
-    public string? DetectedLanguage { get; set; }
-
-    /// <summary>
-    /// Confidence score (0-1).
-    /// </summary>
-    [Description("Translation confidence score from 0.0 to 1.0")]
-    public double? Confidence { get; set; }
-}
 
 /// <summary>
 /// Translates text into a target language as a native writer would — preserving meaning, structure
@@ -50,12 +25,16 @@ public class TranslateResponse
 /// var result = await ai.GenerateAsync(
 ///     new GPT51(),
 ///     new TranslatePrompt { Content = "Hello world!", Target = "pl" });
-/// Console.WriteLine(result.Value.TranslatedText); // "Witaj świecie!"
+/// Console.WriteLine(result.Value); // "Witaj świecie!"
 ///
 /// // Explicit source language (otherwise auto-detected):
 /// new TranslatePrompt { Content = text, Source = "en", Target = "de-DE" };
 /// </example>
-public class TranslatePrompt : PromptBase<TranslateResponse>
+// Returns the translation as a plain string (not a structured object) on purpose:
+// the deliverable is just the translated text, and a string response cannot fail
+// JSON parsing — the model's free text may legitimately contain quotes, braces and
+// other characters that break structured-JSON output on some providers/models.
+public class TranslatePrompt : PromptBase<string>
 {
     /// <summary>
     /// Text to translate.
@@ -104,7 +83,7 @@ public class TranslatePrompt : PromptBase<TranslateResponse>
 
 You are a professional {{ target_name }} translator and localization specialist — a native-level writer, not a word-for-word converter. Your task is to re-express the SOURCE TEXT in {{ target_name }} so that a {{ target_name }} reader receives it as if it had been written in {{ target_name }} from the start: the meaning, intent, tone and structure are the author's, but every convention of spelling, punctuation, numbers, dates and typography is the one {{ target_name }} actually uses.
 
-{{ if source_language != "" }}The source text is written in {{ source_name }}.{{ else }}First identify the source language, then translate.{{ end }} Record the detected source language (ISO 639-1) and your confidence in the structured fields.
+{{ if source_language != "" }}The source text is written in {{ source_name }}.{{ else }}First identify the source language, then translate.{{ end }}
 
 # Preserve exactly — in every language
 
@@ -302,6 +281,6 @@ No dedicated section is defined for this target. Apply general professional-tran
 
 # Output
 
-Place only the finished {{ target_name }} translation in the `translated_text` field — it is the deliverable itself, so it carries no labels, preamble or commentary. Keep the source's structure, markup and tokens intact, and report the detected source language and confidence in their fields.
+Output ONLY the finished {{ target_name }} translation as plain text — it is the deliverable itself, so add no labels, preamble, commentary, surrounding quotes or JSON wrapper. Keep the source's structure, markup and tokens intact.
 """;
 }
