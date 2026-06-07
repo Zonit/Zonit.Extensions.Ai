@@ -62,6 +62,7 @@
     <ZonitAiDoc Include="providers">    <Summary>Which provider NuGet to install for a capability (images, audio, embeddings).</Summary></ZonitAiDoc>
     <ZonitAiDoc Include="configuration"><Summary>DI registration, appsettings.json, resilience.</Summary></ZonitAiDoc>
     <ZonitAiDoc Include="models">       <Summary>Capability interfaces, picking a model, reasoning, fast mode.</Summary></ZonitAiDoc>
+    <ZonitAiDoc Include="llms">         <Summary>Generated catalog of every model: provider, context window, modalities, tools, capabilities, price (incl. cache).</Summary></ZonitAiDoc>
     <ZonitAiDoc Include="prompts">      <Glob>**/*Prompt.cs</Glob><Summary>How to write a prompt class (PromptBase, Scriban, structured output).</Summary></ZonitAiDoc>
     <ZonitAiDoc Include="prompt-library"><Summary>Ready-made prompts from Zonit.Extensions.Ai.Prompts (e.g. translation).</Summary></ZonitAiDoc>
     <ZonitAiDoc Include="tools">        <Glob>**/*Tool.cs</Glob><Summary>How to write an agent tool (ToolBase).</Summary></ZonitAiDoc>

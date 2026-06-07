@@ -37,6 +37,21 @@
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.X\Zonit.Extensions.Ai.X.csproj" />
+    <!-- All remaining providers are referenced so ModelCatalogTests can reflect over
+         the entire model surface and keep Instruction/models.generated.md complete. -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Google\Zonit.Extensions.Ai.Google.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Mistral\Zonit.Extensions.Ai.Mistral.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.DeepSeek\Zonit.Extensions.Ai.DeepSeek.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Cohere\Zonit.Extensions.Ai.Cohere.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Baidu\Zonit.Extensions.Ai.Baidu.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Groq\Zonit.Extensions.Ai.Groq.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Moonshot\Zonit.Extensions.Ai.Moonshot.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Zhipu\Zonit.Extensions.Ai.Zhipu.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Alibaba\Zonit.Extensions.Ai.Alibaba.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Yi\Zonit.Extensions.Ai.Yi.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Together\Zonit.Extensions.Ai.Together.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Fireworks\Zonit.Extensions.Ai.Fireworks.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Perplexity\Zonit.Extensions.Ai.Perplexity.csproj" />
   </ItemGroup>
 
 </Project>

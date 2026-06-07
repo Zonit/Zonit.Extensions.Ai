@@ -6,9 +6,11 @@ using Moq.Protected;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 using Xunit;
 using Zonit.Extensions;
 using Zonit.Extensions.Ai.Anthropic;
+using Zonit.Extensions.Ai.Tests.Schema;
 
 namespace Zonit.Extensions.Ai.Tests.Providers;
 
@@ -219,6 +221,34 @@ public class AnthropicProviderTests
         // regular 1000×$5 + cached 5000×$0.50 + write 2000×$6.25, per 1M = 0.020
         usage.InputCost.Value.Should().BeApproximately(0.020m, 1e-9m);
         usage.OutputCost.Value.Should().BeApproximately(0.0125m, 1e-9m);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_StructuredOutput_DoesNotPrefillAssistant_AndEndsWithUser()
+    {
+        // Regression: Claude Sonnet 4.6+ rejects assistant-message prefill
+        // ("This model does not support assistant message prefill. The
+        // conversation must end with a user message."). Structured output must
+        // NOT append an assistant "{" turn — the request must end on the user
+        // message. See AnthropicProvider.BuildRequest.
+        string? capturedRequest = null;
+        SetupMockResponse(
+            """{"id":"msg_1","content":[{"type":"text","text":"{\"name\":\"Ada\",\"age\":36,\"active\":true,\"score\":9.5,\"note\":\"hi\",\"tag\":\"PIONEER\"}"}],"usage":{"input_tokens":1,"output_tokens":1}}""",
+            r => capturedRequest = r);
+
+        var provider = CreateProvider();
+        await provider.GenerateAsync(new Sonnet46(), new FlatPrompt(), CancellationToken.None);
+
+        capturedRequest.Should().NotBeNull();
+        using var doc = JsonDocument.Parse(capturedRequest!);
+        var messages = doc.RootElement.GetProperty("messages").EnumerateArray().ToList();
+        messages.Should().NotBeEmpty();
+        messages[^1].GetProperty("role").GetString().Should().Be(
+            "user",
+            "Sonnet 4.6+ requires the conversation to end with a user message (no assistant prefill)");
+        messages.Should().NotContain(
+            m => m.GetProperty("role").GetString() == "assistant",
+            "structured output must not use assistant-message prefill");
     }
 
     private AnthropicProvider CreateProvider()

@@ -720,14 +720,13 @@ Remember: Your response must start with the opening curly brace and be a valid J
         }
 
         request.Messages.Add(new AnthropicMessageItem { Role = "user", Content = content });
-        if (responseType != typeof(string))
-        {
-            request.Messages.Add(new AnthropicMessageItem
-            {
-                Role = "assistant",
-                Content = new List<AnthropicContentBlock> { new() { Type = "text", Text = "{" } }
-            });
-        }
+        // Structured output: do NOT prefill the assistant turn with "{".
+        // Newer Claude models (Sonnet 4.6+) reject assistant-message prefill
+        // outright ("This model does not support assistant message prefill. The
+        // conversation must end with a user message.") — and prefill is also
+        // illegal whenever extended thinking is enabled. The strong JSON
+        // contract injected into the system prompt above, plus ExtractJson's
+        // brace-scan on the response, recover the object without prefill.
 
         if (llm is AnthropicBase anthropicLlm)
         {
@@ -935,14 +934,10 @@ Remember: Your response must start with the opening curly brace and be a valid J
                 last.Content.Add(new AnthropicContentBlock { Type = "text", Text = userJsonReminder });
         }
 
-        if (responseType != typeof(string))
-        {
-            messages.Add(new AnthropicMessageItem
-            {
-                Role = "assistant",
-                Content = new List<AnthropicContentBlock> { new() { Type = "text", Text = "{" } }
-            });
-        }
+        // Structured output: no assistant "{" prefill — Sonnet 4.6+ rejects it
+        // and it is incompatible with extended thinking. The conversation ends
+        // on the user turn; the system-prompt JSON contract + ExtractJson handle
+        // parsing. (See the matching note in the single-shot builder above.)
 
         request.Messages = messages;
 

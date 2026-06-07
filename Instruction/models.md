@@ -23,6 +23,11 @@ the time of writing: OpenAI `GPT5`, `GPT52`, `O3`, `GPTImage15`, `TextEmbedding3
 `Whisper1`; Anthropic `Sonnet45`, `Opus48`, `Haiku45`. For the capability each package provides,
 see [`providers.md`](./providers.md).
 
+> 📋 For the complete, always-current list of **every** model — provider, context window,
+> modalities, capabilities and price (including cache) — see the generated
+> [`llms.md`](./llms.md). It is produced from the model types by a test, so it
+> never goes stale; do not edit it by hand.
+
 Select the model in one place and pass it to `GenerateAsync`.
 
 ```csharp
