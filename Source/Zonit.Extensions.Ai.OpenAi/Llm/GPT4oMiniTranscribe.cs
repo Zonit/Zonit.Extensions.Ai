@@ -1,14 +1,13 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// Whisper - General-purpose speech recognition model (legacy).
+/// GPT-4o mini Transcribe — cost-efficient speech-to-text model powered by GPT-4o mini.
+/// A lighter, cheaper alternative to <see cref="GPT4oTranscribe"/> for high-volume transcription.
 /// </summary>
-[Obsolete("whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. " +
-          "Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost.")]
-public class Whisper1 : OpenAiBase, IAudioLlm
+public class GPT4oMiniTranscribe : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />
-    public override string Name => "whisper-1";
+    public override string Name => "gpt-4o-mini-transcribe";
 
     /// <inheritdoc />
     public override decimal PriceInput => 0m;

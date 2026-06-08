@@ -390,7 +390,19 @@ public sealed class OpenAiProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         using var formContent = new MultipartFormDataContent();
-        formContent.Add(new ByteArrayContent(audioFile.Data), "file", audioFile.OriginalName.Value);
+
+        // OpenAI identifies the audio format from the file extension and/or the
+        // part's Content-Type. OriginalName can lack an extension (e.g. a Telegram
+        // voice note saved as "file_123"), which makes the API reject the upload
+        // with a 400. UniqueName is "{Id}{Extension}" with the extension derived
+        // from the detected MediaType, and we also stamp Content-Type — so the
+        // format is recognizable even when the original name has no extension.
+        var fileContent = new ByteArrayContent(audioFile.Data);
+        if (!string.IsNullOrEmpty(audioFile.MediaType.Value))
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(audioFile.MediaType.Value);
+
+        var fileName = audioFile.Extension.Length > 0 ? audioFile.UniqueName : audioFile.OriginalName.Value;
+        formContent.Add(fileContent, "file", fileName);
         formContent.Add(new StringContent(llm.Name), "model");
 
         if (language != null)

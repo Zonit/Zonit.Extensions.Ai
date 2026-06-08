@@ -4,8 +4,10 @@
 > types — do not edit by hand; run the tests to refresh. Capabilities come from the
 > interfaces each model implements. Prices are USD per 1M tokens; `—` means the
 > model does not expose that price (e.g. no prompt caching on that model).
+> A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
+> retired) — see the Deprecated models section at the end for the reason.
 
-Total: 117 models across 16 providers.
+Total: 119 models across 16 providers.
 
 ## Alibaba
 
@@ -36,11 +38,11 @@ Total: 117 models across 16 providers.
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
 | `Haiku45` | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
-| `Opus45` | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
-| `Opus46` | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
-| `Opus47` | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
+| `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus48` | `claude-opus-4-8` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
-| `Sonnet45` | `claude-sonnet-4-5-20250929` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
+| `Sonnet45` ⚠️ | `claude-sonnet-4-5-20250929` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Sonnet46` | `claude-sonnet-4-6` | 1,000,000 | 64,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 
 ### Pricing — USD / 1M tokens
@@ -255,7 +257,9 @@ Total: 117 models across 16 providers.
 | `GPT41Mini` | `gpt-4.1-mini-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `GPT4o` | `gpt-4o` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | WebSearch, FileSearch, CodeInterpreter |
 | `GPT4oMini` | `gpt-4o-mini` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | FileSearch, CodeInterpreter |
+| `GPT4oMiniTranscribe` | `gpt-4o-mini-transcribe` | — | — | Audio → Text | audio | — |
 | `GPT4oTranscribe` | `gpt-4o-transcribe` | — | — | Audio → Text | audio | — |
+| `GPT4oTranscribeDiarize` | `gpt-4o-transcribe-diarize` | — | — | Audio → Text | audio | — |
 | `GPT5` | `gpt-5-2025-08-07` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT51Pro` | `gpt-5.1-pro` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT52` | `gpt-5.2` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
@@ -277,7 +281,7 @@ Total: 117 models across 16 providers.
 | `O3Pro` | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
 | `TextEmbedding3Small` | `text-embedding-3-small` | 8,191 | 1,536 | Text → Embedding | embedding | — |
-| `Whisper1` | `whisper-1` | — | — | Audio → Text | audio | — |
+| `Whisper1` ⚠️ | `whisper-1` | — | — | Audio → Text | audio | — |
 
 ### Pricing — USD / 1M tokens
 
@@ -287,7 +291,9 @@ Total: 117 models across 16 providers.
 | `GPT41Mini` | $0.4 | $0.1 | — | $1.6 |
 | `GPT4o` | $2.5 | $1.25 | — | $10 |
 | `GPT4oMini` | $0.15 | $0.075 | — | $0.6 |
+| `GPT4oMiniTranscribe` | $0 | — | — | $0 |
 | `GPT4oTranscribe` | $0 | — | — | $0 |
+| `GPT4oTranscribeDiarize` | $0 | — | — | $0 |
 | `GPT5` | $1.25 | $0.125 | — | $10 |
 | `GPT51Pro` | $5 | $1.25 | — | $20 |
 | `GPT52` | $1.75 | $0.175 | — | $14 |
@@ -432,4 +438,16 @@ Total: 117 models across 16 providers.
 | `Glm4Flash` | $0.07 | — | — | $0.07 |
 | `Glm4Long` | $0.7 | — | — | $0.7 |
 | `Glm4Plus` | $7 | — | — | $7 |
+
+## Deprecated models
+
+These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working.
+
+| Provider | Class | Model name | Reason |
+| :--- | :--- | :--- | :--- |
+| Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet46 (adaptive thinking). Still functional, but Anthropic will retire older models. |
+| OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost. |
 

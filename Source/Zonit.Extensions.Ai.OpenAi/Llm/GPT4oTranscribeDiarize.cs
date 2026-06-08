@@ -1,14 +1,14 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// Whisper - General-purpose speech recognition model (legacy).
+/// GPT-4o Transcribe Diarize — speech-to-text that also identifies who is speaking
+/// and when (speaker diarization). Returns speaker-segmented transcripts; use when a
+/// recording has multiple speakers (interviews, meetings, calls).
 /// </summary>
-[Obsolete("whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. " +
-          "Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost.")]
-public class Whisper1 : OpenAiBase, IAudioLlm
+public class GPT4oTranscribeDiarize : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />
-    public override string Name => "whisper-1";
+    public override string Name => "gpt-4o-transcribe-diarize";
 
     /// <inheritdoc />
     public override decimal PriceInput => 0m;
@@ -19,7 +19,7 @@ public class Whisper1 : OpenAiBase, IAudioLlm
     /// <summary>
     /// Price per minute of audio transcribed.
     /// </summary>
-    public decimal PricePerMinute => 0.006m;
+    public decimal PricePerMinute => 0.012m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 0;

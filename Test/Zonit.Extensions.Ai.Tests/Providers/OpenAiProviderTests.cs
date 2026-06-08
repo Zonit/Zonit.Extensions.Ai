@@ -236,6 +236,29 @@ public class OpenAiProviderTests
         _testHandler.CapturedRequest.Should().Contain("\"strict\":true");
     }
 
+    [Fact]
+    public async Task TranscribeAsync_AudioWithoutExtensionInName_SendsExtensionAndContentType()
+    {
+        // Regression: OpenAI/Whisper detects the audio format from the filename
+        // extension and/or the part's Content-Type. A voice note whose OriginalName
+        // has no extension (e.g. "file_123" from a Telegram voice message) must
+        // still upload with the detected extension + Content-Type, or the API
+        // returns 400 "invalid file format".
+        var handler = new TestHttpHandler { ResponseJson = """{"text":"witaj świecie"}""" };
+        var provider = CreateProvider(handler);
+
+        // OGG voice note ("OggS" magic bytes), original name WITHOUT an extension.
+        var audio = new Asset([0x4F, 0x67, 0x67, 0x53], "file_123", Asset.MimeType.AudioOgg);
+
+        var result = await provider.TranscribeAsync(new GPT4oTranscribe(), audio, language: "pl");
+
+        result.Value.Should().Be("witaj świecie");
+        handler.CapturedRequest.Should().NotBeNull();
+        handler.CapturedRequest.Should().Contain(".ogg", "the upload filename must carry the detected extension");
+        handler.CapturedRequest.Should().Contain("audio/ogg", "the part Content-Type must advertise the audio format");
+        handler.CapturedRequest.Should().NotContain("filename=\"file_123\"", "the extensionless name must not be sent as-is");
+    }
+
     private OpenAiProvider CreateProvider(TestHttpHandler? handler = null)
     {
         var httpClient = new HttpClient(handler ?? _testHandler)
