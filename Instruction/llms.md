@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 119 models across 16 providers.
+Total: 121 models across 16 providers.
 
 ## Alibaba
 
@@ -37,7 +37,9 @@ Total: 119 models across 16 providers.
 
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
+| `Fable5` | `claude-fable-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Haiku45` | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
+| `Mythos5` | `claude-mythos-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
@@ -49,7 +51,9 @@ Total: 119 models across 16 providers.
 
 | Class | Input | Cached read | Cached write | Output |
 | :--- | ---: | ---: | ---: | ---: |
+| `Fable5` | $10 | $1 | $12.5 | $50 |
 | `Haiku45` | $1 | $0.1 | $1.25 | $5 |
+| `Mythos5` | $10 | $1 | $12.5 | $50 |
 | `Opus45` | $5 | $0.5 | $6.25 | $25 |
 | `Opus46` | $5 | $0.5 | $6.25 | $25 |
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
