@@ -16,13 +16,13 @@ The prompts are normal `PromptBase<TResponse>` classes, so they work with the st
 
 | Prompt | Returns | Purpose |
 | :--- | :--- | :--- |
-| `TranslatePrompt` | `TranslateResponse` | Translate text into a target language as a native writer would |
+| `TranslatePrompt` | `string` (the translated text) | Translate text into a target language as a native writer would |
 
 ## TranslatePrompt
 
 Translates text and localizes punctuation, numbers, dates and typography to the conventions of
-the target language. It preserves layout, markup, code, URLs and placeholders, and reports the
-detected source language and a confidence score. Per-language rules cover the major European
+the target language. It preserves layout, markup, code, URLs and placeholders. It returns the
+translated text directly as a `string` (no JSON wrapper). Per-language rules cover the major European
 languages plus Russian, Ukrainian, Turkish and Arabic; any other target falls back to general
 translation rules.
 
@@ -34,9 +34,7 @@ var result = await ai.GenerateAsync(
     new GPT5(),
     new TranslatePrompt { Content = "Hello world!", Target = "pl" });
 
-string translated = result.Value.TranslatedText;   // "Witaj świecie!"
-string? detected  = result.Value.DetectedLanguage; // e.g. "en"
-double? score     = result.Value.Confidence;        // 0.0 to 1.0
+string translated = result.Value;   // "Witaj świecie!" — translated text as a plain string
 ```
 
 Properties:
@@ -46,16 +44,14 @@ Properties:
 | `Content` | `string` (required) | | Text to translate |
 | `Target` | `Culture` (required) | | Target language, e.g. `"pl"`, `"de-DE"` |
 | `Source` | `Culture` | auto-detect | Leave unset to detect the source language |
-| `Formality` | `TranslationFormality` | `Auto` | `Auto` mirrors the source; `Formal` / `Informal` force a register |
 
 ```csharp
-// Explicit source and a formal register
+// Explicit source language (otherwise auto-detected)
 new TranslatePrompt
 {
-    Content   = text,
-    Source    = "en",
-    Target    = "de-DE",
-    Formality = TranslationFormality.Formal,
+    Content = text,
+    Source  = "en",
+    Target  = "de-DE",
 };
 ```
 

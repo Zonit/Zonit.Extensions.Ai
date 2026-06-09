@@ -16,13 +16,13 @@ For example, "generate images with GPT" needs an image-capable provider, so
 | Image generation | `Zonit.Extensions.Ai.OpenAi` (GPT Image), `Zonit.Extensions.Ai.X` (Grok Imagine) |
 | Video generation | `Zonit.Extensions.Ai.X` (Grok Imagine) |
 | Embeddings | `Zonit.Extensions.Ai.OpenAi`, `Zonit.Extensions.Ai.Google`, `Zonit.Extensions.Ai.Mistral`, `Zonit.Extensions.Ai.Cohere` |
-| Audio transcription | `Zonit.Extensions.Ai.OpenAi` (Whisper, GPT-4o Transcribe) |
+| Audio transcription | `Zonit.Extensions.Ai.OpenAi` (GPT-4o Transcribe / mini / diarize; `whisper-1` is legacy) |
 
 ## By provider
 
 | Provider | Package | Register |
 | :--- | :--- | :--- |
-| OpenAI (GPT, o-series, GPT Image, embeddings, Whisper) | `Zonit.Extensions.Ai.OpenAi` | `AddAiOpenAi()` |
+| OpenAI (GPT, o-series, GPT Image, embeddings, Transcribe) | `Zonit.Extensions.Ai.OpenAi` | `AddAiOpenAi()` |
 | Anthropic (Claude) | `Zonit.Extensions.Ai.Anthropic` | `AddAiAnthropic()` |
 | Google (Gemini) | `Zonit.Extensions.Ai.Google` | `AddAiGoogle()` |
 | xAI (Grok, Grok Imagine image/video) | `Zonit.Extensions.Ai.X` | `AddAiX()` |
@@ -49,5 +49,5 @@ dotnet add package Zonit.Extensions.Ai.OpenAi
 builder.Services.AddAiOpenAi();                 // reads "Ai:OpenAi" (configuration.md)
 ```
 
-Concrete model classes (`GPT5`, `GPTImage15`, `Sonnet45`) live in the chosen package under
+Concrete model classes (`GPT5`, `GPTImage15`, `Sonnet46`) live in the chosen package under
 `Llm/`. Pick them with IntelliSense; do not hardcode names from memory.

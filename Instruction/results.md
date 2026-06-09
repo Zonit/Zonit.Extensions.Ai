@@ -60,7 +60,7 @@ Price c = ai.CalculateCost(new GPT5(), inputTokens: 1_000, outputTokens: 500);
 Price emb   = ai.CalculateCost(new TextEmbedding3Large(), inputTokens: 1_000);
 Price image = ai.CalculateCost(new GPTImage15 { Quality = GPTImage15.QualityType.High,
                                                 Size = GPTImage15.SizeType.Square }); // imageCount defaults to 1
-Price audio = ai.CalculateCost(new Whisper1(), durationSeconds: 180);
+Price audio = ai.CalculateCost(new GPT4oTranscribe(), durationSeconds: 180);
 
 // Estimate from prompt text before sending (estimates input tokens for you)
 Price est = ai.EstimateCost(new GPT5(), "your prompt text...", estimatedOutputTokens: 500);

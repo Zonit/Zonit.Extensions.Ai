@@ -28,7 +28,7 @@ IAiProvider ai = /* injected */;
 var answer = await ai.GenerateAsync(new GPT5(), "Summarise the CAP theorem in one sentence.");
 
 // Typed, structured output (JSON Schema generated for you)
-var review = await ai.GenerateAsync(new Sonnet45(), new CodeReviewPrompt { Diff = diff });
+var review = await ai.GenerateAsync(new Sonnet46(), new CodeReviewPrompt { Diff = diff });
 Console.WriteLine(review.Value.Severity);     // strongly typed
 Console.WriteLine(review.MetaData.TotalCost); // cost, already computed
 ```
@@ -207,7 +207,7 @@ stops you from, for example, asking an embedding model to generate an image.
 | `IVideoLlm`     | Video generation |
 | `IFast`         | Opt-in fast inference tier (premium pricing) |
 
-Concrete model classes (`GPT5`, `Sonnet45`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
+Concrete model classes (`GPT5`, `Sonnet46`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
 provider package and evolve with the providers. Discover them through IntelliSense or the
 package's `Llm/` folder; each class carries its own context window, pricing and supported
 endpoints. This README lists no model tables, because they go stale every release.
@@ -221,31 +221,25 @@ the model sees; `TResponse` becomes the structured-output contract.
 using System.ComponentModel;
 using Zonit.Extensions; // Culture value object
 
-public sealed class TranslatePrompt : PromptBase<TranslateResponse>
+public sealed class SentimentPrompt : PromptBase<SentimentResponse>
 {
-    public required string  Content { get; init; }
-    public required Culture Target  { get; init; }   // "pl", "pl-PL", "de-DE", ...
-
-    // Computed properties are template variables too (snake_case):
-    public string TargetName => Target.EnglishName ?? Target.Value;   // {{ target_name }}
+    public required string Text { get; init; }
 
     public override string Prompt => """
-        You are a native {{ target_name }} writer, not a literal translator.
-        Re-express the text below in {{ target_name }}, localizing punctuation,
-        numbers and dates to {{ target_name }} convention.
+        Classify the sentiment of the text below as positive, neutral or negative.
 
-        {{ content }}
+        {{ text }}
         """;
 }
 
-[Description("Translation result.")]
-public sealed class TranslateResponse
+[Description("Sentiment classification.")]
+public sealed class SentimentResponse
 {
-    [Description("The translated text.")]
-    public required string TranslatedText { get; init; }
+    [Description("positive, neutral or negative")]
+    public required string Sentiment { get; init; }
 
-    [Description("Detected source language (ISO-639-1).")]
-    public string? DetectedLanguage { get; init; }
+    [Description("Confidence from 0.0 to 1.0.")]
+    public double Confidence { get; init; }
 }
 ```
 
@@ -302,12 +296,12 @@ interface and the argument you pass.
 Result<string> reply = await ai.GenerateAsync(new GPT5(), "What is 2 + 2?");
 Console.WriteLine(reply.Value); // "4"
 
-// Structured. TranslateResponse is filled from the model's JSON.
-Result<TranslateResponse> r = await ai.GenerateAsync(
-    new Sonnet45(),
-    new TranslatePrompt { Content = "Good morning!", Target = "pl" });
+// Structured. SentimentResponse is filled from the model's JSON.
+Result<SentimentResponse> r = await ai.GenerateAsync(
+    new Sonnet46(),
+    new SentimentPrompt { Text = "I love this!" });
 
-Console.WriteLine(r.Value.TranslatedText);  // "Dzień dobry!"
+Console.WriteLine(r.Value.Sentiment);  // "positive"
 Console.WriteLine(r.MetaData.PromptName);   // "Translate"
 ```
 
@@ -365,7 +359,7 @@ float[] vector = embedding.Value;
 
 ```csharp
 var audio = new Asset(await File.ReadAllBytesAsync("speech.mp3"), "speech.mp3");
-var text  = await ai.GenerateAsync(new Whisper1(), audio, language: "en");
+var text  = await ai.GenerateAsync(new GPT4oTranscribe(), audio, language: "en");
 Console.WriteLine(text.Value);
 ```
 
@@ -446,7 +440,7 @@ var history = new ChatMessage[]
 };
 
 var result = await ai.ChatAsync(
-    llm:    new Sonnet45(),
+    llm:    new Sonnet46(),
     prompt: new HelpdeskPrompt { Product = "Zonit.Ai" },
     chat:   history);
 
@@ -603,7 +597,7 @@ no plumbing on your side.
 `GenerateStreamAsync` emits a sealed `AgentEvent` hierarchy so you can drive a live UI:
 
 ```csharp
-await foreach (var evt in ai.GenerateStreamAsync(new Sonnet45(), prompt, tools: [new SaveNoteTool(db)]))
+await foreach (var evt in ai.GenerateStreamAsync(new Sonnet46(), prompt, tools: [new SaveNoteTool(db)]))
 {
     switch (evt)
     {
@@ -656,7 +650,7 @@ var result = await ai.GenerateAsync(
     new GPT5(),
     new TranslatePrompt { Content = "Hello world!", Target = "pl" });
 
-string translated = result.Value.TranslatedText;   // "Witaj świecie!"
+string translated = result.Value;   // "Witaj świecie!" — translated text as a plain string
 ```
 
 More templates will be added over time. Details in [`Instruction/prompt-library.md`](./Instruction/prompt-library.md).

@@ -12,28 +12,26 @@ For prompts that already exist (translation and more), check
 using System.ComponentModel;
 using Zonit.Extensions.Ai;
 
-public sealed class TranslatePrompt : PromptBase<TranslateResponse>
+public sealed class SentimentPrompt : PromptBase<SentimentResponse>
 {
-    public required string Content  { get; init; }
-    public required string Language { get; init; }
+    public required string Text { get; init; }
 
     // Properties are exposed to the template as snake_case.
     public override string Prompt => """
-        Translate the text below into {{ language }}.
-        Preserve tone and formatting.
+        Classify the sentiment of the text below as positive, neutral or negative.
 
-        {{ content }}
+        {{ text }}
         """;
 }
 
-[Description("Translation result.")]
-public sealed class TranslateResponse
+[Description("Sentiment classification.")]
+public sealed class SentimentResponse
 {
-    [Description("The translated text.")]
-    public required string TranslatedText { get; init; }
+    [Description("positive, neutral or negative")]
+    public required string Sentiment { get; init; }
 
-    [Description("Detected source language (ISO-639-1).")]
-    public string? DetectedLanguage { get; init; }
+    [Description("Confidence from 0.0 to 1.0.")]
+    public double Confidence { get; init; }
 }
 ```
 
@@ -47,14 +45,17 @@ public sealed class TranslateResponse
 - `TResponse` is the structured-output contract. Annotate it and its members with
   `[Description(...)]`, which flows into the JSON Schema. Use `required` for mandatory fields and
   a nullable type for optional ones.
+- For a plain-text answer, use `PromptBase<string>` — the model's text is returned verbatim with
+  no JSON step. Prefer this when the deliverable is just text (e.g. a translation), so output can
+  never fail JSON parsing.
 
 ## Calling
 
 ```csharp
-Result<TranslateResponse> r = await ai.GenerateAsync(
-    new GPT5(), new TranslatePrompt { Content = "Hello", Language = "Polish" }, ct);
+Result<SentimentResponse> r = await ai.GenerateAsync(
+    new GPT5(), new SentimentPrompt { Text = "I love this!" }, ct);
 
-string text = r.Value.TranslatedText;   // typed. Do not parse JSON and do not check IsSuccess.
+string sentiment = r.Value.Sentiment;   // typed. Do not parse JSON and do not check IsSuccess.
 ```
 
 ## Files, one-offs, images

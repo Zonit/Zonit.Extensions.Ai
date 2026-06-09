@@ -14,7 +14,7 @@ var history = new ChatMessage[]
 };
 
 Result<HelpdeskAnswer> result = await ai.ChatAsync(
-    llm:    new Sonnet45(),
+    llm:    new Sonnet46(),
     prompt: new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
     chat:   history, ct);
 
@@ -42,7 +42,7 @@ var result = await ai.ChatAsync(new GPT5(), prompt, history,
 ## Streaming tokens (no tools)
 
 ```csharp
-await foreach (var token in ai.ChatStreamAsync(new Sonnet45(), prompt, history, ct))
+await foreach (var token in ai.ChatStreamAsync(new Sonnet46(), prompt, history, ct))
     Console.Write(token);
 ```
 

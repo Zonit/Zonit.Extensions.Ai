@@ -95,7 +95,7 @@ float[] vec = (await ai.GenerateAsync(new TextEmbedding3Large(), "vectorise me",
 
 // Audio transcription. Returns Result<string>.
 var audio = new Asset(await File.ReadAllBytesAsync("speech.mp3"), "speech.mp3");
-string text = (await ai.GenerateAsync(new Whisper1(), audio, language: "en", ct)).Value;
+string text = (await ai.GenerateAsync(new GPT4oTranscribe(), audio, language: "en", ct)).Value;
 ```
 
 ## Files and vision
