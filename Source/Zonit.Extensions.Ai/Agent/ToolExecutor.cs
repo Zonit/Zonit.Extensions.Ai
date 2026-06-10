@@ -18,6 +18,7 @@ namespace Zonit.Extensions.Ai;
 internal sealed class ToolExecutor
 {
     private readonly IReadOnlyDictionary<string, ITool> _byName;
+    private readonly IReadOnlyList<object>? _context;
     private readonly int _maxParallel;
     private readonly TimeSpan _perCallTimeout;
     private readonly ToolExceptionPolicy _exceptionPolicy;
@@ -28,6 +29,7 @@ internal sealed class ToolExecutor
 
     public ToolExecutor(
         IReadOnlyList<ITool> tools,
+        IReadOnlyList<object>? context,
         int maxParallel,
         TimeSpan perCallTimeout,
         ToolExceptionPolicy exceptionPolicy,
@@ -37,6 +39,7 @@ internal sealed class ToolExecutor
         ILogger logger)
     {
         _byName = tools.ToDictionary(t => t.Name, StringComparer.Ordinal);
+        _context = context;
         _maxParallel = Math.Max(1, maxParallel);
         _perCallTimeout = perCallTimeout;
         _exceptionPolicy = exceptionPolicy;
@@ -44,6 +47,36 @@ internal sealed class ToolExecutor
         _tracker = tracker;
         _agentScope = agentScope;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Finds the per-call context value assignable to <paramref name="scopeType"/> (a scoped
+    /// tool's <c>TScope</c>). Exact-type match wins over assignability. Returns null when none
+    /// was supplied; throws <see cref="AiToolContextException"/> when more than one matches.
+    /// </summary>
+    private object? ResolveContext(Type scopeType)
+    {
+        if (_context is null || _context.Count == 0)
+            return null;
+
+        // Exact type first — unambiguous and the common case.
+        foreach (var item in _context)
+            if (item is not null && item.GetType() == scopeType)
+                return item;
+
+        // Then assignable (interface / base-class contexts), guarding against ambiguity.
+        object? match = null;
+        foreach (var item in _context)
+        {
+            if (item is null || !scopeType.IsInstanceOfType(item))
+                continue;
+            if (match is not null)
+                throw new AiToolContextException(
+                    $"Ambiguous context for type '{scopeType.Name}': multiple values passed in " +
+                    "'context:' are assignable to it. Pass a single matching value.");
+            match = item;
+        }
+        return match;
     }
 
     public async Task<IReadOnlyList<ToolResult>> ExecuteAsync(
@@ -136,6 +169,20 @@ internal sealed class ToolExecutor
             });
         }
 
+        // Resolve the server context for scoped tools BEFORE any try/scope. A missing context
+        // is a caller wiring mistake (not a model-recoverable error), so AiToolContextException
+        // must propagate to the caller rather than be caught by the ReturnErrorToModel policy.
+        object? scopedContext = null;
+        if (tool is IScopedTool scopedTool)
+        {
+            scopedContext = ResolveContext(scopedTool.ContextType);
+            if (scopedContext is null)
+                throw new AiToolContextException(
+                    $"Tool '{call.Name}' requires context of type '{scopedTool.ContextType.Name}', " +
+                    "but the agent call supplied no matching value. Pass it via the 'context:' " +
+                    "argument, e.g. context: [yourContext].");
+        }
+
         // Optional hook — allow host to block the call.
         if (_onToolCall is not null)
         {
@@ -189,7 +236,10 @@ internal sealed class ToolExecutor
 
         try
         {
-            var output = await tool.InvokeAsync(call.Arguments, callCts.Token).ConfigureAwait(false);
+            // Scoped tools receive the resolved server context; plain tools the model args only.
+            var output = scopedContext is not null
+                ? await ((IScopedTool)tool).InvokeAsync(call.Arguments, scopedContext, callCts.Token).ConfigureAwait(false)
+                : await tool.InvokeAsync(call.Arguments, callCts.Token).ConfigureAwait(false);
             sw.Stop();
             var nested = NestedOf(toolScope);
 

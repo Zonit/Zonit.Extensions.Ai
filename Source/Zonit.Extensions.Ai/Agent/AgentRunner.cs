@@ -65,9 +65,10 @@ internal sealed class AgentRunner
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
         CancellationToken cancellationToken,
-        IReadOnlyList<ChatMessage>? initialChat = null)
+        IReadOnlyList<ChatMessage>? initialChat = null,
+        IReadOnlyList<object>? callerContext = null)
     {
-        await foreach (var evt in StreamAsync(llm, prompt, callerTools, callerMcps, options, cancellationToken, initialChat)
+        await foreach (var evt in StreamAsync(llm, prompt, callerTools, callerMcps, options, cancellationToken, initialChat, callerContext)
                            .ConfigureAwait(false))
         {
             switch (evt)
@@ -96,7 +97,8 @@ internal sealed class AgentRunner
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
         [EnumeratorCancellation] CancellationToken cancellationToken,
-        IReadOnlyList<ChatMessage>? initialChat = null)
+        IReadOnlyList<ChatMessage>? initialChat = null,
+        IReadOnlyList<object>? callerContext = null)
     {
         // Open the usage-tracking node for this run BEFORE the core iterator, so the
         // restore in the finally runs on EVERY exit path (yield break, exception, or
@@ -112,7 +114,7 @@ internal sealed class AgentRunner
         try
         {
             await foreach (var evt in StreamCoreAsync<TResponse>(
-                    scope, captureIo, llm, prompt, callerTools, callerMcps, options, cancellationToken, initialChat)
+                    scope, captureIo, llm, prompt, callerTools, callerMcps, options, cancellationToken, initialChat, callerContext)
                 .ConfigureAwait(false))
             {
                 yield return evt;
@@ -133,7 +135,8 @@ internal sealed class AgentRunner
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
         [EnumeratorCancellation] CancellationToken cancellationToken,
-        IReadOnlyList<ChatMessage>? initialChat = null)
+        IReadOnlyList<ChatMessage>? initialChat = null,
+        IReadOnlyList<object>? callerContext = null)
     {
         var globalAgent = _aiOptions.Value.Agent ?? new AiAgentOptions();
         // Precedence: per-call option → model's DefaultMaxIterations (if < global) → global cap.
@@ -183,6 +186,7 @@ internal sealed class AgentRunner
 
         var executor = new ToolExecutor(
             resolvedTools,
+            callerContext,
             maxParallel,
             perCallTimeout,
             exceptionPolicy,

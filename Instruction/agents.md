@@ -21,6 +21,26 @@ Report answer = result.Value;                     // full trace and cost in resu
 Tools and MCP servers passed explicitly are authoritative. Pass `null` to use DI-registered
 defaults (`AddAiTools<T>()`, `AddAiMcp(...)`).
 
+### Passing trusted server data to tools (`context:`)
+
+Every agent entry point (`GenerateAsync`, `GenerateStreamAsync`, `ChatAsync`) takes a `context:`
+list that delivers per-call server data to scoped tools (`ToolBase<TScope, TInput, TOutput>`) —
+the current user, tenant, permission scope, etc. Values are matched to each scoped tool's `TScope`
+by type and are **never** sent to the model, so the model cannot read or forge them.
+
+```csharp
+var user = new UserContext(currentUser.Id, currentUser.Name);
+
+ResultAgent<Report> result = await ai.GenerateAsync(
+    new GPT5(), prompt,
+    tools:   [new GetMyOrdersTool(orders)],
+    context: [user]);                 // [user, billing] when several scoped tools need it
+```
+
+A scoped tool whose `TScope` has no matching value in `context:` throws `AiToolContextException`
+to the caller (a wiring mistake) rather than reporting it to the model. Authoring scoped tools is
+covered in [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+
 > **Cut cost with prompt caching.** An agent resends the system prompt and tool definitions every
 > turn, so on Anthropic models set `Cache = Cache.FiveMinutes` (or `Cache.OneHour` for long
 > sessions) on the model — the repeated prefix then replays at ~10% of input price from the second

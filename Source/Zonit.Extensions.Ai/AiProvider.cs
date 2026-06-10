@@ -136,6 +136,7 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(prompt);
@@ -156,7 +157,7 @@ internal sealed class AiProvider : IAiProvider
             // / Request / Total / Usage remain accessible via a downcast if the caller
             // wants the full agent trace.
             return await _agentRunner
-                .RunAsync(agentLlm, Materialize(prompt), tools, mcps, options, cancellationToken, chat)
+                .RunAsync(agentLlm, Materialize(prompt), tools, mcps, options, cancellationToken, chat, context)
                 .ConfigureAwait(false);
         }
 
@@ -175,8 +176,9 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
-        => ChatAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat, tools, mcps, options, cancellationToken);
+        => ChatAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat, tools, mcps, options, context, cancellationToken);
 
     /// <inheritdoc />
     public IAsyncEnumerable<string> ChatStreamAsync(
@@ -323,10 +325,11 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent run with {Model}", llm.Name);
-        return _agentRunner.RunAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken);
+        return _agentRunner.RunAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
 
     /// <inheritdoc />
@@ -336,9 +339,10 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
-        return GenerateAsync(llm, new SimplePrompt<string>(prompt), tools, mcps, options, cancellationToken);
+        return GenerateAsync(llm, new SimplePrompt<string>(prompt), tools, mcps, options, context, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -348,10 +352,11 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent stream with {Model}", llm.Name);
-        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken);
+        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
 
     /// <inheritdoc />
@@ -362,10 +367,11 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
         _logger.LogDebug("Agent stream (chat) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
-        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, chat);
+        return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, chat, context);
     }
 
     #endregion

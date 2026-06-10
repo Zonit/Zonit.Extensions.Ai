@@ -60,6 +60,15 @@ public interface IAiProvider
     /// per-turn files on <see cref="User.Files"/> are forwarded with that turn.
     /// Both can be supplied.
     /// </para>
+    /// <para>
+    /// <paramref name="context"/> carries per-call server data (e.g. the current user/tenant)
+    /// to scoped tools (<c>ToolBase&lt;TScope, TInput, TOutput&gt;</c>). It is matched to each
+    /// scoped tool's <c>TScope</c> by type and is <b>never</b> sent to the model, so ids and
+    /// identities flow from the server through the pipeline without the model being able to read
+    /// or forge them. Pass <c>context: [user]</c>, or <c>context: [user, billing]</c> when
+    /// several scoped tools each need their own context type. Only required when a scoped tool
+    /// is actually exposed.
+    /// </para>
     /// </remarks>
     Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
@@ -68,6 +77,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -80,6 +90,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -206,6 +217,12 @@ public interface IAiProvider
     /// registered via <c>AddAiMcp(...)</c> are used.
     /// </param>
     /// <param name="options">Per-call overrides (iterations, timeout, cost cap, allow-list, <c>OnToolCall</c>).</param>
+    /// <param name="context">
+    /// Per-call server data delivered to scoped tools (<c>ToolBase&lt;TScope, TInput, TOutput&gt;</c>),
+    /// matched to each tool's <c>TScope</c> by type and never sent to the model. Pass
+    /// <c>context: [user]</c> (or several values for several scoped tools). Only required when a
+    /// scoped tool is exposed.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
@@ -213,6 +230,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -224,6 +242,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -246,6 +265,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -268,6 +288,7 @@ public interface IAiProvider
         IReadOnlyList<ITool>? tools = null,
         IReadOnlyList<Mcp>? mcps = null,
         AgentOptions? options = null,
+        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     #endregion

@@ -86,6 +86,35 @@ public class AgentRunnerTests
         public class Output { public required string Echo { get; init; } }
     }
 
+    private sealed record UserCtx(Guid UserId, string UserName);
+    private sealed record BillingCtx(string Plan);
+
+    /// <summary>Scoped tool: combines server context (UserCtx) with the model's input.</summary>
+    private sealed class ScopedEchoTool : ToolBase<UserCtx, ScopedEchoTool.Input, ScopedEchoTool.Output>
+    {
+        public override string Name => "scoped_echo";
+        public override string Description => "Echoes the input prefixed with the context user.";
+
+        public override Task<Output> ExecuteAsync(UserCtx context, Input input, CancellationToken cancellationToken)
+            => Task.FromResult(new Output { Echo = $"{context.UserName}:{input.Message}" });
+
+        public class Input { public required string Message { get; init; } }
+        public class Output { public required string Echo { get; init; } }
+    }
+
+    /// <summary>Scoped tool that needs a different context type than <see cref="ScopedEchoTool"/>.</summary>
+    private sealed class BillingScopedTool : ToolBase<BillingCtx, BillingScopedTool.Input, BillingScopedTool.Output>
+    {
+        public override string Name => "billing_plan";
+        public override string Description => "Returns the context billing plan.";
+
+        public override Task<Output> ExecuteAsync(BillingCtx context, Input input, CancellationToken cancellationToken)
+            => Task.FromResult(new Output { Plan = context.Plan });
+
+        public class Input { public string? Ignored { get; init; } }
+        public class Output { public required string Plan { get; init; } }
+    }
+
     private sealed class ThrowingTool : ToolBase<ThrowingTool.Input, ThrowingTool.Output>
     {
         public override string Name => "explode";
@@ -306,6 +335,103 @@ public class AgentRunnerTests
         result.ToolCalls.Should().ContainSingle().Which.IsError.Should().BeTrue();
         result.ToolCalls[0].Error.Should().Be("planned failure");
     }
+
+    #region Scoped tools (per-call server context)
+
+    [Fact]
+    public async Task ScopedTool_ReceivesContext_NotVisibleToModel()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(("scoped_echo", """{"message":"hi"}""", "c1")));
+        adapter.Turns.Enqueue(FinalTurn("done"));
+
+        var user = new UserCtx(Guid.NewGuid(), "alice");
+        var result = await provider.GenerateAsync(
+            new FakeModel(),
+            "say hi",
+            tools: new ITool[] { new ScopedEchoTool() },
+            context: new object[] { user });
+
+        result.Value.Should().Be("done");
+        result.ToolCalls.Should().ContainSingle();
+        result.ToolCalls[0].Output!.Value.GetProperty("echo").GetString().Should().Be("alice:hi");
+        // The model never received the context — only the tool's Input is in the schema.
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name).Should().Contain("scoped_echo");
+    }
+
+    [Fact]
+    public async Task ScopedTool_MissingContext_ThrowsToCaller_NotToModel()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(("scoped_echo", """{"message":"hi"}""", "c1")));
+        // No second (final) turn: if the error leaked to the model the loop would continue.
+
+        var act = async () => await provider.GenerateAsync(
+            new FakeModel(),
+            "say hi",
+            tools: new ITool[] { new ScopedEchoTool() },
+            context: null); // forgot to supply context — a wiring mistake
+
+        await act.Should().ThrowAsync<AiToolContextException>();
+    }
+
+    [Fact]
+    public async Task ScopedTool_WrongContextType_ThrowsToCaller()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(("scoped_echo", """{"message":"hi"}""", "c1")));
+
+        var act = async () => await provider.GenerateAsync(
+            new FakeModel(),
+            "say hi",
+            tools: new ITool[] { new ScopedEchoTool() },
+            context: new object[] { new BillingCtx("pro") }); // wrong type for this tool
+
+        await act.Should().ThrowAsync<AiToolContextException>();
+    }
+
+    [Fact]
+    public async Task ScopedTools_MultipleContexts_EachToolResolvesItsOwnType()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(
+            ("scoped_echo", """{"message":"hi"}""", "c1"),
+            ("billing_plan", "{}", "c2")));
+        adapter.Turns.Enqueue(FinalTurn("done"));
+
+        var result = await provider.GenerateAsync(
+            new FakeModel(),
+            "go",
+            tools: new ITool[] { new ScopedEchoTool(), new BillingScopedTool() },
+            context: new object[] { new UserCtx(Guid.NewGuid(), "bob"), new BillingCtx("enterprise") });
+
+        result.ToolCalls.Should().HaveCount(2);
+        result.ToolCalls.Single(t => t.Name == "scoped_echo")
+            .Output!.Value.GetProperty("echo").GetString().Should().Be("bob:hi");
+        result.ToolCalls.Single(t => t.Name == "billing_plan")
+            .Output!.Value.GetProperty("plan").GetString().Should().Be("enterprise");
+    }
+
+    [Fact]
+    public async Task PlainTool_IgnoresContext_WhenSupplied()
+    {
+        // A non-scoped tool runs fine even if a context list is passed for other tools.
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(("echo", """{"message":"hi"}""", "c1")));
+        adapter.Turns.Enqueue(FinalTurn("done"));
+
+        var result = await provider.GenerateAsync(
+            new FakeModel(),
+            "say hi",
+            tools: new ITool[] { new EchoTool() },
+            context: new object[] { new UserCtx(Guid.NewGuid(), "carol") });
+
+        result.Value.Should().Be("done");
+        result.ToolCalls[0].Output!.Value.GetProperty("echo").GetString().Should().Be("hi");
+    }
+
+    #endregion
 
     [Fact]
     public async Task RunAsync_IterationLimitExceeded_ShouldThrow()

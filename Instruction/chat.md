@@ -39,6 +39,17 @@ var result = await ai.ChatAsync(new GPT5(), prompt, history,
     options: new AgentOptions { MaxIterations = 8 }, cancellationToken: ct);
 ```
 
+To hand tools trusted server data the model must not see (current user/tenant), use a scoped tool
+and the `context:` argument:
+
+```csharp
+var result = await ai.ChatAsync(new GPT5(), prompt, history,
+    tools:   [new GetMyOrdersTool(orders)],
+    context: [new UserContext(currentUser.Id, currentUser.Name)]);
+```
+
+See [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+
 ## Streaming tokens (no tools)
 
 ```csharp

@@ -54,4 +54,63 @@ builder.Services.AddAiTools<SaveNoteTool>();      // by type
 builder.Services.AddAiTools(new ReportBugTool()); // by instance
 ```
 
+## Tools that need server data the model must not see (`TScope`)
+
+When a tool must act on trusted data — the current user's id, the tenant, a permission scope —
+**do not** put it in `TInput`. Anything in `TInput` is in the schema, so the model supplies it and
+can forge it. Instead inherit `ToolBase<TScope, TInput, TOutput>`: `TScope` comes **first** (server
+data), then the model's `TInput`. The caller passes the value per call via `context:`; it is never
+sent to the model.
+
+```csharp
+public sealed record UserContext(Guid UserId, string UserName, Guid TenantId);
+
+public sealed class GetMyOrdersTool(IOrderRepository orders)
+    : ToolBase<UserContext, GetMyOrdersTool.Input, GetMyOrdersTool.Output>
+{
+    public override string Name        => "get_my_orders";
+    public override string Description => "Lists the signed-in user's orders.";
+
+    // context = trusted server data (first); input = model arguments (second).
+    public override async Task<Output> ExecuteAsync(
+        UserContext context, Input input, CancellationToken ct)
+    {
+        var rows = await orders.GetForUserAsync(context.UserId, input.Status, ct);
+        return new Output { Count = rows.Count };
+    }
+
+    public sealed class Input
+    {
+        [Description("Optional status filter, e.g. 'pending'.")] public string? Status { get; init; }
+    }
+    public sealed class Output { public int Count { get; init; } }
+}
+```
+
+Supply the context on the call as a list (matched to each tool's `TScope` by type):
+
+```csharp
+var user = new UserContext(currentUser.Id, currentUser.Name, currentUser.TenantId);
+
+await ai.ChatAsync(new GPT5(), prompt, chat,
+    tools: [new GetMyOrdersTool(orders)],
+    context: [user]);                       // one context
+
+await ai.GenerateAsync(new GPT5(), prompt,
+    tools: [new GetMyOrdersTool(orders), new BillingTool()],
+    context: [user, billing]);              // several scoped tools, several contexts
+```
+
+Rules:
+
+- **`context` first, `input` second** in `ExecuteAsync`. `TScope` must be a `class`/`record`.
+- **`context` is guaranteed non-null and correctly typed** — the runner resolves it from the
+  `context:` list before calling. You never write `if (context is null)` for a *missing* context.
+- **Missing or mistyped context is a wiring error, not a model error.** If a scoped tool runs but no
+  matching value was passed, the runner throws `AiToolContextException` to *you* (the caller), so it
+  surfaces in logs/tests at first run instead of leaking to the model. Validate the context's
+  *contents* (permissions, etc.) yourself — throwing there is reported to the model like any tool error.
+- **Register and pass exactly like a plain tool** (`AddAiTools<GetMyOrdersTool>()` or `tools: [...]`).
+  Only the `context:` argument is new, and only scoped tools read it; plain tools ignore it.
+
 The agent loop, MCP and the `ResultAgent<T>` audit trail are in [`agents.md`](./agents.md).

@@ -504,6 +504,52 @@ public sealed class SaveNoteTool(INoteStore store)
 Throwing is fine. The runner catches the exception and returns the error to the model, which can
 retry with different arguments or fall back, controlled by `ToolExceptionPolicy`.
 
+### Server context a tool can trust (and the model cannot forge)
+
+Some tools must act on data that has to come from the server — the signed-in user's id, the
+tenant, a permission scope. Putting it in the tool's input is unsafe: input is part of the schema,
+so the model fills it in and could send anything. Inherit `ToolBase<TScope, TInput, TOutput>`
+instead — `TScope` comes **first** (trusted server data), then the model's `TInput`. The caller
+supplies the value per call via `context:`; it never reaches the model, so it cannot be read or
+forged through the prompt and flows untouched through the whole pipeline.
+
+```csharp
+public sealed record UserContext(Guid UserId, string UserName, Guid TenantId);
+
+public sealed class GetMyOrdersTool(IOrderRepository orders)
+    : ToolBase<UserContext, GetMyOrdersTool.Input, GetMyOrdersTool.Output>
+{
+    public override string Name        => "get_my_orders";
+    public override string Description => "Lists the signed-in user's orders.";
+
+    // context = trusted server data (first); input = model arguments (second).
+    public override async Task<Output> ExecuteAsync(UserContext context, Input input, CancellationToken ct)
+    {
+        var rows = await orders.GetForUserAsync(context.UserId, input.Status, ct);
+        return new Output { Count = rows.Count };
+    }
+
+    public sealed class Input  { [Description("Optional status filter.")] public string? Status { get; init; } }
+    public sealed class Output { public int Count { get; init; } }
+}
+```
+
+Pass the context on any agent call (`GenerateAsync`, `GenerateStreamAsync`, `ChatAsync`) as a
+list — each scoped tool resolves the value matching its `TScope` by type:
+
+```csharp
+var user = new UserContext(currentUser.Id, currentUser.Name, currentUser.TenantId);
+
+await ai.ChatAsync(new GPT5(), prompt, chat,
+    tools:   [new GetMyOrdersTool(orders)],
+    context: [user]);                 // [user, billing] when several scoped tools each need one
+```
+
+The runner guarantees `context` is non-null and correctly typed before calling, so you never
+null-check a *missing* context. If a scoped tool runs but no matching value was supplied, the
+runner throws `AiToolContextException` to **you** (a wiring mistake caught at first run), never to
+the model. Validate the context's *contents* (permissions, etc.) inside the tool as usual.
+
 ### Registering tools and MCP servers
 
 Pass tools per call (above), or register them as DI defaults that apply whenever a call passes
