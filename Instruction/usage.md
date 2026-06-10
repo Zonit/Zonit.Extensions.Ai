@@ -40,7 +40,7 @@ only. There is no `IsSuccess` property; failures throw. See [`results.md`](./res
 
 | | Single prompt | Agent |
 | :--- | :--- | :--- |
-| Call | `GenerateAsync(llm, prompt)` | `GenerateAsync(agentLlm, prompt, tools, mcps)` |
+| Call | `GenerateAsync(llm, prompt)` | `Agent(agentLlm, prompt).AddTool<T>()….RunAsync()` |
 | Model does | one round-trip | a loop: calls tools, reads results, repeats |
 | Use when | the model has everything it needs in the prompt | the task needs live data or actions the model cannot perform alone |
 | Cost and latency | lowest, predictable | higher, grows with iterations |
@@ -52,6 +52,22 @@ self-contained task. Use an agent only when the model must fetch something (a re
 response, a search) or take an action (write to a database, create an issue) partway through the
 task. The test: if the model needs to do or fetch something mid-task, use an agent; otherwise
 use a prompt.
+
+## Two surfaces: simple calls and the fluent builder
+
+The API is split so the common case stays tiny and only advanced calls grow:
+
+- **Simple calls** — positional, just `llm` + input (generation settings like `MaxTokens` /
+  `Temperature` / `Cache` live on the model object, so there is no settings parameter). Use these
+  for plain in→out: text, image, embedding, audio, plain chat, token streaming.
+- **Fluent builder** — `ai.Agent(...)` / `ai.Chat(...)` for anything with **tools, MCP, scoped
+  context or limits**. Safe by default: nothing reaches the model unless you add it. There is no
+  positional overload that takes `tools` / `mcps` / `context` — that all moved onto the builder.
+
+```csharp
+var quick  = await ai.GenerateAsync(new GPT5(), "summarise this", ct);          // simple
+var answer = await ai.Agent(new GPT5(), prompt).AddTool<SearchTool>().RunAsync(ct); // advanced
+```
 
 ## The unified API
 
@@ -66,9 +82,10 @@ The overload is chosen by the model's capability interface.
 | `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm` | `Result<string>` |
 | `GenerateAsync(videoLlm, string)` | `IVideoLlm` | `Result<Asset>` |
 | `StreamAsync(llm, string)` | `ILlm` | `IAsyncEnumerable<string>` |
-| `ChatAsync(...)` / `ChatStreamAsync(...)` | `ILlm` | `Result<T>` / tokens (see chat.md) |
-| `GenerateAsync(agentLlm, prompt, tools, mcps, options)` | `IAgentLlm` | `ResultAgent<T>` (see agents.md) |
-| `GenerateStreamAsync(agentLlm, ...)` | `IAgentLlm` | `IAsyncEnumerable<AgentEvent>` |
+| `ChatAsync(llm, system, history)` | `ILlm` | `Result<T>` — plain multi-turn, no tools (chat.md) |
+| `ChatStreamAsync(llm, system, history)` | `ILlm` | `IAsyncEnumerable<string>` — plain token stream |
+| `Agent(agentLlm, prompt)` → `.RunAsync()` / `.RunStreamAsync()` | `IAgentLlm` | `ResultAgent<T>` / `IAsyncEnumerable<AgentEvent>` (agents.md) |
+| `Chat(llm, system, history)` → `.RunAsync()` / `.RunStreamAsync()` | `ILlm` | tool-driven chat → `Result<T>` / `AgentEvent` stream (agents.md) |
 | `CalculateCost(...)` / `EstimateCost(...)` | various | `Price` (see results.md) |
 
 ## One example per modality

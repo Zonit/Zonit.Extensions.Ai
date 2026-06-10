@@ -8,7 +8,13 @@
     <Description>Core AI integration library for .NET. Features Scriban templating, structured outputs, and auto-discovery of providers. Install provider packages (OpenAi, Anthropic, Google, X) separately.</Description>
     <PackageTags>ai;llm;text-generation;structured-output;scriban;templating</PackageTags>
   </PropertyGroup>
-  
+
+  <!-- Test assembly drives the internal agent/chat engine directly (the heavy tool-driven
+       overloads are internal; public callers use the fluent IAgentRequest / IChatRequest builders). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Zonit.Extensions.Ai.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" />

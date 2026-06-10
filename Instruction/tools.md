@@ -46,13 +46,22 @@ public sealed class SaveNoteTool(INoteStore store)
 ## Using a tool
 
 ```csharp
-// Per call (authoritative; DI defaults are ignored when you pass a list):
-await ai.GenerateAsync(new GPT5(), prompt, tools: [new SaveNoteTool(store)]);
+// Fluent (recommended): the container builds the tool, dependencies injected.
+await ai.Agent(new GPT5(), prompt).AddTool<SaveNoteTool>().RunAsync();
 
-// As a DI default (used when a call passes tools: null):
+// Per call, explicit instance (for tests / ready-made tools):
+await ai.Agent(new GPT5(), prompt).AddTool(new SaveNoteTool(store)).RunAsync();
+
+// As a global default — OFF unless a call opts in:
 builder.Services.AddAiTools<SaveNoteTool>();      // by type
 builder.Services.AddAiTools(new ReportBugTool()); // by instance
 ```
+
+Globally registered tools are **opt-in**, never silently active. A call that passes `tools: null`
+(or omits it) exposes none of them; opt in per call with `.AddDefaultTools()` (fluent) or
+`options: new AgentOptions { DefaultTools = true }`. This keeps a tool registered for one flow from
+leaking into every other agent call. Either way, the model's `TInput` is always just a filter — the
+authorization key comes from `TScope` (below).
 
 ## Tools that need server data the model must not see (`TScope`)
 
@@ -87,18 +96,22 @@ public sealed class GetMyOrdersTool(IOrderRepository orders)
 }
 ```
 
-Supply the context on the call as a list (matched to each tool's `TScope` by type):
+Supply the context on the builder with `.WithContext(...)` (matched to each tool's `TScope` by type):
 
 ```csharp
 var user = new UserContext(currentUser.Id, currentUser.Name, currentUser.TenantId);
 
-await ai.ChatAsync(new GPT5(), prompt, chat,
-    tools: [new GetMyOrdersTool(orders)],
-    context: [user]);                       // one context
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<GetMyOrdersTool>()
+    .WithContext(user)                      // one context
+    .RunAsync();
 
-await ai.GenerateAsync(new GPT5(), prompt,
-    tools: [new GetMyOrdersTool(orders), new BillingTool()],
-    context: [user, billing]);              // several scoped tools, several contexts
+await ai.Agent(new GPT5(), prompt)          // several scoped tools, several contexts
+    .AddTool<GetMyOrdersTool>()
+    .AddTool<BillingTool>()
+    .WithContext(user)
+    .WithContext(billing)
+    .RunAsync();
 ```
 
 Rules:
@@ -110,7 +123,7 @@ Rules:
   matching value was passed, the runner throws `AiToolContextException` to *you* (the caller), so it
   surfaces in logs/tests at first run instead of leaking to the model. Validate the context's
   *contents* (permissions, etc.) yourself — throwing there is reported to the model like any tool error.
-- **Register and pass exactly like a plain tool** (`AddAiTools<GetMyOrdersTool>()` or `tools: [...]`).
-  Only the `context:` argument is new, and only scoped tools read it; plain tools ignore it.
+- **Add it exactly like a plain tool** (`.AddTool<GetMyOrdersTool>()`). Only `.WithContext(...)` is
+  new, and only scoped tools read it; plain tools ignore it.
 
 The agent loop, MCP and the `ResultAgent<T>` audit trail are in [`agents.md`](./agents.md).

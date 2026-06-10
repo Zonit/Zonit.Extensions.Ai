@@ -31,9 +31,16 @@ public sealed class AgentOptions
     /// Controls whether tools registered globally via
     /// <c>services.AddAiTools(...)</c> are exposed to the model when the
     /// caller did <b>not</b> supply an explicit <c>tools:</c> list (i.e.
-    /// passed <c>null</c>). Default <c>true</c>.
+    /// passed <c>null</c>). Default <c>false</c> — globally registered tools
+    /// are <b>opt-in</b>, never silently active.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <b>Safe by default.</b> A call that passes <c>tools: null</c> exposes
+    /// <b>no</b> tools unless you explicitly set this flag to <c>true</c>. This
+    /// prevents a tool registered via <c>AddAiTools&lt;T&gt;()</c> for one flow
+    /// from silently leaking into every other agent call in the process.
+    /// </para>
     /// <para>
     /// Passing an explicit <c>tools:</c> list (including an empty one) is
     /// authoritative — DI defaults are <b>never</b> merged on top, regardless
@@ -42,27 +49,28 @@ public sealed class AgentOptions
     /// else from the container".
     /// </para>
     /// <para>
-    /// Set this flag to <c>false</c> only when you want to suppress DI
-    /// defaults <i>even though</i> you passed <c>tools: null</c> — useful for
-    /// fully provider-driven calls where the model should rely solely on its
-    /// built-in / MCP tooling.
+    /// Set this flag to <c>true</c> (with <c>tools: null</c>) to opt the call
+    /// into the globally registered tool set. The fluent builder exposes the
+    /// same opt-in as <c>.AddDefaultTools()</c>.
     /// </para>
     /// </remarks>
-    public bool DefaultTools { get; init; } = true;
+    public bool DefaultTools { get; init; } = false;
 
     /// <summary>
     /// Controls whether MCP servers registered globally via
     /// <c>services.AddAiMcp(...)</c> are attached when the caller did
     /// <b>not</b> supply an explicit <c>mcps:</c> list (i.e. passed
-    /// <c>null</c>). Default <c>true</c>.
+    /// <c>null</c>). Default <c>false</c> — globally registered MCP servers
+    /// are <b>opt-in</b>, never silently active.
     /// </summary>
     /// <remarks>
     /// Passing an explicit <c>mcps:</c> list (including an empty one) is
     /// authoritative — DI-registered MCP servers are <b>never</b> merged on
-    /// top, regardless of this flag. Set this flag to <c>false</c> only to
-    /// suppress DI-registered MCPs when you also passed <c>mcps: null</c>.
+    /// top, regardless of this flag. Set this flag to <c>true</c> (with
+    /// <c>mcps: null</c>) to opt the call into the globally registered MCP set;
+    /// the fluent builder exposes the same opt-in as <c>.AddDefaultMcp()</c>.
     /// </remarks>
-    public bool DefaultMcp { get; init; } = true;
+    public bool DefaultMcp { get; init; } = false;
 
     /// <summary>
     /// Allow-list of tool names. When set, only tools whose <see cref="ITool.Name"/>

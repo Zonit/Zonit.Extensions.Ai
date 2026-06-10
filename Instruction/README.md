@@ -10,7 +10,7 @@ New here? Start with [usage.md](./usage.md).
 
 | Guide | What it covers |
 | :--- | :--- |
-| [usage.md](./usage.md) | Getting started, the unified `GenerateAsync` API, prompt vs agent, each modality |
+| [usage.md](./usage.md) | Getting started, simple calls vs the fluent builder, prompt vs agent, each modality |
 | [providers.md](./providers.md) | Which provider NuGet to install for a capability (text, images, audio, embeddings) |
 | [configuration.md](./configuration.md) | DI registration, `appsettings.json`, resilience |
 | [models.md](./models.md) | Capability interfaces, picking a model, reasoning and fast mode |
@@ -18,7 +18,7 @@ New here? Start with [usage.md](./usage.md).
 | [prompt-library.md](./prompt-library.md) | Ready-made prompts from `Zonit.Extensions.Ai.Prompts` |
 | [tools.md](./tools.md) | Writing an agent tool (`ToolBase`) |
 | [chat.md](./chat.md) | Multi-turn chat (`ChatAsync`, `ChatStreamAsync`) |
-| [agents.md](./agents.md) | Agents: tool-calling, MCP, streaming events |
+| [agents.md](./agents.md) | Agents: the fluent `ai.Agent(...)` builder, tool-calling, MCP, streaming events (safe-by-default tooling) |
 | [results.md](./results.md) | `Result`, `MetaData`, token usage and cost, `ResultAgent` roll-ups |
 
 These files are the authored source. At consumer build time the package projects them into

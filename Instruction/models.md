@@ -79,10 +79,11 @@ on with the `Cache` property — it is **off by default** (`Cache.None`).
 ```csharp
 using Zonit.Extensions.Ai.Anthropic;   // the Cache enum
 
-await ai.GenerateAsync(
-    new Opus48 { Cache = Cache.FiveMinutes },   // None | FiveMinutes | OneHour
-    new ResearchPrompt { Topic = "EU AI Act" },
-    tools: [new SearchTool()]);
+await ai.Agent(
+        new Opus48 { Cache = Cache.FiveMinutes },   // None | FiveMinutes | OneHour
+        new ResearchPrompt { Topic = "EU AI Act" })
+    .AddTool<SearchTool>()
+    .RunAsync();
 ```
 
 | TTL | When to use it |

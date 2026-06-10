@@ -17,9 +17,9 @@
 `Zonit.Extensions.Ai` talks to OpenAI, Anthropic, Google, xAI and a dozen other providers
 through a single interface, `IAiProvider`. You pick a model as a strongly-typed class, pass a
 typed prompt, and get back a typed result with usage and cost already calculated. The same
-`GenerateAsync` call resolves to text, image, audio, embedding or agent mode depending on the
-model you hand it. No separate clients, no stringly-typed configuration, no provider-specific
-SDKs in your domain code.
+`GenerateAsync` call resolves to text, image, audio or embedding by the model you hand it; agents
+and tool-driven chat use the fluent `ai.Agent(...)` / `ai.Chat(...)` builder. No separate clients,
+no stringly-typed configuration, no provider-specific SDKs in your domain code.
 
 ```csharp
 IAiProvider ai = /* injected */;
@@ -279,11 +279,15 @@ interface and the argument you pass.
 | `GenerateAsync(audioLlm, Asset)`        | `IAudioLlm`     | `Result<string>` |
 | `GenerateAsync(videoLlm, string)`       | `IVideoLlm`     | `Result<Asset>` |
 | `StreamAsync(llm, string)`              | `ILlm`          | `IAsyncEnumerable<string>` |
-| `ChatAsync(llm, prompt, chat, ...)`     | `ILlm`          | `Result<T>` |
-| `ChatStreamAsync(llm, prompt, chat)`    | `ILlm`          | `IAsyncEnumerable<string>` |
-| `GenerateAsync(agentLlm, prompt, tools, mcps, ...)` | `IAgentLlm` | `ResultAgent<T>` |
-| `GenerateStreamAsync(agentLlm, prompt, ...)`        | `IAgentLlm` | `IAsyncEnumerable<AgentEvent>` |
+| `ChatAsync(llm, prompt, history)`       | `ILlm`          | `Result<T>` — plain multi-turn, no tools |
+| `ChatStreamAsync(llm, prompt, history)` | `ILlm`          | `IAsyncEnumerable<string>` |
+| `Agent(agentLlm, prompt)` → `.RunAsync()` / `.RunStreamAsync()` | `IAgentLlm` | `ResultAgent<T>` / `IAsyncEnumerable<AgentEvent>` |
+| `Chat(llm, prompt, history)` → `.RunAsync()` / `.RunStreamAsync()` | `ILlm` | tool-driven chat → `Result<T>` / `AgentEvent` stream |
 | `CalculateCost(...)` / `EstimateCost(...)`          | various     | `Price` |
+
+Simple positional calls cover plain in→out (text, image, embedding, audio, plain chat, streaming);
+the fluent `Agent` / `Chat` builder covers anything with tools, MCP, context or limits — and is
+safe by default (no tool reaches the model unless you add it).
 
 ---
 
@@ -401,10 +405,12 @@ turns at a fraction of the input price. Enable it per model with the `Cache` pro
 using Zonit.Extensions.Ai.Anthropic;   // the Cache enum
 
 // Agents, chat loops and any repeated-prefix calls benefit most.
-var result = await ai.GenerateAsync(
-    new Opus48 { Cache = Cache.FiveMinutes },     // None (default) | FiveMinutes | OneHour
-    new ResearchPrompt { Topic = "EU AI Act" },
-    tools: [new SearchTool(), new SaveNoteTool(db)]);
+var result = await ai.Agent(
+        new Opus48 { Cache = Cache.FiveMinutes },     // None (default) | FiveMinutes | OneHour
+        new ResearchPrompt { Topic = "EU AI Act" })
+    .AddTool<SearchTool>()
+    .AddTool<SaveNoteTool>()
+    .RunAsync();
 ```
 
 | TTL | Use it when |
@@ -447,10 +453,11 @@ var result = await ai.ChatAsync(
 Console.WriteLine(result.Value);
 ```
 
-Pass `tools:` and/or `mcps:` to make the chat turn tool-capable; the call then routes through the
-agent runner and returns a `ResultAgent<T>` (see below). For token-by-token output without tools,
-use `ChatStreamAsync`. Native multi-turn message arrays are used for OpenAI, Anthropic, xAI
-(Grok) and Google (Gemini); other providers fall back to a flattened transcript.
+For a tool-driven conversation, switch to the fluent builder —
+`ai.Chat(llm, prompt, history).AddTool<T>()….RunAsync()` — the turn then routes through the agent
+runner and the result's `.Value` is a `ResultAgent<T>` (see below). For token-by-token output
+without tools, use `ChatStreamAsync`. Native multi-turn message arrays are used for OpenAI,
+Anthropic, xAI (Grok) and Google (Gemini); other providers fall back to a flattened transcript.
 
 ---
 
@@ -462,11 +469,11 @@ all behind one `await`. Prefer a single prompt for self-contained tasks and use 
 model needs to fetch data or take actions mid-task.
 
 ```csharp
-var result = await ai.GenerateAsync(
-    new GPT5(),                                   // any IAgentLlm
-    new ResearchPrompt { Topic = "EU AI Act" },   // typed final answer
-    tools: [new GetWeatherTool(), new SaveNoteTool(db)],
-    mcps:  [new Mcp("github", "https://mcp.example.com/sse", token)]);
+var result = await ai.Agent(new GPT5(), new ResearchPrompt { Topic = "EU AI Act" })  // any IAgentLlm
+    .AddTool<GetWeatherTool>()                    // tools off by default — add what this call needs
+    .AddTool<SaveNoteTool>()
+    .AddMcp("github", "https://mcp.example.com/sse", token)
+    .RunAsync();
 
 Console.WriteLine($"Answer: {result.Value}");
 Console.WriteLine($"Iterations: {result.Iterations}, cost: {result.Total.Cost}");
@@ -534,15 +541,16 @@ public sealed class GetMyOrdersTool(IOrderRepository orders)
 }
 ```
 
-Pass the context on any agent call (`GenerateAsync`, `GenerateStreamAsync`, `ChatAsync`) as a
-list — each scoped tool resolves the value matching its `TScope` by type:
+Supply the context on the builder with `.WithContext(...)` — each scoped tool resolves the value
+matching its `TScope` by type:
 
 ```csharp
 var user = new UserContext(currentUser.Id, currentUser.Name, currentUser.TenantId);
 
-await ai.ChatAsync(new GPT5(), prompt, chat,
-    tools:   [new GetMyOrdersTool(orders)],
-    context: [user]);                 // [user, billing] when several scoped tools each need one
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<GetMyOrdersTool>()
+    .WithContext(user)                // call .WithContext again per extra scoped context type
+    .RunAsync();
 ```
 
 The runner guarantees `context` is non-null and correctly typed before calling, so you never
@@ -552,17 +560,18 @@ the model. Validate the context's *contents* (permissions, etc.) inside the tool
 
 ### Registering tools and MCP servers
 
-Pass tools per call (above), or register them as DI defaults that apply whenever a call passes
-`tools: null`:
+Add tools on the builder (above), or register global defaults. Globally registered defaults are
+**opt-in** — a call gets them only when it asks, with `.AddDefaultTools()` / `.AddDefaultMcp()`.
+This keeps a tool registered for one flow from silently leaking into every other agent call.
 
 ```csharp
 builder.Services.AddAiTools<SaveNoteTool>();          // type, resolved from DI
 builder.Services.AddAiTools(new ReportBugTool());     // pre-built instance
 builder.Services.AddAiMcp(new Mcp("github", "https://mcp.example.com/sse", token));
-```
 
-An explicit `tools:` list (even an empty one) is authoritative; DI defaults are not merged on
-top. `tools: []` means no tools for this call.
+// opt a specific call into the registered set:
+await ai.Agent(new GPT5(), prompt).AddDefaultTools().AddDefaultMcp().RunAsync();
+```
 
 ### External MCP (client only)
 
@@ -580,26 +589,28 @@ var mcp = new Mcp(
 
 ### Per-call options
 
+Every knob is a chainable builder method:
+
 ```csharp
-var options = new AgentOptions
-{
-    MaxIterations        = 12,
-    MaxParallelToolCalls = 8,
-    Timeout              = TimeSpan.FromMinutes(2),
-    AllowedTools         = ["save_note", "github.read_file"],
-    OnToolCall           = async (call, ct) => call.Name != "delete_everything", // veto hook
-};
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<SaveNoteTool>()
+    .MaxIterations(12)
+    .MaxParallelToolCalls(8)
+    .Timeout(TimeSpan.FromMinutes(2))
+    .AllowOnly("save_note", "github.read_file")
+    .OnToolCall(async (call, ct) => call.Name != "delete_everything")   // veto hook
+    .RunAsync();
 ```
 
-| Option | Purpose |
+| Method | Purpose |
 | :--- | :--- |
-| `MaxIterations` | Hard ceiling on agent turns |
-| `MaxParallelToolCalls` | Concurrency for tool execution within a turn (surplus is queued, never dropped) |
-| `Timeout` | Wall-clock limit for the whole run |
-| `AllowedTools` | Per-call allow-list of tool names |
-| `OnToolCall` | Async hook called before each tool; return `false` to block it |
-| `DefaultTools` / `DefaultMcp` | Opt out of DI-registered defaults for this call |
-| `MaxNestedDepth` | Bound on agent-to-tool-to-agent nesting |
+| `.MaxIterations(n)` | Hard ceiling on agent turns |
+| `.MaxParallelToolCalls(n)` | Concurrency for tool execution within a turn (surplus is queued, never dropped) |
+| `.Timeout(t)` | Wall-clock limit for the whole run |
+| `.AllowOnly(names…)` | Per-call allow-list of tool names |
+| `.OnToolCall((call, ct) => …)` | Async hook before each tool; return `false` to block it |
+| `.AddDefaultTools()` / `.AddDefaultMcp()` | **Opt IN** to DI-registered defaults (off otherwise) |
+| `.MaxNestedDepth(n)` | Bound on agent-to-tool-to-agent nesting |
 
 ### The audit trail: `ResultAgent<T>`
 
@@ -640,10 +651,10 @@ no plumbing on your side.
 
 ### Streaming an agent run
 
-`GenerateStreamAsync` emits a sealed `AgentEvent` hierarchy so you can drive a live UI:
+`.RunStreamAsync()` emits a sealed `AgentEvent` hierarchy so you can drive a live UI:
 
 ```csharp
-await foreach (var evt in ai.GenerateStreamAsync(new Sonnet46(), prompt, tools: [new SaveNoteTool(db)]))
+await foreach (var evt in ai.Agent(new Sonnet46(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
 {
     switch (evt)
     {
@@ -657,18 +668,19 @@ await foreach (var evt in ai.GenerateStreamAsync(new Sonnet46(), prompt, tools: 
 }
 ```
 
-A second overload accepts a prior `chat` transcript, so you can resume an existing conversation
-with full tool-calling. It is the streaming counterpart of `ChatAsync` with tools.
+`ai.Chat(llm, prompt, history).RunStreamAsync()` does the same resuming from a prior transcript
+with full tool-calling (needs an `IAgentLlm` model).
 
 ### Chat and agent API at a glance
 
-| Method | Returns | Tools | Streaming |
+| Call | Returns | Tools | Streaming |
 | :--- | :--- | :---: | :---: |
-| `ChatAsync(llm, prompt, chat)` | `Result<T>` | no | no |
-| `ChatAsync(llm, prompt, chat, tools, mcps, options)` | `ResultAgent<T>` | yes | no |
-| `ChatStreamAsync(llm, prompt, chat)` | `IAsyncEnumerable<string>` | no | tokens |
-| `GenerateAsync(agentLlm, prompt, tools, mcps, options)` | `ResultAgent<T>` | yes | no |
-| `GenerateStreamAsync(agentLlm, prompt, ...)` | `IAsyncEnumerable<AgentEvent>` | yes | events |
+| `ChatAsync(llm, prompt, history)` | `Result<T>` | no | no |
+| `ChatStreamAsync(llm, prompt, history)` | `IAsyncEnumerable<string>` | no | tokens |
+| `Agent(agentLlm, prompt).RunAsync()` | `ResultAgent<T>` | yes | no |
+| `Agent(agentLlm, prompt).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
+| `Chat(llm, prompt, history).RunAsync()` | `Result<T>` | yes | no |
+| `Chat(llm, prompt, history).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
 
 Every entry point has a plain-`string` overload for when you do not need a typed response.
 

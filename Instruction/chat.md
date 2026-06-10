@@ -28,27 +28,35 @@ Message records:
 - `Tool` records a tool result. The runtime creates it and returns it in transcripts; you do not
   construct it.
 
-## With tools or MCP
+The plain `ChatAsync` overload takes **no** tools, MCP or context — it is the simple multi-turn
+call. For a tool-driven conversation, switch to the fluent `ai.Chat(...)` builder below.
 
-Pass `tools:` and/or `mcps:` to make the turn tool-capable. The call routes through the agent
-runner and returns a `ResultAgent<T>`. See [`agents.md`](./agents.md).
+## With tools, MCP or context (fluent)
+
+`ai.Chat(llm, prompt, history)` carries the history at the entry point, then takes the same
+safe-by-default builder as an agent: tools are off unless you add them. The turn routes through the
+agent runner and the result's `.Value` is a `ResultAgent<T>` when tools ran. See
+[`agents.md`](./agents.md).
 
 ```csharp
-var result = await ai.ChatAsync(new GPT5(), prompt, history,
-    tools: [new SaveNoteTool(store)],
-    options: new AgentOptions { MaxIterations = 8 }, cancellationToken: ct);
+var result = await ai.Chat(new GPT5(), prompt, history)
+    .AddTool<SaveNoteTool>()
+    .MaxIterations(8)
+    .RunAsync(ct);
 ```
 
 To hand tools trusted server data the model must not see (current user/tenant), use a scoped tool
-and the `context:` argument:
+and `.WithContext(...)`:
 
 ```csharp
-var result = await ai.ChatAsync(new GPT5(), prompt, history,
-    tools:   [new GetMyOrdersTool(orders)],
-    context: [new UserContext(currentUser.Id, currentUser.Name)]);
+var result = await ai.Chat(new GPT5(), prompt, history)
+    .AddTool<GetMyOrdersTool>()
+    .WithContext(new UserContext(currentUser.Id, currentUser.Name))
+    .RunAsync(ct);
 ```
 
-See [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+See [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope). For a live
+event stream of a tool-driven chat, terminate with `.RunStreamAsync()` instead (needs an `IAgentLlm`).
 
 ## Streaming tokens (no tools)
 

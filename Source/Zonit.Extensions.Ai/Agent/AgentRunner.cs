@@ -437,14 +437,15 @@ internal sealed class AgentRunner
         // tools: [t1] — the caller wants exactly t1 for this call, not "t1
         // plus everything else in the container".
         //
-        // Per-call AgentOptions.DefaultTools / DefaultMcp can additionally
-        // suppress the DI fallback even when the caller passed null. Default
-        // is true because the global registries are populated only by
-        // explicit AddAiTools<T>() / AddAiMcp() calls — i.e. tools the
-        // application owner has deliberately marked as "active for every
-        // agent call".
-        var includeDefaultTools = options?.DefaultTools ?? true;
-        var includeDefaultMcp = options?.DefaultMcp ?? true;
+        // Per-call AgentOptions.DefaultTools / DefaultMcp opt the call INTO the
+        // globally registered set when the caller passed null. Default is
+        // FALSE — globally registered tools/MCPs are never silently active;
+        // they must be opted into per call (AgentOptions.DefaultTools = true,
+        // or the fluent .AddDefaultTools() / .AddDefaultMcp()). This keeps a
+        // tool registered via AddAiTools<T>() for one flow from leaking into
+        // every other agent call in the process.
+        var includeDefaultTools = options?.DefaultTools ?? false;
+        var includeDefaultMcp = options?.DefaultMcp ?? false;
 
         var tools = new List<ITool>();
 

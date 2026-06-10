@@ -16,6 +16,7 @@ internal sealed class AiProvider : IAiProvider
     private readonly AiUsageTracker _tracker;
     private readonly IOptions<AiOptions> _aiOptions;
     private readonly ILogger<AiProvider> _logger;
+    private readonly IServiceProvider _serviceProvider;
 
     public AiProvider(
         IEnumerable<IModelProvider> providers,
@@ -23,7 +24,8 @@ internal sealed class AiProvider : IAiProvider
         IPromptRenderer renderer,
         AiUsageTracker tracker,
         IOptions<AiOptions> aiOptions,
-        ILogger<AiProvider> logger)
+        ILogger<AiProvider> logger,
+        IServiceProvider serviceProvider)
     {
         _providers = providers;
         _agentRunner = agentRunner;
@@ -31,7 +33,43 @@ internal sealed class AiProvider : IAiProvider
         _tracker = tracker;
         _aiOptions = aiOptions;
         _logger = logger;
+        _serviceProvider = serviceProvider;
     }
+
+    #region Fluent
+
+    /// <inheritdoc />
+    public IAgentRequest<TResponse> Agent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        IAgentLlm llm, IPrompt<TResponse> prompt)
+        => new AgentRequest<TResponse>(
+            _serviceProvider,
+            (tools, mcps, options, context, ct) => GenerateAsync(llm, prompt, tools, mcps, options, context, ct),
+            (tools, mcps, options, context, ct) => GenerateStreamAsync(llm, prompt, tools, mcps, options, context, ct));
+
+    /// <inheritdoc />
+    public IAgentRequest<string> Agent(IAgentLlm llm, string prompt)
+        => new AgentRequest<string>(
+            _serviceProvider,
+            (tools, mcps, options, context, ct) => GenerateAsync(llm, prompt, tools, mcps, options, context, ct),
+            (_, _, _, _, _) => throw new NotSupportedException(
+                "Streaming a string-prompt agent is not supported. Use Agent(llm, IPrompt<TResponse>) to stream."));
+
+    /// <inheritdoc />
+    public IChatRequest<TResponse> Chat<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        ILlm llm, IPrompt<TResponse> prompt, IReadOnlyList<ChatMessage> history)
+        => new ChatRequest<TResponse>(
+            _serviceProvider,
+            (tools, mcps, options, context, ct) => ChatWithToolsAsync(llm, prompt, history, tools, mcps, options, context, ct),
+            (tools, mcps, options, context, ct) => ChatStreamWithToolsAsync(llm, prompt, history, tools, mcps, options, context, ct));
+
+    /// <inheritdoc />
+    public IChatRequest<string> Chat(ILlm llm, string systemPrompt, IReadOnlyList<ChatMessage> history)
+        => new ChatRequest<string>(
+            _serviceProvider,
+            (tools, mcps, options, context, ct) => ChatWithToolsAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), history, tools, mcps, options, context, ct),
+            (tools, mcps, options, context, ct) => ChatStreamWithToolsAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), history, tools, mcps, options, context, ct));
+
+    #endregion
 
     /// <summary>
     /// Wraps a single-shot leaf operation so that, when it runs <i>inside</i> an active
@@ -129,15 +167,36 @@ internal sealed class AiProvider : IAiProvider
     #region Chat
 
     /// <inheritdoc />
-    public async Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+    public Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
+        => ChatWithToolsAsync(llm, prompt, chat, tools: null, mcps: null, options: null, context: null, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<Result<string>> ChatAsync(
+        ILlm llm,
+        string systemPrompt,
+        IReadOnlyList<ChatMessage> chat,
+        CancellationToken cancellationToken = default)
+        => ChatWithToolsAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat,
+            tools: null, mcps: null, options: null, context: null, cancellationToken);
+
+    /// <summary>
+    /// Tool-driven chat — the engine behind the fluent <c>Chat(...)</c> builder. Not part of the
+    /// public <see cref="IAiProvider"/> surface: callers reach it through <c>ai.Chat(...).RunAsync()</c>
+    /// (with tools / context) or the plain <c>ChatAsync</c> overloads above (without).
+    /// </summary>
+    internal async Task<Result<TResponse>> ChatWithToolsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        ILlm llm,
+        IPrompt<TResponse> prompt,
+        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ITool>? tools,
+        IReadOnlyList<Mcp>? mcps,
+        AgentOptions? options,
+        IReadOnlyList<object>? context,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(prompt);
         ArgumentNullException.ThrowIfNull(chat);
@@ -150,7 +209,7 @@ internal sealed class AiProvider : IAiProvider
                 throw new InvalidOperationException(
                     $"Chat with tools or MCP requires an IAgentLlm-capable model. " +
                     $"'{llm.GetType().Name}' is not agent-capable in this provider; " +
-                    $"omit tools/mcps/options for a plain chat completion.");
+                    $"use a plain ai.Chat(llm, system, history).RunAsync() without tools.");
 
             _logger.LogDebug("Chat (agent) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
             // ResultAgent<T> : Result<T> — assignable directly. Iterations / ToolCalls
@@ -168,17 +227,27 @@ internal sealed class AiProvider : IAiProvider
             () => provider.ChatAsync(llm, materialized, chat, cancellationToken));
     }
 
-    /// <inheritdoc />
-    public Task<Result<string>> ChatAsync(
+    /// <summary>
+    /// Streaming engine behind <c>ai.Chat(...).RunStreamAsync()</c>: resumes the agent loop from
+    /// <paramref name="chat"/> and emits <see cref="AgentEvent"/>s. Requires an agent-capable model.
+    /// </summary>
+    internal IAsyncEnumerable<AgentEvent> ChatStreamWithToolsAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
-        string systemPrompt,
+        IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
-        CancellationToken cancellationToken = default)
-        => ChatAsync<string>(llm, new SimplePrompt<string>(systemPrompt ?? string.Empty), chat, tools, mcps, options, context, cancellationToken);
+        IReadOnlyList<ITool>? tools,
+        IReadOnlyList<Mcp>? mcps,
+        AgentOptions? options,
+        IReadOnlyList<object>? context,
+        CancellationToken cancellationToken)
+    {
+        if (llm is not IAgentLlm agentLlm)
+            throw new NotSupportedException(
+                $"Streaming a chat requires an agent-capable model (IAgentLlm); '{llm.GetType().Name}' is not. " +
+                "For plain token-by-token streaming without tools use ai.ChatStreamAsync(llm, system, history).");
+
+        return GenerateStreamAsync(agentLlm, prompt, chat, tools, mcps, options, context, cancellationToken);
+    }
 
     /// <inheritdoc />
     public IAsyncEnumerable<string> ChatStreamAsync(
@@ -316,10 +385,10 @@ internal sealed class AiProvider : IAiProvider
 
     #endregion
 
-    #region Agent
+    #region Agent (internal — driven through the fluent IAgentRequest builder)
 
-    /// <inheritdoc />
-    public Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+    /// <summary>Agent run engine behind <c>ai.Agent(...).RunAsync()</c>. Not on the public IAiProvider surface.</summary>
+    internal Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -332,8 +401,8 @@ internal sealed class AiProvider : IAiProvider
         return _agentRunner.RunAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
 
-    /// <inheritdoc />
-    public Task<ResultAgent<string>> GenerateAsync(
+    /// <summary>Plain-text agent run engine behind <c>ai.Agent(llm, string).RunAsync()</c>.</summary>
+    internal Task<ResultAgent<string>> GenerateAsync(
         IAgentLlm llm,
         string prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -345,8 +414,8 @@ internal sealed class AiProvider : IAiProvider
         return GenerateAsync(llm, new SimplePrompt<string>(prompt), tools, mcps, options, context, cancellationToken);
     }
 
-    /// <inheritdoc />
-    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+    /// <summary>Agent stream engine behind <c>ai.Agent(...).RunStreamAsync()</c>.</summary>
+    internal IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ITool>? tools = null,
@@ -359,8 +428,8 @@ internal sealed class AiProvider : IAiProvider
         return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
 
-    /// <inheritdoc />
-    public IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+    /// <summary>Agent stream (resumed from chat history) engine behind <c>ai.Chat(...).RunStreamAsync()</c>.</summary>
+    internal IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,

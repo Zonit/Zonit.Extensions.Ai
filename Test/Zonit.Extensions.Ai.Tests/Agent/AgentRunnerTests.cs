@@ -212,10 +212,7 @@ public class AgentRunnerTests
 
         public override async Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
         {
-            var r = await _ai.GenerateAsync(
-                new FakeModel(), "sub",
-                tools: Array.Empty<ITool>(), mcps: null, options: null,
-                cancellationToken: cancellationToken);
+            var r = await _ai.Agent(new FakeModel(), "sub").RunAsync(cancellationToken);
             return new Output { Sub = r.Value };
         }
 
@@ -246,7 +243,9 @@ public class AgentRunnerTests
         Duration = TimeSpan.FromMilliseconds(5),
     };
 
-    private static (IAiProvider provider, ScriptedAgentAdapter adapter) BuildProvider(
+    // Returns the concrete AiProvider so tests can drive the internal agent/chat engine directly
+    // (the heavy tool-driven overloads are internal — public callers use the fluent builder).
+    private static (AiProvider provider, ScriptedAgentAdapter adapter) BuildProvider(
         Action<ServiceCollection>? configure = null)
     {
         var services = new ServiceCollection();
@@ -260,7 +259,7 @@ public class AgentRunnerTests
         configure?.Invoke(services);
 
         var sp = services.BuildServiceProvider();
-        return (sp.GetRequiredService<IAiProvider>(), adapter);
+        return ((AiProvider)sp.GetRequiredService<IAiProvider>(), adapter);
     }
 
     [Fact]
@@ -494,10 +493,33 @@ public class AgentRunnerTests
     }
 
     [Fact]
-    public async Task RunAsync_NullTools_FallsBackToDIDefaults()
+    public async Task RunAsync_NullTools_OptIn_ExposesDIDefaults()
     {
-        // Passing tools: null is the "I have no opinion" signal — DI defaults
-        // (anything explicitly registered via AddAiTools<>()) DO apply.
+        // Globally registered tools are OFF by default. Passing tools: null
+        // exposes them only when the caller opts in with DefaultTools = true
+        // (the fluent .AddDefaultTools() does the same).
+        var (provider, adapter) = BuildProvider(s =>
+        {
+            s.AddAiTools<EchoTool>();
+        });
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.GenerateAsync(
+            new FakeModel(),
+            "q",
+            tools: null,
+            options: new AgentOptions { DefaultTools = true });
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name)
+            .Should().BeEquivalentTo(new[] { "echo" });
+    }
+
+    [Fact]
+    public async Task RunAsync_NullTools_NoOptIn_HidesDIDefaults()
+    {
+        // Safe by default: tools: null with no opt-in exposes NO globally
+        // registered tools, even when some are registered via AddAiTools<>().
         var (provider, adapter) = BuildProvider(s =>
         {
             s.AddAiTools<EchoTool>();
@@ -510,8 +532,7 @@ public class AgentRunnerTests
             tools: null);
 
         adapter.SessionsCreated.Should().ContainSingle()
-            .Which.Tools.Select(t => t.Name)
-            .Should().BeEquivalentTo(new[] { "echo" });
+            .Which.Tools.Should().BeEmpty();
     }
 
     [Fact]
@@ -574,6 +595,68 @@ public class AgentRunnerTests
 
         adapter.SessionsCreated.Should().ContainSingle()
             .Which.Tools.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Fluent_Agent_AddTool_ResolvesFromDI_AndExposesExactlyIt()
+    {
+        // .AddTool<T>() resolves the tool from the container (its dependencies
+        // are injected) and exposes exactly it — no DI defaults tag along.
+        var (provider, adapter) = BuildProvider(s => s.AddAiTools<EchoTool>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Agent(new FakeModel(), "q")
+            .AddTool<EchoTool>()
+            .RunAsync();
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name).Should().BeEquivalentTo(new[] { "echo" });
+    }
+
+    [Fact]
+    public async Task Fluent_Agent_NoTools_ExposesNothing_EvenWithRegisteredDefaults()
+    {
+        // Safe by default: a fluent agent with no tool calls exposes zero tools,
+        // even when tools are globally registered via AddAiTools<>().
+        var (provider, adapter) = BuildProvider(s => s.AddAiTools<EchoTool>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Agent(new FakeModel(), "q").RunAsync();
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Fluent_Agent_AddDefaultTools_OptsIntoRegistry()
+    {
+        // .AddDefaultTools() is the explicit opt-in into the globally
+        // registered set.
+        var (provider, adapter) = BuildProvider(s => s.AddAiTools<EchoTool>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Agent(new FakeModel(), "q")
+            .AddDefaultTools()
+            .RunAsync();
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name).Should().BeEquivalentTo(new[] { "echo" });
+    }
+
+    [Fact]
+    public async Task Fluent_Chat_AddTool_RoutesThroughAgentWithExactlyThatTool()
+    {
+        // Fluent chat carries history at the entry point and exposes only the
+        // tools added on the chain.
+        var (provider, adapter) = BuildProvider(s => s.AddAiTools<EchoTool>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Chat(new FakeModel(), "system", new ChatMessage[] { new User("hi") })
+            .AddTool<EchoTool>()
+            .RunAsync();
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name).Should().BeEquivalentTo(new[] { "echo" });
     }
 
     [Fact]

@@ -61,23 +61,15 @@ public interface IAiProvider
     /// Both can be supplied.
     /// </para>
     /// <para>
-    /// <paramref name="context"/> carries per-call server data (e.g. the current user/tenant)
-    /// to scoped tools (<c>ToolBase&lt;TScope, TInput, TOutput&gt;</c>). It is matched to each
-    /// scoped tool's <c>TScope</c> by type and is <b>never</b> sent to the model, so ids and
-    /// identities flow from the server through the pipeline without the model being able to read
-    /// or forge them. Pass <c>context: [user]</c>, or <c>context: [user, billing]</c> when
-    /// several scoped tools each need their own context type. Only required when a scoped tool
-    /// is actually exposed.
+    /// <b>This is the plain chat call</b> — no tools, MCP or scoped context. For a tool-driven
+    /// conversation use the fluent <see cref="Chat{TResponse}(ILlm, IPrompt{TResponse}, IReadOnlyList{ChatMessage})"/>
+    /// builder (<c>ai.Chat(llm, system, history).AddTool&lt;T&gt;().WithContext(user).RunAsync()</c>).
     /// </para>
     /// </remarks>
     Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
         IReadOnlyList<ChatMessage> chat,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -87,10 +79,6 @@ public interface IAiProvider
         ILlm llm,
         string systemPrompt,
         IReadOnlyList<ChatMessage> chat,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -199,97 +187,38 @@ public interface IAiProvider
 
     #endregion
 
-    #region Agent
+    // Agent runs (tool-calling, MCP, scoped context, streaming) are driven through the fluent
+    // builder below — `ai.Agent(llm, prompt)` → `IAgentRequest<T>` → `RunAsync()` / `RunStreamAsync()`.
+    // There is no positional agent overload: an agent without tools is just a single-shot call
+    // (`GenerateAsync`), and anything with tools belongs on the safe-by-default builder.
+
+    #region Fluent
 
     /// <summary>
-    /// Runs an agent loop: drives the model, executes tool calls on our side,
-    /// feeds results back, until the model produces a final structured answer.
+    /// Starts a fluent agent request for a typed answer. Configure tools, MCP, context and limits on
+    /// the returned builder, then terminate with <c>RunAsync()</c> / <c>StreamAsync()</c>. Tools are
+    /// empty by default — add them explicitly or opt in via <c>.AddDefaultTools()</c>.
     /// </summary>
-    /// <typeparam name="TResponse">Final response type (parsed from structured output).</typeparam>
-    /// <param name="llm">Agent-capable LLM.</param>
-    /// <param name="prompt">Initial user prompt.</param>
-    /// <param name="tools">
-    /// Explicit tool list for this invocation. When <c>null</c>, all tools registered
-    /// via <c>AddAiTool&lt;T&gt;()</c> are used.
-    /// </param>
-    /// <param name="mcps">
-    /// Explicit MCP server list for this invocation. When <c>null</c>, servers
-    /// registered via <c>AddAiMcp(...)</c> are used.
-    /// </param>
-    /// <param name="options">Per-call overrides (iterations, timeout, cost cap, allow-list, <c>OnToolCall</c>).</param>
-    /// <param name="context">
-    /// Per-call server data delivered to scoped tools (<c>ToolBase&lt;TScope, TInput, TOutput&gt;</c>),
-    /// matched to each tool's <c>TScope</c> by type and never sent to the model. Pass
-    /// <c>context: [user]</c> (or several values for several scoped tools). Only required when a
-    /// scoped tool is exposed.
-    /// </param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    Task<ResultAgent<TResponse>> GenerateAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+    /// <remarks>Use for advanced calls; for a plain prompt prefer <c>GenerateAsync(llm, prompt)</c>.</remarks>
+    IAgentRequest<TResponse> Agent<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         IAgentLlm llm,
+        IPrompt<TResponse> prompt);
+
+    /// <summary>Starts a fluent agent request for plain-text output.</summary>
+    IAgentRequest<string> Agent(IAgentLlm llm, string prompt);
+
+    /// <summary>
+    /// Starts a fluent multi-turn chat request. The <paramref name="prompt"/> is the system
+    /// instruction and <paramref name="history"/> is the conversation timeline; configure tools /
+    /// context on the builder and terminate with <c>RunAsync()</c>. Tools are empty by default.
+    /// </summary>
+    IChatRequest<TResponse> Chat<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
+        ILlm llm,
         IPrompt<TResponse> prompt,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
-        CancellationToken cancellationToken = default);
+        IReadOnlyList<ChatMessage> history);
 
-    /// <summary>
-    /// Agent-mode overload for plain-text output (no structured response type).
-    /// </summary>
-    Task<ResultAgent<string>> GenerateAsync(
-        IAgentLlm llm,
-        string prompt,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Streams an agent run as a sequence of <see cref="AgentEvent"/>s.
-    /// </summary>
-    /// <remarks>
-    /// Event order per iteration:
-    /// <list type="number">
-    ///   <item><description><see cref="AgentIterationStartedEvent"/></description></item>
-    ///   <item><description><see cref="AgentTurnCompletedEvent"/> (after the model responds)</description></item>
-    ///   <item><description><see cref="AgentToolCallStartedEvent"/> / <see cref="AgentToolCallCompletedEvent"/> (one pair per tool call, fan-out in parallel)</description></item>
-    /// </list>
-    /// The stream always terminates with either
-    /// <see cref="AgentFinalTextEvent"/> + <see cref="AgentCompletedEvent{TResponse}"/>
-    /// (success) or <see cref="AgentFailedEvent"/> (failure).
-    /// </remarks>
-    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
-        IAgentLlm llm,
-        IPrompt<TResponse> prompt,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
-        CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Streams an agent run that resumes from an existing <paramref name="chat"/>
-    /// transcript. The model sees the prior conversation as session state, then
-    /// continues with full tool-calling capability — events are emitted exactly
-    /// as for the no-chat overload.
-    /// </summary>
-    /// <remarks>
-    /// This is the streaming counterpart of <c>ChatAsync</c> with tools — useful
-    /// for live UI: subscribe to <see cref="AgentFinalTextEvent"/> for the final
-    /// text and to <see cref="AgentToolCallStartedEvent"/> /
-    /// <see cref="AgentToolCallCompletedEvent"/> for tool activity (with parallel
-    /// fan-out preserved).
-    /// </remarks>
-    IAsyncEnumerable<AgentEvent> GenerateStreamAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
-        IAgentLlm llm,
-        IPrompt<TResponse> prompt,
-        IReadOnlyList<ChatMessage> chat,
-        IReadOnlyList<ITool>? tools = null,
-        IReadOnlyList<Mcp>? mcps = null,
-        AgentOptions? options = null,
-        IReadOnlyList<object>? context = null,
-        CancellationToken cancellationToken = default);
+    /// <summary>Starts a fluent multi-turn chat request for plain-text output.</summary>
+    IChatRequest<string> Chat(ILlm llm, string systemPrompt, IReadOnlyList<ChatMessage> history);
 
     #endregion
 
