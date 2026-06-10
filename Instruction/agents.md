@@ -1,112 +1,145 @@
-# Agents (tool-calling, MCP, audit)
+# The fluent builder: agents and tool-driven chat
 
-An agent drives the model in a loop: the model requests tool calls, the library runs them in
-parallel and feeds the results back, until the model returns a final structured answer, all
-behind one `await`. Build one with the fluent `ai.Agent(llm, prompt)` entry point on an
-`IAgentLlm` model. For when to choose an agent over a single prompt, see [`usage.md`](./usage.md).
+The fluent builder is how you run anything with **tools, MCP servers, scoped context, or per-call
+limits**. Two entry points on `IAiProvider`, same builder, same terminals:
+
+- `ai.Agent(llm, prompt)` — a single task: prompt in, the model loops over tools, a final answer out.
+  Needs an `IAgentLlm` model. Returns `IAgentRequest<T>`.
+- `ai.Chat(llm, prompt, history)` — a multi-turn conversation: the system prompt plus a
+  `ChatMessage[]` history, optionally tool-driven. Returns `IChatRequest<T>`. See [`chat.md`](./chat.md).
+
+Both are **safe by default**: nothing reaches the model unless you add it. There is no positional
+overload that takes `tools` / `mcps` / `context`. For a plain prompt with no tools, use the simple
+`GenerateAsync(llm, prompt)` / `ChatAsync(llm, system, history)` calls instead (see
+[`usage.md`](./usage.md)). The compact method/return reference also lives in `usage.md`.
 
 ## Run an agent
 
-The fluent builder is **safe by default** — nothing reaches the model unless you add it. There is
-no positional overload that takes `tools` / `mcps` / `context`; that all lives on the builder. Keep
-the simple `GenerateAsync(llm, prompt)` / `ChatAsync(llm, system, history)` overloads for plain
-calls without tools.
+`.RunAsync()` drives the whole loop behind one `await` and returns `ResultAgent<T>` (the answer plus
+the full trace and cost — see [`results.md`](./results.md)).
 
 ```csharp
-ResultAgent<Report> result = await ai.Agent(new GPT5(), prompt)   // IAgentLlm
-    .AddTool<SaveNoteTool>()                  // resolved from DI (dependencies injected)
-    .WithContext(user)                        // trusted server data (never sent to the model)
-    .AddDefaultTools()                         // opt-in to AddAiTools<T>() defaults (off otherwise)
-    .AddMcp("github", "https://mcp.example.com/sse", token,
-            o => o.AllowOnly("read_file"))     // MCP wiring in its own sub-config
+ResultAgent<Report> result = await ai.Agent(new GPT5(), new ResearchPrompt { Topic = "EU AI Act" })
+    .AddTool<SearchTool>()        // a *Tool.cs you wrote (tools.md), built by DI
+    .AddTool<SaveNoteTool>()
     .MaxIterations(12)
-    .RunAsync();                               // terminal: RunAsync (await) or RunStreamAsync (events)
-
-// Multi-turn chat carries history at the entry point:
-Result<string> reply = await ai.Chat(new GPT5(), systemPrompt, history)
-    .AddTool<GetVariableTool>()
-    .WithContext(user)
     .RunAsync();
+
+Report answer = result.Value;
 ```
 
-`.AddTool<T>()` is the recommended path: the container builds the tool (injecting its
-dependencies) and exposes exactly it. `.AddTool(instance)` / `.AddTools(...)` take ready-made
-instances for tests and scripts.
+## Stream an agent
 
-### Passing trusted server data to tools (`.WithContext(...)`)
-
-`.WithContext(value)` delivers per-call server data to scoped tools (`ToolBase<TScope, TInput,
-TOutput>`) — the current user, tenant, permission scope, etc. Values are matched to each scoped
-tool's `TScope` by type and are **never** sent to the model, so the model cannot read or forge them.
-
-```csharp
-var user = new UserContext(currentUser.Id, currentUser.Name);
-
-ResultAgent<Report> result = await ai.Agent(new GPT5(), prompt)
-    .AddTool<GetMyOrdersTool>()
-    .WithContext(user)                // call .WithContext again per extra scoped context type
-    .RunAsync();
-```
-
-A scoped tool whose `TScope` has no matching `.WithContext(...)` value throws `AiToolContextException`
-to the caller (a wiring mistake) rather than reporting it to the model. Authoring scoped tools is
-covered in [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
-
-> **Cut cost with prompt caching.** An agent resends the system prompt and tool definitions every
-> turn, so on Anthropic models set `Cache = Cache.FiveMinutes` (or `Cache.OneHour` for long
-> sessions) on the model — the repeated prefix then replays at ~10% of input price from the second
-> turn on. Off by default; see [`models.md`](./models.md#prompt-caching-anthropic).
-
-## Builder knobs
-
-Every option is a chainable method on `IAgentRequest<T>` / `IChatRequest<T>`:
-
-| Method | Purpose |
-| :--- | :--- |
-| `.AddTool<T>()` / `.AddTool(instance)` / `.AddTools(...)` | Expose a tool (DI-resolved or ready-made) |
-| `.AddDefaultTools()` / `.AddDefaultMcp()` | **Opt IN** to the globally registered set (off otherwise — registered tooling is never silently active) |
-| `.AddMcp(name, url, token, o => o.AllowOnly(...))` | Attach an MCP server with optional tool whitelist |
-| `.WithContext(value)` | Trusted server data for scoped tools, never sent to the model |
-| `.AllowOnly(names…)` | Restrict the model to these tool names |
-| `.OnToolCall((call, ct) => …)` | Return `false` to block a call before it runs |
-| `.MaxIterations(n)` | Hard ceiling on agent turns |
-| `.MaxParallelToolCalls(n)` | Concurrency within a turn (surplus is queued, never dropped) |
-| `.Timeout(t)` | Wall-clock limit for the whole run |
-| `.MaxNestedDepth(n)` *(agent only)* | Bound agent-to-tool-to-agent nesting |
-
-## External MCP (client only)
-
-Attach servers on the builder with `.AddMcp(name, url, token, o => o.AllowOnly(...))`; the optional
-configure callback whitelists remote tools.
-
-```csharp
-await ai.Agent(new GPT5(), prompt)
-    .AddMcp("github", "https://mcp.example.com/sse", bearer,   // absolute HTTPS, token optional
-            o => o.AllowOnly("read_file", "create_issue"))     // optional whitelist
-    .RunAsync();
-```
-
-Remote tools are exposed to the model as `"{name}.{tool}"`, for example `github.read_file`.
-
-## Streaming an agent run
-
-`RunStreamAsync()` on the builder emits the agent's events as they happen:
+`.RunStreamAsync()` is the streaming twin of `.RunAsync()` — same builder, it emits the run as a
+sealed `AgentEvent` hierarchy so you can drive a live UI:
 
 ```csharp
 await foreach (var evt in ai.Agent(new GPT5(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
 {
     switch (evt)
     {
-        case AgentIterationStartedEvent i:   /* i.Iteration */          break;
-        case AgentToolCallStartedEvent s:    /* s.ToolName, s.CallId */ break;
-        case AgentToolCallCompletedEvent d:  /* d.Invocation */         break;
-        case AgentFinalTextEvent f:          /* f.Text */               break;
-        case AgentCompletedEvent<Report> c:  /* c.Result */             break;
-        case AgentFailedEvent x:             /* x.Error */              break;
+        case AgentIterationStartedEvent i:    /* i.Iteration */          break;
+        case AgentTurnCompletedEvent t:       /* model responded */      break;
+        case AgentToolCallStartedEvent s:     /* s.ToolName, s.CallId */ break;
+        case AgentToolCallCompletedEvent d:   /* d.Invocation */         break;
+        case AgentFinalTextEvent f:           /* f.Text */               break;
+        case AgentCompletedEvent<Report> c:   /* c.Result */             break;
+        case AgentFailedEvent x:              /* x.Error */              break;
     }
 }
 ```
 
-`ai.Chat(llm, system, history).RunStreamAsync()` does the same resuming from a chat transcript
-(needs an `IAgentLlm` model). The audit trail (`Iterations`, `ToolCalls`, `Request` and `Total`
-usage, `NestedAiCalls`) is documented in [`results.md`](./results.md).
+The stream always ends with `AgentFinalTextEvent` + `AgentCompletedEvent<T>` (success) or
+`AgentFailedEvent` (failure). `ai.Chat(...).RunStreamAsync()` does the same resuming from history.
+
+## Tools
+
+`.AddTool<T>()` is the recommended path: the DI container builds the tool, injecting its
+dependencies, and exposes exactly it. Use `.AddTool(instance)` / `.AddTools(items)` for ready-made
+instances in tests or scripts.
+
+```csharp
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<GetWeatherTool>()
+    .AddTool<SaveNoteTool>()
+    .RunAsync();
+```
+
+### Globally registered tools are opt-in
+
+A tool registered with `AddAiTools<T>()` (see [`tools.md`](./tools.md)) is **off** for every call
+unless that call opts in — so one flow's tool never silently leaks into another. Opt in with
+`.AddDefaultTools()` (and `.AddDefaultMcp()` for MCP servers); they compose with explicit
+`.AddTool<>()` calls.
+
+```csharp
+await ai.Agent(new GPT5(), prompt).AddDefaultTools().AddDefaultMcp().RunAsync();
+```
+
+## Trusted server data: `.WithContext(...)`
+
+`.WithContext(value)` delivers per-call server data — the current user, tenant, permission scope —
+to scoped tools (`ToolBase<TScope, TInput, TOutput>`). Values are matched to each scoped tool's
+`TScope` **by type** and are **never** sent to the model, so it cannot read or forge them. Call it
+once per distinct context type the exposed tools require.
+
+```csharp
+var user = new UserContext(currentUser.Id, currentUser.Name);
+
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<GetMyOrdersTool>()      // ToolBase<UserContext, …>
+    .WithContext(user)
+    .RunAsync();
+```
+
+A scoped tool whose `TScope` has no matching `.WithContext(...)` value throws
+`AiToolContextException` to the caller (a wiring mistake) rather than reporting it to the model.
+Authoring scoped tools: [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+
+## External MCP servers
+
+`.AddMcp(name, url, token?, configure?)` attaches a remote Model Context Protocol server over
+HTTPS/SSE. The optional `configure` callback whitelists which remote tools are exposed. Remote tools
+appear to the model as `"{name}.{tool}"`, e.g. `github.read_file`.
+
+```csharp
+await ai.Agent(new GPT5(), prompt)
+    .AddMcp("github", "https://mcp.example.com/sse", token,
+            o => o.AllowOnly("read_file", "create_issue"))
+    .RunAsync();
+```
+
+## Limits and gates
+
+| Method | Effect |
+| :--- | :--- |
+| `.MaxIterations(n)` | Hard ceiling on agent turns |
+| `.MaxParallelToolCalls(n)` | Concurrency for tool execution within a turn (surplus is queued, never dropped) |
+| `.Timeout(t)` | Wall-clock limit for the whole run |
+| `.AllowOnly(names…)` | Restrict the model to these tool names (incl. `"{mcp}.{tool}"`) |
+| `.OnToolCall((call, ct) => bool)` | Called before each tool; return `false` to block that call |
+| `.MaxNestedDepth(n)` *(agent only)* | Bound agent → tool → agent nesting |
+
+```csharp
+await ai.Agent(new GPT5(), prompt)
+    .AddTool<SaveNoteTool>()
+    .MaxIterations(12)
+    .Timeout(TimeSpan.FromMinutes(2))
+    .AllowOnly("save_note")
+    .OnToolCall(async (call, ct) => call.Name != "delete_everything")
+    .RunAsync();
+```
+
+Global defaults for these (when a call sets nothing) live under `Ai:Agent` in configuration; see
+[`configuration.md`](./configuration.md).
+
+> **Cut cost with prompt caching.** An agent resends the system prompt and tool definitions every
+> turn, so on Anthropic models set `Cache = Cache.FiveMinutes` (or `Cache.OneHour`) on the model —
+> the repeated prefix then replays at ~10% of input price from the second turn on. Off by default;
+> see [`models.md`](./models.md#prompt-caching-anthropic).
+
+## The audit trail
+
+`.RunAsync()` returns `ResultAgent<T>` — `Result<T>` plus `Iterations`, `ToolCalls`, `Request` and
+`Total` usage roll-ups, and `NestedAiCalls` (cost of AI a tool itself called). Full breakdown in
+[`results.md`](./results.md).

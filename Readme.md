@@ -267,27 +267,26 @@ public class Result<T>
 
 ## The unified API
 
-All generation goes through `IAiProvider`. The overload is selected by the model's capability
-interface and the argument you pass.
+All generation goes through `IAiProvider`, on **two surfaces**: simple positional calls for plain
+in→out, and the fluent `Agent` / `Chat` builder for anything with tools, MCP, context or limits
+(safe by default — no tool reaches the model unless you add it). Simple calls, selected by the
+model's capability interface:
 
 | Call | Model type | Returns |
 | :--- | :--- | :--- |
-| `GenerateAsync(llm, string)`            | `ILlm`          | `Result<string>` |
-| `GenerateAsync(llm, IPrompt<T>)`        | `ILlm`          | `Result<T>` |
-| `GenerateAsync(imageLlm, string)`       | `IImageLlm`     | `Result<Asset>` |
+| `GenerateAsync(llm, string)` / `(llm, IPrompt<T>)` | `ILlm`          | `Result<string>` / `Result<T>` |
+| `GenerateAsync(imageLlm, string)` / `(…, IPrompt<Asset>)` | `IImageLlm`     | `Result<Asset>` |
+| `GenerateAsync(videoLlm, string)` / `(…, IPrompt<Asset>)` | `IVideoLlm`     | `Result<Asset>` |
 | `GenerateAsync(embeddingLlm, string)`   | `IEmbeddingLlm` | `Result<float[]>` |
-| `GenerateAsync(audioLlm, Asset)`        | `IAudioLlm`     | `Result<string>` |
-| `GenerateAsync(videoLlm, string)`       | `IVideoLlm`     | `Result<Asset>` |
-| `StreamAsync(llm, string)`              | `ILlm`          | `IAsyncEnumerable<string>` |
-| `ChatAsync(llm, prompt, history)`       | `ILlm`          | `Result<T>` — plain multi-turn, no tools |
-| `ChatStreamAsync(llm, prompt, history)` | `ILlm`          | `IAsyncEnumerable<string>` |
-| `Agent(agentLlm, prompt)` → `.RunAsync()` / `.RunStreamAsync()` | `IAgentLlm` | `ResultAgent<T>` / `IAsyncEnumerable<AgentEvent>` |
-| `Chat(llm, prompt, history)` → `.RunAsync()` / `.RunStreamAsync()` | `ILlm` | tool-driven chat → `Result<T>` / `AgentEvent` stream |
-| `CalculateCost(...)` / `EstimateCost(...)`          | various     | `Price` |
+| `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm`     | `Result<string>` |
+| `ChatAsync(llm, prompt, history)`       | `ILlm`          | `Result<T>` — multi-turn, no tools |
+| `StreamAsync(llm, string)` · `ChatStreamAsync(llm, prompt, history)` | `ILlm` | `IAsyncEnumerable<string>` (tokens) |
+| `CalculateCost(...)` / `EstimateCost(...)` | various     | `Price` |
 
-Simple positional calls cover plain in→out (text, image, embedding, audio, plain chat, streaming);
-the fluent `Agent` / `Chat` builder covers anything with tools, MCP, context or limits — and is
-safe by default (no tool reaches the model unless you add it).
+For **tools, MCP, scoped context or per-call limits**, use the fluent builder —
+`ai.Agent(agentLlm, prompt)` or `ai.Chat(llm, prompt, history)`, each terminated by `.RunAsync()`
+(awaited result) or `.RunStreamAsync()` (event stream). Full reference in
+[Agents and tools](#agents-and-tools). Every text entry point also has a plain-`string` overload.
 
 ---
 
@@ -446,9 +445,9 @@ var history = new ChatMessage[]
 };
 
 var result = await ai.ChatAsync(
-    llm:    new Sonnet46(),
-    prompt: new HelpdeskPrompt { Product = "Zonit.Ai" },
-    chat:   history);
+    new Sonnet46(),
+    new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
+    history);
 
 Console.WriteLine(result.Value);
 ```

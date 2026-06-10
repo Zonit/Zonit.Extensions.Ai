@@ -68,8 +68,9 @@ Price est = ai.EstimateCost(new GPT5(), "your prompt text...", estimatedOutputTo
 
 ## Agent runs: `ResultAgent<T> : Result<T>`
 
-Agent calls (see [`agents.md`](./agents.md)) return `ResultAgent<T>`, which adds the full trace
-and two usage roll-ups.
+A fluent agent or tool-driven chat run — `await ai.Agent(llm, prompt).….RunAsync()` or
+`await ai.Chat(llm, system, history).….RunAsync()` (see [`agents.md`](./agents.md)) — returns
+`ResultAgent<T>`, which adds the full trace and two usage roll-ups.
 
 ```csharp
 result.Iterations      // number of model round-trips

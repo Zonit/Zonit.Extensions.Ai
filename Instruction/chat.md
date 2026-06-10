@@ -1,9 +1,21 @@
 # Multi-turn chat
 
-`ChatAsync` is the conversational counterpart to `GenerateAsync`. The conversation lives in a
-`ChatMessage[]` of `User` and `Assistant` records; the prompt supplies the system instruction.
-In chat mode `prompt.Text` is the system message, which is the inverse of single-shot
-`GenerateAsync`, where it is the user message.
+A chat is a conversation over a `ChatMessage[]` history. The prompt supplies the **system**
+instruction (in chat mode `prompt.Text` is the system message — the inverse of single-shot
+`GenerateAsync`, where it is the user message).
+
+Message records:
+
+- `User(string Text, IReadOnlyList<Asset>? Files = null)` — optional per-message attachments.
+- `Assistant(string Text)`.
+- `Tool` — a tool result; the runtime creates it and returns it in transcripts. You never construct it.
+
+Two ways to run a chat, mirroring the rest of the library: a **simple** call without tools, and the
+**fluent** builder when the turn needs tools, MCP or context.
+
+## Simple chat (no tools)
+
+`ChatAsync(llm, prompt, history)` is the plain multi-turn call — no tools, no MCP, no context.
 
 ```csharp
 var history = new ChatMessage[]
@@ -14,29 +26,21 @@ var history = new ChatMessage[]
 };
 
 Result<HelpdeskAnswer> result = await ai.ChatAsync(
-    llm:    new Sonnet46(),
-    prompt: new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
-    chat:   history, ct);
+    new Sonnet46(),
+    new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
+    history, ct);
 
 Console.WriteLine(result.Value);
 ```
 
-Message records:
+A plain-`string` overload takes a `string` system prompt instead of an `IPrompt<T>`.
 
-- `User(string Text, IReadOnlyList<Asset>? Files = null)`, with optional per-message attachments.
-- `Assistant(string Text)`.
-- `Tool` records a tool result. The runtime creates it and returns it in transcripts; you do not
-  construct it.
+## Tool-driven chat (fluent)
 
-The plain `ChatAsync` overload takes **no** tools, MCP or context — it is the simple multi-turn
-call. For a tool-driven conversation, switch to the fluent `ai.Chat(...)` builder below.
-
-## With tools, MCP or context (fluent)
-
-`ai.Chat(llm, prompt, history)` carries the history at the entry point, then takes the same
-safe-by-default builder as an agent: tools are off unless you add them. The turn routes through the
-agent runner and the result's `.Value` is a `ResultAgent<T>` when tools ran. See
-[`agents.md`](./agents.md).
+`ai.Chat(llm, prompt, history)` carries the history at the entry point, then exposes the same
+safe-by-default builder as an agent (full reference in [`agents.md`](./agents.md)): tools are off
+unless you add them. The turn routes through the agent runner, so the result's `.Value` is a
+`ResultAgent<T>` when tools ran.
 
 ```csharp
 var result = await ai.Chat(new GPT5(), prompt, history)
@@ -45,8 +49,8 @@ var result = await ai.Chat(new GPT5(), prompt, history)
     .RunAsync(ct);
 ```
 
-To hand tools trusted server data the model must not see (current user/tenant), use a scoped tool
-and `.WithContext(...)`:
+For trusted server data the model must not see (current user / tenant), use a scoped tool and
+`.WithContext(...)`:
 
 ```csharp
 var result = await ai.Chat(new GPT5(), prompt, history)
@@ -55,16 +59,49 @@ var result = await ai.Chat(new GPT5(), prompt, history)
     .RunAsync(ct);
 ```
 
-See [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope). For a live
-event stream of a tool-driven chat, terminate with `.RunStreamAsync()` instead (needs an `IAgentLlm`).
+See [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
 
-## Streaming tokens (no tools)
+## Streaming
+
+Two modes, by whether the chat uses tools.
+
+**Tool-driven chat → `AgentEvent` stream.** Terminate the builder with `.RunStreamAsync()` (the
+streaming twin of `.RunAsync()`) to drive a live UI — tool activity as it happens, then the final
+text. Needs an `IAgentLlm` model.
+
+```csharp
+await foreach (var evt in ai.Chat(new GPT5(), prompt, history)
+                   .AddTool<SaveNoteTool>()
+                   .WithContext(user)
+                   .RunStreamAsync(ct))
+{
+    switch (evt)
+    {
+        case AgentToolCallStartedEvent s:    ui.ShowTool(s.ToolName, s.CallId);  break;
+        case AgentToolCallCompletedEvent d:  ui.MarkDone(d.Invocation);          break;
+        case AgentFinalTextEvent f:          ui.AppendFinal(f.Text);             break;
+        case AgentFailedEvent x:             ui.Error(x.Error);                  break;
+    }
+}
+```
+
+The full `AgentEvent` hierarchy is in [`agents.md`](./agents.md#stream-an-agent).
+
+**Plain chat → token stream.** Without tools, `ChatStreamAsync` emits the reply token by token:
 
 ```csharp
 await foreach (var token in ai.ChatStreamAsync(new Sonnet46(), prompt, history, ct))
     Console.Write(token);
 ```
 
-Every entry point also has a plain-`string` overload: pass a `string` system prompt instead of
-an `IPrompt<T>`. Native multi-turn message arrays are used for OpenAI, Anthropic, xAI (Grok) and
-Google (Gemini); other providers fall back to a flattened transcript.
+## At a glance
+
+| Call | Tools | Streaming | Returns |
+| :--- | :---: | :---: | :--- |
+| `ChatAsync(llm, prompt, history)` | no | no | `Result<T>` |
+| `ChatStreamAsync(llm, prompt, history)` | no | tokens | `IAsyncEnumerable<string>` |
+| `Chat(llm, prompt, history).….RunAsync()` | yes | no | `Result<T>` (`.Value` is a `ResultAgent<T>`) |
+| `Chat(llm, prompt, history).….RunStreamAsync()` | yes | events | `IAsyncEnumerable<AgentEvent>` |
+
+Native multi-turn message arrays are used for OpenAI, Anthropic, xAI (Grok) and Google (Gemini);
+other providers fall back to a flattened transcript.

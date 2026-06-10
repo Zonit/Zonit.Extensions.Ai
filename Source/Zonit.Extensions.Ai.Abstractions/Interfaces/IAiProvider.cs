@@ -40,36 +40,28 @@ public interface IAiProvider
     #region Chat
 
     /// <summary>
-    /// Multi-turn chat completion. The <paramref name="prompt"/> supplies the
-    /// system instruction (its rendered <c>Text</c> is the system message);
-    /// the conversation timeline lives in <paramref name="chat"/> as a sequence
-    /// of <see cref="User"/>, <see cref="Assistant"/>, and <see cref="Tool"/>
-    /// records.
+    /// Plain multi-turn chat — <b>no tools, MCP or scoped context</b>. The <paramref name="prompt"/>
+    /// supplies the system instruction (its rendered <c>Text</c> is the system message); the
+    /// conversation timeline lives in <paramref name="history"/> as a sequence of <see cref="User"/>,
+    /// <see cref="Assistant"/> and <see cref="Tool"/> records.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Semantic difference vs <c>GenerateAsync(llm, prompt)</c>: in chat mode
-    /// <c>prompt.Text</c> becomes the <b>system</b> message (not the user
-    /// message). In single-shot <c>GenerateAsync</c>, <c>prompt.Text</c> is the
-    /// <b>user</b> message — single-shot calls have no separate system instruction;
-    /// callers needing a system role should use <c>ChatAsync</c> with explicit
-    /// <see cref="User"/> turns in <paramref name="chat"/>.
+    /// Semantic difference vs <c>GenerateAsync(llm, prompt)</c>: in chat mode <c>prompt.Text</c>
+    /// becomes the <b>system</b> message; in single-shot <c>GenerateAsync</c> it is the <b>user</b>
+    /// message. Files on <c>prompt.Files</c> are session-level attachments; per-turn files on
+    /// <see cref="User.Files"/> ride with that turn.
     /// </para>
     /// <para>
-    /// Files on <c>prompt.Files</c> are forwarded as session-level attachments;
-    /// per-turn files on <see cref="User.Files"/> are forwarded with that turn.
-    /// Both can be supplied.
-    /// </para>
-    /// <para>
-    /// <b>This is the plain chat call</b> — no tools, MCP or scoped context. For a tool-driven
-    /// conversation use the fluent <see cref="Chat{TResponse}(ILlm, IPrompt{TResponse}, IReadOnlyList{ChatMessage})"/>
-    /// builder (<c>ai.Chat(llm, system, history).AddTool&lt;T&gt;().WithContext(user).RunAsync()</c>).
+    /// For a tool-driven conversation use the fluent
+    /// <see cref="Chat{TResponse}(ILlm, IPrompt{TResponse}, IReadOnlyList{ChatMessage})"/> builder
+    /// (<c>ai.Chat(llm, system, history).AddTool&lt;T&gt;().WithContext(user).RunAsync()</c>).
     /// </para>
     /// </remarks>
     Task<Result<TResponse>> ChatAsync<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
         ILlm llm,
         IPrompt<TResponse> prompt,
-        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -78,21 +70,18 @@ public interface IAiProvider
     Task<Result<string>> ChatAsync(
         ILlm llm,
         string systemPrompt,
-        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Live (streaming) chat: emits the assistant's reply token-by-token.
+    /// Live (streaming) chat <b>without tools</b>: emits the assistant's reply token-by-token. For a
+    /// tool-driven streamed conversation use <c>ai.Chat(llm, system, history).RunStreamAsync()</c>,
+    /// which yields <see cref="AgentEvent"/>s instead of raw tokens.
     /// </summary>
-    /// <remarks>
-    /// Streaming with tool execution is intentionally <b>not supported</b> on this
-    /// API — pass <see cref="ChatAsync{TResponse}"/> with tools for tool-driven
-    /// runs (and use <c>GenerateStreamAsync</c> for fine-grained agent events).
-    /// </remarks>
     IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         IPrompt prompt,
-        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -101,7 +90,7 @@ public interface IAiProvider
     IAsyncEnumerable<string> ChatStreamAsync(
         ILlm llm,
         string systemPrompt,
-        IReadOnlyList<ChatMessage> chat,
+        IReadOnlyList<ChatMessage> history,
         CancellationToken cancellationToken = default);
 
     #endregion

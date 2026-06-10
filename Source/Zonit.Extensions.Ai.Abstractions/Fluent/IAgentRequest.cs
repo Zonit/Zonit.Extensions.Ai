@@ -5,7 +5,7 @@ namespace Zonit.Extensions.Ai;
 /// <summary>
 /// Fluent builder for an agent run. Obtain one from
 /// <see cref="IAiProvider.Agent{TResponse}(IAgentLlm, IPrompt{TResponse})"/> and terminate with
-/// <see cref="RunAsync"/> (awaited result) or <see cref="StreamAsync"/> (event stream).
+/// <see cref="RunAsync"/> (awaited result) or <see cref="RunStreamAsync"/> (event stream).
 /// </summary>
 /// <remarks>
 /// <para>

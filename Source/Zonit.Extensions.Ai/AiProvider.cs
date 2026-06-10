@@ -51,8 +51,7 @@ internal sealed class AiProvider : IAiProvider
         => new AgentRequest<string>(
             _serviceProvider,
             (tools, mcps, options, context, ct) => GenerateAsync(llm, prompt, tools, mcps, options, context, ct),
-            (_, _, _, _, _) => throw new NotSupportedException(
-                "Streaming a string-prompt agent is not supported. Use Agent(llm, IPrompt<TResponse>) to stream."));
+            (tools, mcps, options, context, ct) => GenerateStreamAsync(llm, new SimplePrompt<string>(prompt), tools, mcps, options, context, ct));
 
     /// <inheritdoc />
     public IChatRequest<TResponse> Chat<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TResponse>(
