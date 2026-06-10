@@ -1,0 +1,9 @@
+# Build output
+bin/
+obj/
+
+# BenchmarkDotNet run artifacts (regenerated on every run)
+BenchmarkDotNet.Artifacts/
+
+# Transient run logs
+*.log

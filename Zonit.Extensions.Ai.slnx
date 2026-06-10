@@ -1,0 +1,43 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/Benchmark/">
+    <Project Path="Benchmark/Zonit.Extensions.Ai.Benchmarks/Zonit.Extensions.Ai.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/Elementy rozwiązania/">
+    <File Path="Readme.md" />
+  </Folder>
+  <Folder Name="/Example/">
+    <Project Path="Example/Example/Example.csproj" />
+  </Folder>
+  <Folder Name="/Source/">
+    <File Path="Source/Directory.Build.props" />
+    <File Path="Source/Directory.Packages.props" />
+    <Project Path="Source/Zonit.Extensions.Ai.Abstractions/Zonit.Extensions.Ai.Abstractions.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Alibaba/Zonit.Extensions.Ai.Alibaba.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Anthropic/Zonit.Extensions.Ai.Anthropic.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Baidu/Zonit.Extensions.Ai.Baidu.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Cohere/Zonit.Extensions.Ai.Cohere.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.DeepSeek/Zonit.Extensions.Ai.DeepSeek.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Fireworks/Zonit.Extensions.Ai.Fireworks.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Google/Zonit.Extensions.Ai.Google.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Groq/Zonit.Extensions.Ai.Groq.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Mistral/Zonit.Extensions.Ai.Mistral.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Moonshot/Zonit.Extensions.Ai.Moonshot.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.OpenAi/Zonit.Extensions.Ai.OpenAi.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Perplexity/Zonit.Extensions.Ai.Perplexity.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Prompts/Zonit.Extensions.Ai.Prompts.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.SourceGenerators/Zonit.Extensions.Ai.SourceGenerators.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Together/Zonit.Extensions.Ai.Together.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.X/Zonit.Extensions.Ai.X.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Yi/Zonit.Extensions.Ai.Yi.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Zhipu/Zonit.Extensions.Ai.Zhipu.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai/Zonit.Extensions.Ai.csproj" />
+  </Folder>
+  <Folder Name="/Test/">
+    <Project Path="Test/Zonit.Extensions.Ai.Tests/Zonit.Extensions.Ai.Tests.csproj" />
+  </Folder>
+</Solution>

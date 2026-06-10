@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      BenchmarkDotNet must run optimized, server-GC-tunable code. Force Release
+      semantics even if the solution is built in Debug, and silence the analyzer
+      that (correctly) refuses to benchmark a Debug build when run that way.
+    -->
+    <Optimize>true</Optimize>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- Concrete DI container, to resolve the real IPromptRenderer (ScribanPromptRenderer
+         is internal; DI is the supported way to obtain it). -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Abstractions\Zonit.Extensions.Ai.Abstractions.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
+    <!--
+      Attach the source generators so the benchmarks exercise the REAL generated
+      artifacts (AOT-safe JsonTypeInfo, build-time JSON schemas, Scriban bindings)
+      for this assembly's own PromptBase<T> types — the same way the test project
+      does. Without this, every "source-generated" path silently falls back to
+      reflection and the comparison is meaningless.
+    -->
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.SourceGenerators\Zonit.Extensions.Ai.SourceGenerators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

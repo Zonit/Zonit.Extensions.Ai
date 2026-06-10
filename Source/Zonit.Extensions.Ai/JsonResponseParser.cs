@@ -59,6 +59,19 @@ public static partial class JsonResponseParser
         PropertyNameCaseInsensitive = true,
         AllowTrailingCommas = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        // Models emit enums as strings ("neutral") and dates in assorted ISO-ish
+        // forms — the same resilient converters ProviderResponseOptions uses must be
+        // present here too. The source-generated POCO JsonTypeInfo leaves enum/date
+        // properties with Converter = null, so the converter is resolved from THESE
+        // options at build time; without them Parse<T> of any type containing a
+        // string enum (or non-strict DateTime) throws even though
+        // DeserializeStructured<T> succeeds on the identical payload.
+        Converters =
+        {
+            new CaseInsensitiveEnumConverterFactory(),
+            new DateTimeConverterFactory(),
+        },
         TypeInfoResolver = JsonTypeInfoResolver.Combine(
             AiJsonTypeInfoResolver.Instance,
             new DefaultJsonTypeInfoResolver()),
@@ -71,6 +84,11 @@ public static partial class JsonResponseParser
     private static JsonSerializerOptions CreateProviderResponseOptions() => new()
     {
         PropertyNameCaseInsensitive = true,
+        // Tolerate the small malformations models routinely emit (a trailing comma,
+        // an inline comment) — kept in lockstep with DefaultOptions so both parse
+        // entry points are equally resilient.
+        AllowTrailingCommas = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         Converters =
         {
