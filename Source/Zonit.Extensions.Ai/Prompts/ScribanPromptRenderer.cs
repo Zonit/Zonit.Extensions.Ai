@@ -71,28 +71,8 @@ internal sealed class ScribanPromptRenderer : IPromptRenderer
                 continue;
 
             var value = prop.GetValue(prompt);
-            var snakeName = ToSnakeCase(prop.Name);
+            var snakeName = AiNaming.ToSnakeCase(prop.Name);
             scriptObject.Add(snakeName, value);
         }
-    }
-
-    private static string ToSnakeCase(string name)
-    {
-        var result = new System.Text.StringBuilder(name.Length + 4);
-        for (var i = 0; i < name.Length; i++)
-        {
-            var c = name[i];
-            if (char.IsUpper(c))
-            {
-                if (i > 0)
-                    result.Append('_');
-                result.Append(char.ToLowerInvariant(c));
-            }
-            else
-            {
-                result.Append(c);
-            }
-        }
-        return result.ToString();
     }
 }

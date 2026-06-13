@@ -19,6 +19,7 @@ internal sealed class ToolExecutor
 {
     private readonly IReadOnlyDictionary<string, ITool> _byName;
     private readonly IReadOnlyList<object>? _context;
+    private readonly IReadOnlyList<ChatMessage>? _chat;
     private readonly int _maxParallel;
     private readonly TimeSpan _perCallTimeout;
     private readonly ToolExceptionPolicy _exceptionPolicy;
@@ -30,6 +31,7 @@ internal sealed class ToolExecutor
     public ToolExecutor(
         IReadOnlyList<ITool> tools,
         IReadOnlyList<object>? context,
+        IReadOnlyList<ChatMessage>? chat,
         int maxParallel,
         TimeSpan perCallTimeout,
         ToolExceptionPolicy exceptionPolicy,
@@ -40,6 +42,7 @@ internal sealed class ToolExecutor
     {
         _byName = tools.ToDictionary(t => t.Name, StringComparer.Ordinal);
         _context = context;
+        _chat = chat;
         _maxParallel = Math.Max(1, maxParallel);
         _perCallTimeout = perCallTimeout;
         _exceptionPolicy = exceptionPolicy;
@@ -236,10 +239,16 @@ internal sealed class ToolExecutor
 
         try
         {
-            // Scoped tools receive the resolved server context; plain tools the model args only.
-            var output = scopedContext is not null
-                ? await ((IScopedTool)tool).InvokeAsync(call.Arguments, scopedContext, callCts.Token).ConfigureAwait(false)
-                : await tool.InvokeAsync(call.Arguments, callCts.Token).ConfigureAwait(false);
+            // Scoped tools receive the single resolved server context; agent tools (sub-agents)
+            // receive the full context list AND the seeded conversation to forward downward;
+            // plain tools get the model args only.
+            JsonElement output;
+            if (scopedContext is not null)
+                output = await ((IScopedTool)tool).InvokeAsync(call.Arguments, scopedContext, callCts.Token).ConfigureAwait(false);
+            else if (tool is IAgentTool agentTool)
+                output = await agentTool.InvokeAsync(call.Arguments, _context, _chat, callCts.Token).ConfigureAwait(false);
+            else
+                output = await tool.InvokeAsync(call.Arguments, callCts.Token).ConfigureAwait(false);
             sw.Stop();
             var nested = NestedOf(toolScope);
 

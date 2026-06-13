@@ -25,6 +25,9 @@ internal sealed class FluentRequestState(IServiceProvider serviceProvider)
     public void AddToolFromDi<TTool>() where TTool : class, ITool
         => Tools.Add(serviceProvider.GetRequiredService<TTool>());
 
+    public void AddAgentFromDi<TAgent>() where TAgent : class, IAgent
+        => Tools.Add(new AgentToolAdapter(serviceProvider.GetRequiredService<TAgent>(), serviceProvider));
+
     public void AddDefaultTools()
     {
         var registry = serviceProvider.GetService<IToolRegistry>();

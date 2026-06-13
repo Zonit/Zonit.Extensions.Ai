@@ -27,6 +27,15 @@ public interface IChatRequest<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// <summary>Opts this call into the globally registered tool set (<c>AddAiTools&lt;T&gt;()</c>). Off unless called.</summary>
     IChatRequest<TResponse> AddDefaultTools();
 
+    /// <summary>
+    /// Exposes a declarative sub-agent (resolved from DI) to the model as a callable tool. The model
+    /// delegates by <see cref="IAgent.Name"/>/<see cref="IAgent.Description"/>; the sub-agent then runs
+    /// on its own <see cref="IAgent.Llm"/> and <see cref="IAgent.Tools"/> in an isolated loop, with this
+    /// conversation and <see cref="WithContext"/> data forwarded down, and returns its final text — ready
+    /// for this (cheaper / persona) model to re-voice into the customer's language.
+    /// </summary>
+    IChatRequest<TResponse> AddAgent<TAgent>() where TAgent : class, IAgent;
+
     /// <summary>Attaches an MCP server for this call, with optional per-server configuration.</summary>
     IChatRequest<TResponse> AddMcp(string name, string url, string? token = null, Action<IMcpOptions>? configure = null);
 

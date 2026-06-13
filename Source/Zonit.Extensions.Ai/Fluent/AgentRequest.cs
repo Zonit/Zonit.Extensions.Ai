@@ -29,6 +29,7 @@ internal sealed class AgentRequest<[DynamicallyAccessedMembers(DynamicallyAccess
     public IAgentRequest<TResponse> AddTool(ITool tool) { _state.Tools.Add(tool); return this; }
     public IAgentRequest<TResponse> AddTools(IEnumerable<ITool> tools) { _state.Tools.AddRange(tools); return this; }
     public IAgentRequest<TResponse> AddDefaultTools() { _state.AddDefaultTools(); return this; }
+    public IAgentRequest<TResponse> AddAgent<TAgent>() where TAgent : class, IAgent { _state.AddAgentFromDi<TAgent>(); return this; }
     public IAgentRequest<TResponse> AddMcp(string name, string url, string? token = null, Action<IMcpOptions>? configure = null) { _state.AddMcp(name, url, token, configure); return this; }
     public IAgentRequest<TResponse> AddDefaultMcp() { _state.AddDefaultMcp(); return this; }
     public IAgentRequest<TResponse> WithContext(object context) { _state.Context.Add(context); return this; }

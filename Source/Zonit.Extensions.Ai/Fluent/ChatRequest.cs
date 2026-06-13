@@ -28,6 +28,7 @@ internal sealed class ChatRequest<[DynamicallyAccessedMembers(DynamicallyAccesse
     public IChatRequest<TResponse> AddTool(ITool tool) { _state.Tools.Add(tool); return this; }
     public IChatRequest<TResponse> AddTools(IEnumerable<ITool> tools) { _state.Tools.AddRange(tools); return this; }
     public IChatRequest<TResponse> AddDefaultTools() { _state.AddDefaultTools(); return this; }
+    public IChatRequest<TResponse> AddAgent<TAgent>() where TAgent : class, IAgent { _state.AddAgentFromDi<TAgent>(); return this; }
     public IChatRequest<TResponse> AddMcp(string name, string url, string? token = null, Action<IMcpOptions>? configure = null) { _state.AddMcp(name, url, token, configure); return this; }
     public IChatRequest<TResponse> AddDefaultMcp() { _state.AddDefaultMcp(); return this; }
     public IChatRequest<TResponse> WithContext(object context) { _state.Context.Add(context); return this; }

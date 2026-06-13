@@ -220,6 +220,62 @@ public class AgentRunnerTests
         public class Output { public required string Sub { get; init; } }
     }
 
+    /// <summary>Scoped tool used inside a sub-agent — records the forwarded context user into a shared sink.</summary>
+    private sealed class RecordingScopedTool : ToolBase<UserCtx, RecordingScopedTool.Input, RecordingScopedTool.Output>
+    {
+        private readonly List<string> _seen;
+        public RecordingScopedTool(List<string> seen) => _seen = seen;
+
+        public override string Name => "record";
+        public override string Description => "Records the context user.";
+
+        public override Task<Output> ExecuteAsync(UserCtx context, Input input, CancellationToken cancellationToken)
+        {
+            _seen.Add(context.UserName);
+            return Task.FromResult(new Output { Echo = $"{context.UserName}:{input.Message}" });
+        }
+
+        public class Input { public required string Message { get; init; } }
+        public class Output { public required string Echo { get; init; } }
+    }
+
+    /// <summary>Chat-driven sub-agent with its own model + scoped tool.</summary>
+    private sealed class ConversionAgent : AgentBase<string>
+    {
+        public override string Name => "conversion";
+        public override string Description => "Onboards a customer onto the exchange.";
+        public override IAgentLlm Llm => new FakeModel();
+        public override string Prompt => "You onboard the customer onto the exchange.";
+        public override IReadOnlyList<Type> Tools => Toolset.Of<RecordingScopedTool>();
+    }
+
+    private sealed class AnalysisInput
+    {
+        public required string Symbol { get; init; }
+        public required string Timeframe { get; init; }
+    }
+
+    /// <summary>Parametrized sub-agent: the parent model fills AnalysisInput; the Prompt is a Scriban template.</summary>
+    private sealed class AnalysisAgent : AgentBase<AnalysisInput, string>
+    {
+        public override string Name => "analysis";
+        public override string Description => "Runs market analysis for a symbol over a timeframe.";
+        public override IAgentLlm Llm => new FakeModel();
+        public override string Prompt => "Analyze {{ symbol }} on the {{ timeframe }} timeframe.";
+        public override IReadOnlyList<Type> Tools => Toolset.Of<EchoTool>();
+    }
+
+    /// <summary>Sub-agent that opts OUT of conversation forwarding (runs isolated even under a chat parent).</summary>
+    private sealed class IsolatedAgent : AgentBase<string>
+    {
+        public override string Name => "isolated";
+        public override string Description => "Runs without the conversation.";
+        public override IAgentLlm Llm => new FakeModel();
+        public override string Prompt => "Do the isolated job.";
+        public override IReadOnlyList<Type> Tools => Toolset.Of<EchoTool>();
+        public override bool ForwardChat => false;
+    }
+
     #endregion
 
     private static AgentTurn FinalTurn(string text, TokenUsage? usage = null) => new()
@@ -837,6 +893,122 @@ public class AgentRunnerTests
         var act = async () => await provider.GenerateAsync(new FakeModel(), "go", tools: new ITool[] { tool });
 
         await act.Should().ThrowAsync<AiNestingLimitException>();
+    }
+
+    #endregion
+
+    #region Sub-agents (IAgent / AddAgent)
+
+    [Fact]
+    public async Task AddAgent_ChatDriven_ForwardsConversationAndContext_AndReturnsSubAgentText()
+    {
+        // Router (parent) delegates to a sub-agent exposed via AddAgent<>. The sub-agent runs on
+        // its own model + its own scoped tool. The parent conversation AND the trusted context
+        // (UserCtx) must be forwarded down — the sub-agent's scoped tool receives the user, which
+        // the parent model never saw. The parent then re-voices and returns the final text.
+        var seen = new List<string>();
+        var (provider, adapter) = BuildProvider(s =>
+        {
+            s.AddAiTools(_ => new RecordingScopedTool(seen)); // sub-agent's tool
+            s.AddAiAgent<ConversionAgent>();                  // the sub-agent
+        });
+
+        adapter.Turns.Enqueue(ToolCallTurn(("conversion", "{}", "c1")));            // parent → delegate
+        adapter.Turns.Enqueue(ToolCallTurn(("record", """{"message":"hi"}""", "s1"))); // sub-agent → its tool
+        adapter.Turns.Enqueue(FinalTurn("draft in english"));                       // sub-agent → draft
+        adapter.Turns.Enqueue(FinalTurn("final reply in polish"));                  // parent → re-voiced reply
+
+        var user = new UserCtx(Guid.NewGuid(), "alice");
+        var chat = new ChatMessage[] { new User("chcę zacząć inwestować") };
+
+        var result = await provider.Chat(new FakeModel(), "you are a router", chat)
+            .AddAgent<ConversionAgent>()
+            .WithContext(user)
+            .RunAsync();
+
+        // Parent returns the (re-voiced) text; the sub-agent ran its own loop underneath.
+        result.Value.Should().Be("final reply in polish");
+
+        // Trusted context reached the sub-agent's scoped tool — never exposed to any model.
+        seen.Should().ContainSingle().Which.Should().Be("alice");
+
+        // Two sessions: the parent, then the forwarded sub-agent. The sub-agent saw the parent
+        // conversation (chat forwarded down) and was given exactly its own tool.
+        adapter.SessionsCreated.Should().HaveCount(2);
+        adapter.SessionsCreated[1].InitialChat.Should().BeSameAs(chat);
+        adapter.SessionsCreated[1].Tools.Select(t => t.Name).Should().Contain("record");
+
+        // The delegation shows up as a tool call on the parent with nested AI usage.
+        var agentResult = (ResultAgent<string>)result;
+        agentResult.ToolCalls.Should().ContainSingle(t => t.Name == "conversion")
+            .Which.NestedCalls.Should().BeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task AddAgent_Parametrized_RendersScribanPrompt_AndForwardsChat()
+    {
+        // The parent model fills AnalysisInput; the sub-agent's Prompt is a Scriban template.
+        // The model's JSON is rendered into the template (symbol/timeframe) as the instruction,
+        // and — because the parent is a CHAT — the conversation is forwarded too (even in param mode).
+        var (provider, adapter) = BuildProvider(s =>
+        {
+            s.AddAiTools<EchoTool>();
+            s.AddAiAgent<AnalysisAgent>();
+        });
+
+        adapter.Turns.Enqueue(ToolCallTurn(("analysis", """{"symbol":"GOLD","timeframe":"1d"}""", "c1")));
+        adapter.Turns.Enqueue(FinalTurn("analysis draft"));        // sub-agent (parametrized) final
+        adapter.Turns.Enqueue(FinalTurn("voiced reply"));          // parent final
+
+        var chat = new ChatMessage[] { new User("jak wygląda złoto?") };
+        var result = await provider.Chat(new FakeModel(), "router", chat)
+            .AddAgent<AnalysisAgent>()
+            .RunAsync();
+
+        result.Value.Should().Be("voiced reply");
+
+        adapter.SessionsCreated.Should().HaveCount(2);
+        // Instruction = the RENDERED template (not raw JSON)...
+        adapter.SessionsCreated[1].Prompt.Text.Should().Be("Analyze GOLD on the 1d timeframe.");
+        // ...AND the conversation was forwarded into the parametrized sub-agent.
+        adapter.SessionsCreated[1].InitialChat.Should().BeSameAs(chat);
+    }
+
+    [Fact]
+    public async Task AddAgent_ForwardChatFalse_RunsIsolated_FromConversation()
+    {
+        // A sub-agent with ForwardChat => false does NOT receive the parent conversation, even
+        // though the parent is a chat. It runs as a standalone task (no seeded history).
+        var (provider, adapter) = BuildProvider(s =>
+        {
+            s.AddAiTools<EchoTool>();
+            s.AddAiAgent<IsolatedAgent>();
+        });
+
+        adapter.Turns.Enqueue(ToolCallTurn(("isolated", "{}", "c1")));
+        adapter.Turns.Enqueue(FinalTurn("isolated draft"));
+        adapter.Turns.Enqueue(FinalTurn("final reply"));
+
+        var chat = new ChatMessage[] { new User("kontekst rozmowy") };
+        await provider.Chat(new FakeModel(), "router", chat)
+            .AddAgent<IsolatedAgent>()
+            .RunAsync();
+
+        adapter.SessionsCreated.Should().HaveCount(2);
+        adapter.SessionsCreated[1].InitialChat.Should().BeNull(); // conversation NOT forwarded
+    }
+
+    [Fact]
+    public void AddAiAgent_RegistersAgentResolvableFromDI()
+    {
+        var services = new ServiceCollection();
+        services.AddAi();
+        services.AddAiAgent<ConversionAgent>();
+
+        using var sp = services.BuildServiceProvider();
+        using var scope = sp.CreateScope();
+
+        scope.ServiceProvider.GetService<ConversionAgent>().Should().NotBeNull();
     }
 
     #endregion

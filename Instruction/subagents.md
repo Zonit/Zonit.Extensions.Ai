@@ -1,0 +1,154 @@
+# Sub-agents: delegate to a specialist (`IAgent` / `AgentBase`)
+
+A **sub-agent** is a named, self-contained agent a parent run can delegate to — the agent-level
+counterpart of a tool ([`tools.md`](./tools.md)). The parent (often a cheap router / persona model)
+sees only the sub-agent's `Name` and `Description` and decides when to hand work over. The sub-agent
+then runs on its **own model**, **own tools** and **own system prompt**, in an isolated loop, and
+returns its result to the parent — which re-voices it (translate, apply persona, polish).
+
+Reach for a sub-agent when a capability needs its own big prompt, its own toolset, or a different
+(cheaper/stronger) model than the caller. Typical shape: a small router model that delegates to a
+`conversion` specialist, a `support` specialist, a `market_analysis` specialist.
+
+- **vs one mega-prompt** — each specialist keeps a focused prompt + tools; adding the next specialist
+  doesn't bloat the others.
+- **vs a plain tool** — a sub-agent runs a whole tool-using loop on its own model and returns a
+  compact answer; a tool is a single typed action.
+
+## Two shapes
+
+| Base class | When the parent calls it | Input |
+| :--- | :--- | :--- |
+| `AgentBase<TOutput>` | **chat-driven** — reads the forwarded conversation | none |
+| `AgentBase<TInput, TOutput>` | **parametrized** — the parent model fills `TInput` | a JSON schema generated from `TInput`; the `Prompt` is a Scriban template `TInput` fills |
+
+## Authoring a chat-driven sub-agent
+
+Override `Name`, `Description`, `Llm`, `Prompt`; add tools with `Toolset.Of<…>()`.
+
+```csharp
+using Zonit.Extensions.Ai;
+
+public sealed class ConversionAgent : AgentBase<string>
+{
+    public override string Name        => "conversion";
+    public override string Description => "Onboards a customer onto the exchange: sign-up, KYC, first deposit.";
+    public override IAgentLlm Llm      => new Grok43 { MaxTokens = 8_000 };   // its own model
+    public override string Prompt      => "You onboard the customer onto the exchange. ...";  // its big system prompt
+    public override IReadOnlyList<Type> Tools => Toolset.Of<GenerateLinkTool, ContactSaveTool>(); // its own tools
+}
+```
+
+## Authoring a parametrized sub-agent (Scriban + input schema)
+
+`TInput` exists to **generate the schema** so the parent model knows what fields to provide. The
+agent's `Prompt` is a **Scriban template**; at call time the model's JSON fills it (keys map to
+snake_case, exactly like `PromptBase` — see [`prompts.md`](./prompts.md)). There is no separate
+deserialization step and nothing to hand-write.
+
+```csharp
+using System.ComponentModel;
+using Zonit.Extensions.Ai;
+
+public sealed class AnalysisAgent : AgentBase<AnalysisInput, string>
+{
+    public override string Name        => "market_analysis";
+    public override string Description => "Runs market analysis for a symbol over a timeframe.";
+    public override IAgentLlm Llm      => new Sonnet46();
+    public override string Prompt      => "Analyze {{ symbol }} on the {{ timeframe }} timeframe. Be concise.";
+    public override IReadOnlyList<Type> Tools => Toolset.Of<PriceFeedTool>();
+}
+
+public sealed class AnalysisInput
+{
+    [Description("Instrument symbol, e.g. GOLD.")] public required string Symbol    { get; init; }
+    [Description("Timeframe, e.g. 1d / 4h.")]      public required string Timeframe { get; init; }
+}
+```
+
+When the parent calls `market_analysis` with `{"symbol":"GOLD","timeframe":"1d"}`, the sub-agent's
+instruction becomes `Analyze GOLD on the 1d timeframe. Be concise.`
+
+## Declaring tools without `typeof`
+
+`Toolset.Of<…>()` is the type-safe way to list a sub-agent's tools (each argument is constrained to
+`ITool`, so a wrong type is a compile error). Overloads cover one to six tools; for more (or a
+dynamic set) return any `IReadOnlyList<Type>` yourself.
+
+```csharp
+public override IReadOnlyList<Type> Tools => Toolset.Of<GenerateLinkTool, ContactSaveTool>();
+```
+
+Each tool type must be DI-resolvable — register it with `AddAiTools<T>()` ([`tools.md`](./tools.md)).
+
+## Forwarding the conversation: `ForwardChat`
+
+When the **parent is a chat** (`ai.Chat(...).AddAgent<T>()`), the conversation is forwarded to the
+sub-agent as its history — **for both shapes**, so a parametrized agent still sees the conversation
+alongside its rendered task. This is on by default. Override `ForwardChat => false` to run the
+sub-agent isolated from the conversation. A parent started as a plain agent run (`ai.Agent(...)`)
+has no conversation, so nothing is forwarded regardless.
+
+```csharp
+public override bool ForwardChat => false;   // run isolated, even under a chat parent
+```
+
+## Trusted context flows down to the sub-agent's tools
+
+`.WithContext(...)` on the parent is forwarded into the sub-agent, so its scoped tools
+(`ToolBase<TScope, TInput, TOutput>`) receive the trusted server data the model never sees — the
+sub-agent itself doesn't read it, it just carries it through. See
+[`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+
+## Registering and exposing
+
+Register the sub-agent and its tools, then expose it on a parent run with `.AddAgent<T>()` (works on
+both `ai.Agent(...)` and `ai.Chat(...)`):
+
+```csharp
+builder.Services.AddAiAgent<ConversionAgent>();
+builder.Services.AddAiAgent<AnalysisAgent>();
+builder.Services.AddAiTools<GenerateLinkTool>();   // the sub-agents' tools
+builder.Services.AddAiTools<ContactSaveTool>();
+builder.Services.AddAiTools<PriceFeedTool>();
+```
+
+## A router that delegates (the common shape)
+
+A cheap model reads the conversation, delegates to the right specialist, and re-voices the reply in
+the customer's language. Trusted context (the customer) is forwarded to every specialist's tools.
+
+```csharp
+var reply = await ai.Chat(new Haiku45(), routerSystemPrompt, history)
+    .AddAgent<ConversionAgent>()       // each specialist: own model, own prompt, own tools
+    .AddAgent<SupportAgent>()
+    .AddAgent<AnalysisAgent>()
+    .WithContext(customerContext)      // forwarded down to each sub-agent's scoped tools
+    .RunAsync();
+```
+
+The router model picks a specialist by its `Description`, the specialist does the real work, and the
+router writes the final message — so the persona and language stay in one place.
+
+## What the parent gets back, cost, and limits
+
+The sub-agent's **final text** is returned to the parent as the delegation tool's result, ready for
+the parent to re-voice. The sub-agent's tokens and cost roll into the parent's `ResultAgent.Total`
+and appear in `NestedAiCalls` ([`results.md`](./results.md)); agent → tool → agent nesting is bounded
+by `.MaxNestedDepth(n)` and surfaces `AiNestingLimitException` if exceeded. Both shapes are
+AOT-clean (no reflection on the invocation path).
+
+## Rules
+
+- Inherit `AgentBase<TOutput>` (chat-driven) or `AgentBase<TInput, TOutput>` (parametrized); name the
+  file `*Agent.cs`.
+- `Name` is the delegation function name the parent model sees; `Description` says what the sub-agent
+  does and when to delegate — the model relies on it, so write it well.
+- `Llm` is any `IAgentLlm` — route specialised work to a fitting (cheaper / stronger) model.
+- `Tools` lists the sub-agent's own tools with `Toolset.Of<…>()`; register each with `AddAiTools<T>()`.
+- Parametrized: `Prompt` is a Scriban template, `TInput` defines the fields — never hand-write the schema.
+- `ForwardChat` is `true` by default (forward the conversation under a chat parent); set `false` to isolate.
+- The sub-agent returns its final text; the parent re-voices it. Register with `AddAiAgent<T>()`,
+  expose with `.AddAgent<T>()`.
+
+The agent loop, tools, MCP and the `ResultAgent<T>` audit trail are in [`agents.md`](./agents.md).

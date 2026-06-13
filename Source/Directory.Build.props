@@ -7,7 +7,7 @@
       not trip CS7034 on the netstandard2.0 source generators. To ship a future
       prerelease, set <VersionSuffix> (e.g. preview.1) and it becomes 10.0.0-preview.1.
     -->
-    <VersionPrefix>10.0.7</VersionPrefix>
+    <VersionPrefix>10.0.8</VersionPrefix>
     <!-- Out of preview: suffix commented so the build is a stable 10.0.0.
          Uncomment / bump for the next prerelease (e.g. set VersionPrefix 11.0.0 + preview.1). -->
     <!--<VersionSuffix>preview.16</VersionSuffix>-->

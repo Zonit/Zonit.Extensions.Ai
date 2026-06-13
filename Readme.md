@@ -557,6 +557,44 @@ null-check a *missing* context. If a scoped tool runs but no matching value was 
 runner throws `AiToolContextException` to **you** (a wiring mistake caught at first run), never to
 the model. Validate the context's *contents* (permissions, etc.) inside the tool as usual.
 
+### Sub-agents: delegate to a specialist
+
+A **sub-agent** is the agent-level counterpart of a tool: a named specialist with its **own model,
+own tools and own prompt** that a parent run delegates to. Inherit `AgentBase<TOutput>` (chat-driven
+— it reads the forwarded conversation) or `AgentBase<TInput, TOutput>` (parametrized — the parent
+model fills `TInput`, and the `Prompt` is a Scriban template that input fills). List its tools
+`typeof`-free with `Toolset.Of<…>()`.
+
+```csharp
+public sealed class ConversionAgent : AgentBase<string>
+{
+    public override string Name        => "conversion";
+    public override string Description => "Onboards a customer onto the exchange: sign-up, KYC, first deposit.";
+    public override IAgentLlm Llm      => new Grok43 { MaxTokens = 8_000 };          // its own model
+    public override string Prompt      => "You onboard the customer onto the exchange. ...";
+    public override IReadOnlyList<Type> Tools => Toolset.Of<GenerateLinkTool, ContactSaveTool>();
+}
+
+builder.Services.AddAiAgent<ConversionAgent>();   // register it (and AddAiTools<T>() for its tools)
+```
+
+Expose sub-agents on any run with `.AddAgent<T>()`. A common shape is a cheap router/persona model
+that delegates to specialists and re-voices the reply — so the persona and language stay in one place:
+
+```csharp
+var reply = await ai.Chat(new Haiku45(), routerPrompt, history)
+    .AddAgent<ConversionAgent>()       // each specialist: own model + own tools + own prompt
+    .AddAgent<SupportAgent>()
+    .AddAgent<AnalysisAgent>()
+    .WithContext(customer)             // forwarded down to each sub-agent's scoped tools
+    .RunAsync();
+```
+
+The router picks a specialist by its `Description`; the specialist runs its own loop and returns text
+the parent re-voices. `.WithContext(...)` and — under a chat parent — the conversation are forwarded
+to the sub-agent (set `ForwardChat => false` to isolate it). The sub-agent's cost rolls into `Total`
+and `NestedAiCalls`. Full guide: [Instruction/subagents.md](./Instruction/subagents.md).
+
 ### Registering tools and MCP servers
 
 Add tools on the builder (above), or register global defaults. Globally registered defaults are
@@ -681,7 +719,9 @@ with full tool-calling (needs an `IAgentLlm` model).
 | `Chat(llm, prompt, history).RunAsync()` | `Result<T>` | yes | no |
 | `Chat(llm, prompt, history).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
 
-Every entry point has a plain-`string` overload for when you do not need a typed response.
+Every entry point has a plain-`string` overload for when you do not need a typed response. On either
+builder, `.AddAgent<T>()` delegates to a [sub-agent](#sub-agents-delegate-to-a-specialist) — a
+specialist with its own model, tools and prompt.
 
 ---
 

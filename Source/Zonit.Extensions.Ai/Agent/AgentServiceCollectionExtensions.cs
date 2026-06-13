@@ -98,6 +98,22 @@ public static class AgentServiceCollectionExtensions
         => services.AddAiTools(factory);
 
     /// <summary>
+    /// Registers a declarative sub-agent (<see cref="IAgent"/>) in the DI container so it can be
+    /// exposed to a parent run via <c>IAgentRequest.AddAgent&lt;T&gt;()</c> / <c>IChatRequest.AddAgent&lt;T&gt;()</c>.
+    /// Idempotent. Register the sub-agent's own tools separately with <see cref="AddAiTools{TTool}(IServiceCollection)"/>
+    /// so they are resolvable when it runs.
+    /// </summary>
+    /// <typeparam name="TAgent">A concrete <see cref="IAgent"/> implementation (typically an <c>AgentBase&lt;...&gt;</c> subclass).</typeparam>
+    public static IServiceCollection AddAiAgent<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TAgent>(
+        this IServiceCollection services)
+        where TAgent : class, IAgent
+    {
+        services.TryAddScoped<TAgent>();
+        return services;
+    }
+
+    /// <summary>
     /// Registers an external MCP server as a default — every agent call sees
     /// it unless suppressed via <see cref="AgentOptions.DefaultMcp"/>.
     /// Duplicate <see cref="Mcp.Name"/> values throw when <see cref="IMcpRegistry"/>

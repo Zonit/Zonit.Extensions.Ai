@@ -187,6 +187,7 @@ internal sealed class AgentRunner
         var executor = new ToolExecutor(
             resolvedTools,
             callerContext,
+            initialChat,
             maxParallel,
             perCallTimeout,
             exceptionPolicy,

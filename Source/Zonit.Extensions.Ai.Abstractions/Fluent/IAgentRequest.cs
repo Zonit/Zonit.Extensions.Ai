@@ -40,6 +40,14 @@ public interface IAgentRequest<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     IAgentRequest<TResponse> AddDefaultTools();
 
     /// <summary>
+    /// Exposes a declarative sub-agent (resolved from DI) to the model as a callable tool. The model
+    /// delegates by <see cref="IAgent.Name"/>/<see cref="IAgent.Description"/>; the sub-agent then runs
+    /// on its own <see cref="IAgent.Llm"/> and <see cref="IAgent.Tools"/> in an isolated loop, with this
+    /// run's conversation and <see cref="WithContext"/> data forwarded down, and returns its final text.
+    /// </summary>
+    IAgentRequest<TResponse> AddAgent<TAgent>() where TAgent : class, IAgent;
+
+    /// <summary>
     /// Attaches an MCP server for this call. <paramref name="configure"/> sets per-server options
     /// (e.g. <c>o =&gt; o.AllowOnly("read_file")</c>) without mixing them into the request's own chain.
     /// </summary>

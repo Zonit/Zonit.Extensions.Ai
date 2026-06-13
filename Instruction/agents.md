@@ -138,8 +138,24 @@ Global defaults for these (when a call sets nothing) live under `Ai:Agent` in co
 > the repeated prefix then replays at ~10% of input price from the second turn on. Off by default;
 > see [`models.md`](./models.md#prompt-caching-anthropic).
 
+## Delegating to a sub-agent
+
+`.AddAgent<T>()` exposes a **sub-agent** — a specialist with its own model, tools and prompt — to the
+model as a callable delegation. The parent (often a cheap router/persona model) delegates by the
+sub-agent's `Description`; the sub-agent runs its own loop and returns text the parent re-voices.
+Trusted `.WithContext(...)` data and (under a chat parent) the conversation are forwarded down. Full
+guide: [`subagents.md`](./subagents.md).
+
+```csharp
+await ai.Chat(new Haiku45(), routerPrompt, history)
+    .AddAgent<ConversionAgent>()      // each: own model + own tools + own prompt
+    .AddAgent<SupportAgent>()
+    .WithContext(customer)            // forwarded to the sub-agents' scoped tools
+    .RunAsync();
+```
+
 ## The audit trail
 
 `.RunAsync()` returns `ResultAgent<T>` — `Result<T>` plus `Iterations`, `ToolCalls`, `Request` and
-`Total` usage roll-ups, and `NestedAiCalls` (cost of AI a tool itself called). Full breakdown in
-[`results.md`](./results.md).
+`Total` usage roll-ups, and `NestedAiCalls` (cost of AI a tool **or sub-agent** itself called). Full
+breakdown in [`results.md`](./results.md).

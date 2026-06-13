@@ -126,4 +126,6 @@ Rules:
 - **Add it exactly like a plain tool** (`.AddTool<GetMyOrdersTool>()`). Only `.WithContext(...)` is
   new, and only scoped tools read it; plain tools ignore it.
 
-The agent loop, MCP and the `ResultAgent<T>` audit trail are in [`agents.md`](./agents.md).
+The agent loop, MCP and the `ResultAgent<T>` audit trail are in [`agents.md`](./agents.md). To bundle a
+whole specialist — its own model, prompt and tools — that the model can delegate to, write a
+**sub-agent** instead of a tool: [`subagents.md`](./subagents.md).
