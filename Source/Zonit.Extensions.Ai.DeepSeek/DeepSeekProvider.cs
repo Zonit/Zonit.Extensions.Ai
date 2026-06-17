@@ -74,7 +74,7 @@ public sealed class DeepSeekProvider : IModelProvider
         var textContent = deepSeekResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in DeepSeek response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "DeepSeek returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 

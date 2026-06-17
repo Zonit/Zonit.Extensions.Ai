@@ -356,37 +356,48 @@ public sealed class AnthropicProvider : IModelProvider
     /// refusal. Replaces the previous cryptic "No text in Anthropic response"
     /// message that left users guessing why the call failed.
     /// </summary>
-    private InvalidOperationException BuildEmptyResponseError(string operation, AnthropicResponse response, ILlm llm)
+    /// <summary>
+    /// Builds the exception for an Anthropic response/stream that produced no usable
+    /// text. The same <see cref="AiEmptyResponseException"/> + <see cref="AiResponseError"/>
+    /// codes are used on every call path (single-shot, chat, stream, agent) — a
+    /// server-side empty/truncated/refused response can surface anywhere. <c>pause_turn</c>
+    /// is the one exception: a misuse (server-tool continuation on a non-agent call),
+    /// not an empty-content fault, so it keeps a distinct type.
+    /// </summary>
+    private Exception BuildEmptyResponseError(string operation, ILlm llm, string? stopReason, string? requestId)
     {
-        var stop = response.StopReason ?? "(unknown)";
-        var msg = stop switch
+        if (stopReason is "max_tokens" or "refusal" or "pause_turn")
+            _logger.LogWarning(
+                "Anthropic {Operation} produced empty text content (stop_reason={StopReason}, request_id={RequestId}).",
+                operation, stopReason, requestId);
+
+        return stopReason switch
         {
-            "max_tokens" =>
-                $"Anthropic {operation} returned no text: stop_reason=max_tokens. "
-                + $"The response was truncated — likely the entire budget was spent on extended thinking. "
-                + $"Increase {nameof(ILlm.MaxOutputTokens)} on '{llm.Name}' or lower the thinking effort.",
-            "pause_turn" =>
+            "max_tokens" => new AiEmptyResponseException(
+                AiResponseError.Truncated,
+                $"Anthropic {operation} on '{llm.Name}' returned no text: stop_reason=max_tokens. The response was "
+                + $"truncated — likely the entire budget was spent on extended thinking. Raise "
+                + $"{nameof(ILlm.MaxOutputTokens)} or lower the thinking effort.",
+                stopReason),
+
+            "refusal" => new AiEmptyResponseException(
+                AiResponseError.Refusal,
+                $"Anthropic {operation} on '{llm.Name}' returned stop_reason=refusal — the model declined to continue.",
+                stopReason),
+
+            "pause_turn" => new InvalidOperationException(
                 $"Anthropic {operation} returned stop_reason=pause_turn. "
                 + "This indicates Anthropic's server-side sampling loop hit its iteration limit while running "
                 + "server tools (web_search / web_fetch / code execution). Single-shot calls do not auto-resume — "
                 + "use the agent path (IAiProvider.GenerateAsync overload taking IAgentLlm) which transparently "
-                + "handles pause_turn continuations.",
-            "refusal" =>
-                $"Anthropic {operation} returned stop_reason=refusal — the model declined to continue.",
-            _ =>
-                $"Anthropic {operation} returned no text (stop_reason={stop}, request_id={response.Id ?? "(none)"})."
+                + "handles pause_turn continuations."),
+
+            _ => new AiEmptyResponseException(
+                AiResponseError.EmptyAfterRetries,
+                $"Anthropic {operation} on '{llm.Name}' returned no text (stop_reason={stopReason ?? "(none)"}, "
+                + $"request_id={requestId ?? "(none)"}). Server-side data loss — usually transient; re-run the operation.",
+                stopReason),
         };
-
-        if (string.Equals(stop, "max_tokens", StringComparison.Ordinal) ||
-            string.Equals(stop, "refusal", StringComparison.Ordinal) ||
-            string.Equals(stop, "pause_turn", StringComparison.Ordinal))
-        {
-            _logger.LogWarning(
-                "Anthropic {Operation} produced empty text content (stop_reason={StopReason}, request_id={RequestId}).",
-                operation, stop, response.Id);
-        }
-
-        return new InvalidOperationException(msg);
     }
 
     /// <inheritdoc />
@@ -510,6 +521,8 @@ public sealed class AnthropicProvider : IModelProvider
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
+        var emittedAny = false;
+        string? lastStopReason = null;
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             if (cancellationToken.IsCancellationRequested) break;
@@ -519,10 +532,22 @@ public sealed class AnthropicProvider : IModelProvider
             var chunk = JsonSerializer.Deserialize(data, AnthropicJsonContext.Default.StreamEvent);
 
             if (chunk?.Type == "content_block_delta" && chunk.Delta?.Text != null)
+            {
+                emittedAny = true;
                 yield return chunk.Delta.Text;
+            }
             else if (chunk?.Type == "message_delta" && chunk.Delta?.StopReason is { } sr)
+            {
+                lastStopReason = sr;
                 LogTerminalStreamStopReason("StreamAsync", sr);
+            }
         }
+
+        // A stream that ended without ever emitting text is the same server-side
+        // empty/data-loss fault as a non-streaming empty response — surface it as the
+        // same typed exception rather than completing as a silent empty sequence.
+        if (!emittedAny && !cancellationToken.IsCancellationRequested)
+            throw BuildEmptyResponseError("StreamAsync", llm, lastStopReason, response.Headers.TryGetValues("request-id", out var ids) ? ids.FirstOrDefault() : null);
     }
 
     /// <inheritdoc />
@@ -547,6 +572,8 @@ public sealed class AnthropicProvider : IModelProvider
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
+        var emittedAny = false;
+        string? lastStopReason = null;
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             if (cancellationToken.IsCancellationRequested) break;
@@ -556,10 +583,19 @@ public sealed class AnthropicProvider : IModelProvider
             var chunk = JsonSerializer.Deserialize(data, AnthropicJsonContext.Default.StreamEvent);
 
             if (chunk?.Type == "content_block_delta" && chunk.Delta?.Text != null)
+            {
+                emittedAny = true;
                 yield return chunk.Delta.Text;
+            }
             else if (chunk?.Type == "message_delta" && chunk.Delta?.StopReason is { } sr)
+            {
+                lastStopReason = sr;
                 LogTerminalStreamStopReason("ChatStreamAsync", sr);
+            }
         }
+
+        if (!emittedAny && !cancellationToken.IsCancellationRequested)
+            throw BuildEmptyResponseError("ChatStreamAsync", llm, lastStopReason, response.Headers.TryGetValues("request-id", out var ids) ? ids.FirstOrDefault() : null);
     }
 
     /// <summary>
@@ -695,7 +731,7 @@ public sealed class AnthropicProvider : IModelProvider
 
         var text = response.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
         if (string.IsNullOrEmpty(text))
-            throw BuildEmptyResponseError(operation, response, llm);
+            throw BuildEmptyResponseError(operation, llm, response.StopReason, response.Id);
         return text;
     }
 

@@ -83,7 +83,7 @@ public sealed class GoogleProvider : IModelProvider
             .Content?.Parts?.FirstOrDefault()?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in Google response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Google returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 
@@ -249,7 +249,7 @@ public sealed class GoogleProvider : IModelProvider
             .Content?.Parts?.FirstOrDefault()?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in Google response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Google returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 

@@ -74,7 +74,7 @@ public sealed class MoonshotProvider : IModelProvider
         var textContent = moonshotResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in Moonshot response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Moonshot returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 

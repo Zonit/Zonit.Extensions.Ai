@@ -83,7 +83,10 @@ public sealed class XProvider : IModelProvider
             ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in X response");
+        {
+            var (code, reason, _) = XEmptyResponse.Classify(responseJson);
+            throw XEmptyResponse.Build("GenerateAsync", llm.Name, code, reason, attempts: 1);
+        }
 
         var result = ParseResponse<TResponse>(textContent);
 
@@ -351,6 +354,7 @@ public sealed class XProvider : IModelProvider
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
+        var emittedAny = false;
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             if (cancellationToken.IsCancellationRequested) break;
@@ -363,8 +367,16 @@ public sealed class XProvider : IModelProvider
             var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
 
             if (text != null)
+            {
+                emittedAny = true;
                 yield return text;
+            }
         }
+
+        // A stream that ended without emitting any text is the same empty/data-loss
+        // fault as a non-streaming empty response — surface the same typed exception.
+        if (!emittedAny && !cancellationToken.IsCancellationRequested)
+            throw XEmptyResponse.Build("StreamAsync", llm.Name, AiResponseError.EmptyAfterRetries, reason: null, attempts: 1);
     }
 
     /// <inheritdoc />
@@ -399,7 +411,10 @@ public sealed class XProvider : IModelProvider
             ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in X response");
+        {
+            var (code, reason, _) = XEmptyResponse.Classify(responseJson);
+            throw XEmptyResponse.Build("ChatAsync", llm.Name, code, reason, attempts: 1);
+        }
 
         var result = ParseResponse<TResponse>(textContent);
 
@@ -460,6 +475,7 @@ public sealed class XProvider : IModelProvider
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
+        var emittedAny = false;
         while (await reader.ReadLineAsync(cancellationToken) is { } line)
         {
             if (cancellationToken.IsCancellationRequested) break;
@@ -471,8 +487,14 @@ public sealed class XProvider : IModelProvider
             var chunk = JsonSerializer.Deserialize(data, XJsonContext.Default.StreamChunk);
             var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
             if (text != null)
+            {
+                emittedAny = true;
                 yield return text;
+            }
         }
+
+        if (!emittedAny && !cancellationToken.IsCancellationRequested)
+            throw XEmptyResponse.Build("ChatStreamAsync", llm.Name, AiResponseError.EmptyAfterRetries, reason: null, attempts: 1);
     }
 
     /// <inheritdoc />

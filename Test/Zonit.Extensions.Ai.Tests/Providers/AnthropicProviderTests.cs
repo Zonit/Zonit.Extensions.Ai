@@ -266,6 +266,28 @@ public class AnthropicProviderTests
         result.Value.Note.Should().Be("wyżej na \"dłużej\"");
     }
 
+    [Theory]
+    [InlineData("end_turn", AiResponseError.EmptyAfterRetries, "AI-E1001")]
+    [InlineData("max_tokens", AiResponseError.Truncated, "AI-E1002")]
+    [InlineData("refusal", AiResponseError.Refusal, "AI-E1003")]
+    public async Task GenerateAsync_EmptyResponse_ThrowsCodedAiEmptyResponseException(
+        string stopReason, AiResponseError expected, string codeTag)
+    {
+        // The single-shot path throws the SAME typed exception as the agent path —
+        // a server-side empty/truncated/refused response can surface on any call.
+        SetupMockResponse(
+            """{"id":"msg_e","stop_reason":"__SR__","content":[],"usage":{"input_tokens":5,"output_tokens":0}}"""
+                .Replace("__SR__", stopReason));
+
+        var provider = CreateProvider();
+        var act = async () => await provider.GenerateAsync(new Sonnet46(), new TestPrompt { Text = "hi" }, CancellationToken.None);
+
+        var ex = (await act.Should().ThrowAsync<AiEmptyResponseException>()).Which;
+        ex.Code.Should().Be(expected);
+        ex.StopReason.Should().Be(stopReason);
+        ex.Message.Should().Contain(codeTag);
+    }
+
     private AnthropicProvider CreateProvider()
     {
         var httpClient = new HttpClient(_httpHandlerMock.Object)

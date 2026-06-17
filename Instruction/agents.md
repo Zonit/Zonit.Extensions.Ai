@@ -159,3 +159,9 @@ await ai.Chat(new Haiku45(), routerPrompt, history)
 `.RunAsync()` returns `ResultAgent<T>` — `Result<T>` plus `Iterations`, `ToolCalls`, `Request` and
 `Total` usage roll-ups, and `NestedAiCalls` (cost of AI a tool **or sub-agent** itself called). Full
 breakdown in [`results.md`](./results.md).
+
+## Errors
+
+A successful run **always** has a non-empty `Value` — an agent that produces nothing usable throws
+rather than returning empty, so you never guard with `if (string.IsNullOrWhiteSpace(result.Value))`.
+The full list of exceptions and the `[AI-E…]` error codes is in [`errors.md`](./errors.md).

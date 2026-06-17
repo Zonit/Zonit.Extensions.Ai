@@ -211,22 +211,55 @@ public sealed class AiResilienceOptions
         StreamingAttemptTimeout ?? TotalRequestTimeout;
 
     /// <summary>
-    /// Maximum number of retry attempts before failing.
-    /// Default: 3.
+    /// Maximum gap between two consecutive stream frames before the stream is
+    /// declared dead and retried (streaming providers only; non-streaming
+    /// providers ignore it). Default: 30 minutes — high-effort reasoning
+    /// legitimately pauses for many minutes between frames, so a lower value
+    /// trips the watchdog on healthy long thinking.
     /// </summary>
-    public int MaxRetryAttempts { get; set; } = 3;
+    /// <remarks>
+    /// Complements the transport-layer HTTP/2 keepalive PING: this catches
+    /// "server alive but application frozen" (SSE goes silent while the socket
+    /// stays open), the keepalive catches a dead socket. When it fires, the
+    /// retry loop re-issues the request within the <see cref="MaxRetryAttempts"/>
+    /// budget, so a single stall never kills the agent run.
+    /// </remarks>
+    public TimeSpan InterEventTimeout { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
-    /// Base delay between retry attempts (exponential backoff).
-    /// Default: 2 seconds.
+    /// Maximum number of retry attempts before failing. One knob for the whole
+    /// library: it bounds both the HTTP-layer retries (connection / 429 / 5xx,
+    /// before a response arrives) and the client-side stream retries (an empty
+    /// "200 OK" turn or a stalled/dropped stream, which the HTTP layer cannot
+    /// see). Default: 6.
     /// </summary>
-    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(2);
+    /// <remarks>
+    /// With the default <see cref="RetryBaseDelay"/> / <see cref="RetryMaxDelay"/>
+    /// the backoff runs ≈ 5 → 10 → 20 → 40 → 60 → 60 s (~3 min total), which steps
+    /// over the typical 30–90 s provider incident window instead of firing every
+    /// attempt inside it. Raise it to ride out longer outages (e.g. 30 attempts at
+    /// the 60 s cap ≈ 28 min). When the budget is spent on a still-empty response the
+    /// call throws <see cref="Zonit.Extensions.Ai.AiEmptyResponseException"/> —
+    /// never an empty result.
+    /// </remarks>
+    public int MaxRetryAttempts { get; set; } = 6;
 
     /// <summary>
-    /// Maximum delay between retry attempts.
-    /// Default: 30 seconds.
+    /// Base delay before the first retry; doubles each attempt up to
+    /// <see cref="RetryMaxDelay"/> (exponential backoff). Default: 5 seconds.
     /// </summary>
-    public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromSeconds(30);
+    /// <remarks>
+    /// Deliberately not sub-second: provider incident windows are typically
+    /// 30–90 s, so a very short first backoff lands the next attempt back inside
+    /// the bad window.
+    /// </remarks>
+    public TimeSpan RetryBaseDelay { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Maximum (cap) delay between retry attempts — the steady cadence the backoff
+    /// settles into after the initial ramp. Default: 60 seconds.
+    /// </summary>
+    public TimeSpan RetryMaxDelay { get; set; } = TimeSpan.FromSeconds(60);
 
     /// <summary>
     /// Whether to add random jitter to retry delays to prevent thundering herd.
@@ -272,6 +305,24 @@ public sealed class AiResilienceOptions
     /// </remarks>
     [Obsolete("Use TotalRequestTimeout and AttemptTimeout instead. This property is ignored.")]
     public TimeSpan HttpClientTimeout { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Exponential backoff delay before the given 1-based retry
+    /// <paramref name="attempt"/>, doubling from <see cref="RetryBaseDelay"/> and
+    /// capped at <see cref="RetryMaxDelay"/>. Shared by the client-side stream /
+    /// agent-turn retry loops so they follow the exact same schedule as the
+    /// HTTP-layer Polly retries (which read the same three knobs). Deterministic
+    /// (no jitter) so the schedule is predictable and testable.
+    /// </summary>
+    /// <param name="attempt">1-based retry number (1 = the first retry after the initial attempt).</param>
+    public TimeSpan RetryDelay(int attempt)
+    {
+        if (attempt < 1) attempt = 1;
+        var capMs = RetryMaxDelay.TotalMilliseconds;
+        var ms = RetryBaseDelay.TotalMilliseconds * Math.Pow(2, attempt - 1);
+        if (double.IsNaN(ms) || ms > capMs) ms = capMs;
+        return TimeSpan.FromMilliseconds(Math.Max(0, ms));
+    }
 
     /// <summary>
     /// Validates the configuration and auto-corrects invalid values.

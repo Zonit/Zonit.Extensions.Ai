@@ -74,7 +74,7 @@ public sealed class FireworksProvider : IModelProvider
         var textContent = fireworksResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in Fireworks response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Fireworks returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 

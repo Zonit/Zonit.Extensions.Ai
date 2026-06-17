@@ -14,15 +14,18 @@ public sealed class XAgentAdapter : IAgentProviderAdapter
 {
     private readonly HttpClient _httpClient;
     private readonly IOptions<XOptions> _options;
+    private readonly IOptions<AiOptions> _aiOptions;
     private readonly ILogger<XAgentAdapter> _logger;
 
     public XAgentAdapter(
         HttpClient httpClient,
         IOptions<XOptions> options,
+        IOptions<AiOptions> aiOptions,
         ILogger<XAgentAdapter> logger)
     {
         _httpClient = httpClient;
         _options = options;
+        _aiOptions = aiOptions;
         _logger = logger;
     }
 
@@ -46,7 +49,7 @@ public sealed class XAgentAdapter : IAgentProviderAdapter
         }
 
         EnsureHttpClientConfigured();
-        return new XAgentSession(_httpClient, context, _logger);
+        return new XAgentSession(_httpClient, context, _aiOptions.Value.Resilience, _logger);
     }
 
     private bool _configured;

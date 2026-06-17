@@ -21,18 +21,18 @@ internal sealed class AnthropicAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
     private readonly AgentSessionContext _context;
-    private readonly AnthropicOptions _options;
+    private readonly AiResilienceOptions _resilience;
     private readonly ILogger _logger;
 
     // Accumulating conversation history.
     private readonly List<AnthropicMessageItem> _messages = new();
     private int _turnIndex;
 
-    public AnthropicAgentSession(HttpClient httpClient, AgentSessionContext context, AnthropicOptions options, ILogger logger)
+    public AnthropicAgentSession(HttpClient httpClient, AgentSessionContext context, AiResilienceOptions resilience, ILogger logger)
     {
         _httpClient = httpClient;
         _context = context;
-        _options = options;
+        _resilience = resilience;
         _logger = logger;
     }
 
@@ -205,7 +205,11 @@ internal sealed class AnthropicAgentSession : IAgentSession
     /// </remarks>
     private async Task<AggregatedTurn> SendStreamingWithRetriesAsync(string payload, CancellationToken cancellationToken)
     {
-        var maxRetries = Math.Max(0, _options.StreamMaxRetries);
+        // The client-side stream retry follows the SAME shared schedule as the
+        // HTTP-layer Polly retries — AiOptions.Resilience (MaxRetryAttempts +
+        // RetryDelay's exponential backoff capped at RetryMaxDelay) — so retry
+        // behaviour is configured once and identical across every provider.
+        var maxRetries = Math.Max(0, _resilience.MaxRetryAttempts);
         var attempt = 0;
         while (true)
         {
@@ -213,18 +217,33 @@ internal sealed class AnthropicAgentSession : IAgentSession
             {
                 var aggregated = await SendStreamingAsync(payload, cancellationToken).ConfigureAwait(false);
 
-                if (ShouldRetryEmptyTurn(aggregated) && attempt < maxRetries)
+                if (IsTerminalEmptyTurn(aggregated))
                 {
-                    attempt++;
-                    _logger.LogWarning(
-                        "Anthropic agent turn {Turn} returned an empty assistant turn (stop_reason={StopReason}, " +
-                        "blocks={Blocks}, out_tokens={Out}). Treating as server-side data loss and retrying " +
-                        "(attempt {Attempt}/{Max}). See anthropics/anthropic-sdk-typescript#867.",
-                        _turnIndex, aggregated.StopReason ?? "(null)",
-                        DescribeBlockTypes(aggregated.AssistantContent),
-                        aggregated.OutputTokens, attempt, maxRetries);
-                    await DelayWithBackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
-                    continue;
+                    // Genuine server-side data loss (end_turn / a stream truncated with only
+                    // thinking blocks) is transient — re-issue the identical request while the
+                    // retry budget lasts. max_tokens / refusal are NOT retried (a resend just
+                    // re-truncates / re-refuses) and fall straight through to the throw below.
+                    if (IsRetryableEmptyTurn(aggregated) && attempt < maxRetries)
+                    {
+                        attempt++;
+                        var delay = _resilience.RetryDelay(attempt);
+                        _logger.LogWarning(
+                            "Anthropic agent turn {Turn} returned an empty assistant turn (stop_reason={StopReason}, " +
+                            "blocks={Blocks}, out_tokens={Out}). Server-side data loss — retrying in {Delay} " +
+                            "(attempt {Attempt}/{Max}). See anthropics/anthropic-sdk-typescript#867.",
+                            _turnIndex, aggregated.StopReason ?? "(null)",
+                            DescribeBlockTypes(aggregated.AssistantContent),
+                            aggregated.OutputTokens, delay, attempt, maxRetries);
+                        await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    // No usable content and no (more) retries: fail loudly with a typed,
+                    // coded exception instead of surfacing an empty Value the caller would
+                    // have to guard against. The throw escapes this loop untouched — the
+                    // transient-failure catch below filters on IsTransientStreamFailure,
+                    // which AiEmptyResponseException is not.
+                    throw BuildEmptyTurnException(aggregated, attempt + 1);
                 }
 
                 return aggregated;
@@ -236,11 +255,12 @@ internal sealed class AnthropicAgentSession : IAgentSession
             catch (Exception ex) when (IsTransientStreamFailure(ex) && attempt < maxRetries)
             {
                 attempt++;
+                var delay = _resilience.RetryDelay(attempt);
                 _logger.LogWarning(ex,
                     "Anthropic agent turn {Turn} streaming failed mid-stream ({Type}: {Message}). " +
-                    "Retrying with same message history (attempt {Attempt}/{Max}).",
-                    _turnIndex, ex.GetType().Name, ex.Message, attempt, maxRetries);
-                await DelayWithBackoffAsync(attempt, cancellationToken).ConfigureAwait(false);
+                    "Retrying with same message history in {Delay} (attempt {Attempt}/{Max}).",
+                    _turnIndex, ex.GetType().Name, ex.Message, delay, attempt, maxRetries);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -259,16 +279,15 @@ internal sealed class AnthropicAgentSession : IAgentSession
     };
 
     /// <summary>
-    /// Detects an "empty assistant turn" — the model emitted only
-    /// <c>thinking</c> / <c>redacted_thinking</c> blocks (or nothing) but
-    /// terminated with <c>end_turn</c> / <c>max_tokens</c>, or the stream
-    /// truncated before any <c>message_delta</c> arrived. This is the
-    /// data-loss symptom documented at
-    /// <c>anthropics/anthropic-sdk-typescript#867</c>.
-    /// <c>refusal</c> / <c>tool_use</c> / <c>pause_turn</c> are intentionally
-    /// excluded — they have legitimate semantics that retry would corrupt.
+    /// Detects a <i>terminal</i> empty assistant turn — the model emitted no
+    /// actionable content (only <c>thinking</c> / <c>redacted_thinking</c>, or
+    /// nothing) AND finished on a stop_reason the agent loop cannot continue
+    /// (<c>end_turn</c> / <c>max_tokens</c> / <c>refusal</c>, or a stream that
+    /// truncated before any <c>message_delta</c> set stop_reason).
+    /// <c>tool_use</c> (has content) and <c>pause_turn</c> (the loop resumes it)
+    /// are intentionally excluded — both have legitimate continuations.
     /// </summary>
-    private static bool ShouldRetryEmptyTurn(AggregatedTurn agg)
+    private static bool IsTerminalEmptyTurn(AggregatedTurn agg)
     {
         if (HasObservableContent(agg.AssistantContent)) return false;
 
@@ -276,9 +295,58 @@ internal sealed class AnthropicAgentSession : IAgentSession
         {
             "end_turn" => true,
             "max_tokens" => true,
+            "refusal" => true,
             null => true, // stream truncated before message_delta — treat as data loss
-            _ => false,   // pause_turn / tool_use / refusal: leave to caller
+            _ => false,   // pause_turn / tool_use: not terminal-empty
         };
+    }
+
+    /// <summary>
+    /// The retryable subset of <see cref="IsTerminalEmptyTurn"/>: only genuine
+    /// server-side data loss (<c>end_turn</c> with no content, or a truncated
+    /// stream) is worth re-issuing. <c>max_tokens</c> (re-truncates) and
+    /// <c>refusal</c> (re-refuses) are deterministic given the same request, so
+    /// resending them only burns tokens — they are surfaced immediately.
+    /// </summary>
+    private static bool IsRetryableEmptyTurn(AggregatedTurn agg)
+        => agg.StopReason is "end_turn" or null && !HasObservableContent(agg.AssistantContent);
+
+    /// <summary>
+    /// Maps a terminal empty turn's stop_reason to a stable
+    /// <see cref="AiResponseError"/> code and builds the typed exception. Called
+    /// only when <see cref="IsTerminalEmptyTurn"/> already held, so the default
+    /// arm (data loss) is the correct fallback for <c>end_turn</c> / <c>null</c>.
+    /// </summary>
+    private AiEmptyResponseException BuildEmptyTurnException(AggregatedTurn agg, int attempts)
+    {
+        var stop = agg.StopReason;
+        var blocks = DescribeBlockTypes(agg.AssistantContent);
+
+        var (code, message) = stop switch
+        {
+            "max_tokens" => (
+                AiResponseError.Truncated,
+                $"Anthropic agent turn {_turnIndex} on '{_context.Llm.Name}' returned no usable content: "
+                + $"stop_reason=max_tokens (blocks={blocks}). The token budget was spent before any text/tool_use — "
+                + $"raise MaxTokens or lower the reasoning effort."),
+            "refusal" => (
+                AiResponseError.Refusal,
+                $"Anthropic agent turn {_turnIndex} on '{_context.Llm.Name}' was declined: stop_reason=refusal. "
+                + "The model will not answer this input; revise the prompt / inputs."),
+            _ => (
+                AiResponseError.EmptyAfterRetries,
+                $"Anthropic agent turn {_turnIndex} on '{_context.Llm.Name}' returned an empty assistant turn "
+                + $"(stop_reason={stop ?? "(null)"}, blocks={blocks}) after {attempts} attempt(s). "
+                + "Server-side data loss (anthropics/anthropic-sdk-typescript#867) — usually a transient Anthropic "
+                + "incident; re-run the operation. Tune Ai:Resilience MaxRetryAttempts / RetryBaseDelay / RetryMaxDelay."),
+        };
+
+        _logger.LogError(
+            "Anthropic agent turn {Turn} unusable empty turn → throwing AiEmptyResponseException "
+            + "[AI-E{Code}] (stop_reason={StopReason}, blocks={Blocks}, attempts={Attempts}).",
+            _turnIndex, (int)code, stop ?? "(null)", blocks, attempts);
+
+        return new AiEmptyResponseException(code, message, stop, attempts);
     }
 
     /// <summary>
@@ -306,21 +374,6 @@ internal sealed class AnthropicAgentSession : IAgentSession
             sb.Append(content[i].Type ?? "?");
         }
         return sb.ToString();
-    }
-
-    /// <summary>
-    /// Jittered exponential backoff capped at 30 s, seeded from
-    /// <see cref="AnthropicOptions.StreamRetryBaseDelay"/>. Anthropic
-    /// incident windows during a Sonnet/Opus stall are typically 30–90 s,
-    /// so very short backoffs land squarely back inside the bad window.
-    /// </summary>
-    private async Task DelayWithBackoffAsync(int attempt, CancellationToken cancellationToken)
-    {
-        var baseMs = (int)Math.Max(250, _options.StreamRetryBaseDelay.TotalMilliseconds);
-        var shift = Math.Min(attempt - 1, 5);
-        var delayMs = Math.Min(baseMs * (1 << shift), 30_000);
-        var jitter = Random.Shared.Next(0, Math.Max(1, delayMs / 4));
-        await Task.Delay(delayMs + jitter, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<AggregatedTurn> SendStreamingAsync(string payload, CancellationToken cancellationToken)
@@ -355,7 +408,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         // ReadLineAsync blocked indefinitely. Anthropic <i>documents</i>
         // `ping` SSE events every ~10–15 s, but on Sonnet 4.6 / Opus 4.7
         // high-effort thinking the API has been observed to emit no frames
-        // for several minutes — see AnthropicOptions.StreamInterEventTimeout
+        // for several minutes — see AiResilienceOptions.InterEventTimeout
         // docs for community references. Going that timeout without ANY
         // frame is the dead-stream signal.
         //
@@ -363,8 +416,8 @@ internal sealed class AnthropicAgentSession : IAgentSession
         // SendStreamingWithRetriesAsync — the SSE stall is the most common
         // Sonnet ReasonHigh failure mode and we never want a single stall to
         // kill an entire agent run.
-        var interEventTimeout = _options.StreamInterEventTimeout > TimeSpan.Zero
-            ? _options.StreamInterEventTimeout
+        var interEventTimeout = _resilience.InterEventTimeout > TimeSpan.Zero
+            ? _resilience.InterEventTimeout
             : TimeSpan.FromMinutes(30);
         using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         watchdog.CancelAfter(interEventTimeout);
@@ -383,7 +436,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
                     interEventTimeout);
                 throw new TimeoutException(
                     $"Anthropic stream produced no event for {interEventTimeout.TotalSeconds:N0}s. "
-                    + "Server-side stall (no ping frames). Configurable via AnthropicOptions.StreamInterEventTimeout / StreamMaxRetries.");
+                    + "Server-side stall (no ping frames). Configurable via Ai:Resilience InterEventTimeout / MaxRetryAttempts.");
             }
 
             if (line is null) break;

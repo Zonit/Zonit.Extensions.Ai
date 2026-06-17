@@ -86,7 +86,7 @@ public sealed class OpenAiProvider : IModelProvider
             .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in OpenAI response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "OpenAI returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 
@@ -160,7 +160,7 @@ public sealed class OpenAiProvider : IModelProvider
             .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in OpenAI response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "OpenAI returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 

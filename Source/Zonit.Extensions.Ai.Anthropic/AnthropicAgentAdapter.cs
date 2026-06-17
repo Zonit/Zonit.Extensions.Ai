@@ -22,15 +22,18 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
 {
     private readonly HttpClient _httpClient;
     private readonly IOptions<AnthropicOptions> _options;
+    private readonly IOptions<AiOptions> _aiOptions;
     private readonly ILogger<AnthropicAgentAdapter> _logger;
 
     public AnthropicAgentAdapter(
         HttpClient httpClient,
         IOptions<AnthropicOptions> options,
+        IOptions<AiOptions> aiOptions,
         ILogger<AnthropicAgentAdapter> logger)
     {
         _httpClient = httpClient;
         _options = options;
+        _aiOptions = aiOptions;
         _logger = logger;
     }
 
@@ -54,7 +57,7 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
         }
 
         EnsureHttpClientConfigured();
-        return new AnthropicAgentSession(_httpClient, context, _options.Value, _logger);
+        return new AnthropicAgentSession(_httpClient, context, _aiOptions.Value.Resilience, _logger);
     }
 
     private bool _configured;

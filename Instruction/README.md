@@ -21,6 +21,8 @@ New here? Start with [usage.md](./usage.md).
 | [agents.md](./agents.md) | Agents: the fluent `ai.Agent(...)` builder, tool-calling, MCP, streaming events (safe-by-default tooling) |
 | [subagents.md](./subagents.md) | Sub-agents (`IAgent` / `AgentBase`): delegate to a specialist with its own model, tools and prompt; routers; chat forwarding |
 | [results.md](./results.md) | `Result`, `MetaData`, token usage and cost, `ResultAgent` roll-ups |
+| [errors.md](./errors.md) | Exceptions and the `[AI-E…]` error codes; why empty results throw instead of returning empty |
+| [patchnotes.md](./patchnotes.md) | Dated, version-scoped change log |
 
 These files are the authored source. At consumer build time the package projects them into
 `.zonit/extensions/ai/` plus editor-native rule files (`.cursor/rules/`, `.github/instructions/`,

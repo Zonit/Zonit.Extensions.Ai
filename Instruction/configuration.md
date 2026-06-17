@@ -49,24 +49,39 @@ builder.Services.AddAiOpenAi(o =>                             // or full options
 
 ## Resilience
 
-Retry, timeout and circuit breaker run through `Microsoft.Extensions.Http.Resilience`, tuned for
-long AI calls. Configure them under `Ai:Resilience` or in code with `AddAi(o => o.Resilience...)`.
+One section, `Ai:Resilience`, governs retry, timeout and circuit-breaker behaviour for **every
+provider** — set it once and it applies everywhere. Configure it under `Ai:Resilience` or in code
+with `AddAi(o => o.Resilience...)`.
 
 | Setting | Default | Meaning |
 | :--- | :--- | :--- |
-| `TotalRequestTimeout` | 40 min | Whole pipeline including retries |
-| `AttemptTimeout` | 10 min | One attempt |
-| `MaxRetryAttempts` | 3 | Retries on transient failures |
-| `RetryBaseDelay` / `RetryMaxDelay` | 2 s / 30 s | Exponential backoff bounds |
-| `UseJitter` | `true` | Randomise delays |
+| `TotalRequestTimeout` | 90 min | Whole pipeline including retries |
+| `AttemptTimeout` | 30 min | One non-streaming attempt |
+| `MaxRetryAttempts` | 6 | Retry budget for both HTTP-layer and stream-layer retries |
+| `RetryBaseDelay` / `RetryMaxDelay` | 5 s / 60 s | Exponential backoff: first delay → steady cap |
+| `InterEventTimeout` | 30 min | Max gap between two stream frames before the stream is declared dead (streaming providers) |
+| `UseJitter` | `true` | Randomise HTTP-layer delays |
 | `CircuitBreakerFailureRatio` | 0.5 | Failure ratio that opens the circuit |
 
 ```csharp
 builder.Services.AddAi(o =>
 {
-    o.Resilience.MaxRetryAttempts = 5;
+    o.Resilience.MaxRetryAttempts = 30;   // ride out a longer outage (~28 min at the 60 s cap)
     o.Resilience.AttemptTimeout   = TimeSpan.FromMinutes(15);
 });
 ```
 
-Requests are retried on network errors, timeouts, HTTP 429 and HTTP 5xx.
+### Two layers, one schedule
+
+A retry is a retry whether the connection failed before or after a response started, so both layers
+read the **same three knobs** (`MaxRetryAttempts`, `RetryBaseDelay`, `RetryMaxDelay`):
+
+- **HTTP layer** — network errors, timeouts, HTTP 429 and HTTP 5xx (before any response arrives).
+- **Stream / agent-turn layer** — failures the HTTP layer cannot see: a stalled or dropped stream,
+  or a `200 OK` turn that carries **no usable content** (a server-side "empty turn").
+
+The backoff ramps from `RetryBaseDelay`, doubling up to `RetryMaxDelay`, then holds at that cap as a
+steady cadence (≈ 5 → 10 → 20 → 40 → 60 → 60 s with the defaults). It steps over the typical 30–90 s
+provider incident window instead of firing every attempt inside it; raise `MaxRetryAttempts` to cover
+longer outages. When the budget is spent on a still-empty turn the agent **throws** rather than
+returning an empty value — see [`errors.md`](./errors.md).

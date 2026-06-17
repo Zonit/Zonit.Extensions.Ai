@@ -24,6 +24,7 @@ internal sealed class XAgentSession : IAgentSession
 {
     private readonly HttpClient _httpClient;
     private readonly AgentSessionContext _context;
+    private readonly AiResilienceOptions _resilience;
     private readonly ILogger _logger;
 
     // Full input array (X has no previous_response_id chaining).
@@ -36,10 +37,11 @@ internal sealed class XAgentSession : IAgentSession
     // (https://docs.x.ai/developers/advanced-api-usage/prompt-caching/maximizing-cache-hits).
     private readonly string _cacheKey = Guid.NewGuid().ToString("N");
 
-    public XAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
+    public XAgentSession(HttpClient httpClient, AgentSessionContext context, AiResilienceOptions resilience, ILogger logger)
     {
         _httpClient = httpClient;
         _context = context;
+        _resilience = resilience;
         _logger = logger;
     }
 
@@ -57,7 +59,6 @@ internal sealed class XAgentSession : IAgentSession
         CancellationToken cancellationToken)
     {
         _turnIndex++;
-        var sw = Stopwatch.StartNew();
 
         if (_turnIndex == 1)
         {
@@ -76,19 +77,55 @@ internal sealed class XAgentSession : IAgentSession
         var payload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
         _logger.LogDebug("X agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
-        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-
-        sw.Stop();
-
-        if (!response.IsSuccessStatusCode)
+        // Polly's HTTP resilience handler already retries connection failures /
+        // 429 / 5xx BEFORE a response arrives. This loop covers the failure it
+        // cannot see: a 200 OK response that carries no usable content (no message
+        // text, no function_call) — the data-loss symptom — using the SAME shared
+        // schedule (AiOptions.Resilience: MaxRetryAttempts + RetryDelay) as every
+        // other provider. A turn that yields nothing is never returned as an empty
+        // Value; it surfaces as a typed AiEmptyResponseException once retries run out.
+        // An empty parse mutates no history (see ParseResponse), so re-POSTing the
+        // identical request is safe.
+        var maxRetries = Math.Max(0, _resilience.MaxRetryAttempts);
+        var attempt = 0;
+        while (true)
         {
-            _logger.LogError("X agent error: {Status} - {Body}", response.StatusCode, body);
-            throw new HttpRequestException($"X API failed: {response.StatusCode}: {body}");
-        }
+            var sw = Stopwatch.StartNew();
+            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
+            using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken).ConfigureAwait(false);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            sw.Stop();
 
-        return ParseResponse(body, sw.Elapsed);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogError("X agent error: {Status} - {Body}", response.StatusCode, body);
+                throw new HttpRequestException($"X API failed: {response.StatusCode}: {body}");
+            }
+
+            var turn = ParseResponse(body, sw.Elapsed);
+            if (turn.ToolCalls.Count != 0 || !string.IsNullOrWhiteSpace(turn.FinalText))
+                return turn;
+
+            // Empty turn: classify and either retry (data loss) or throw (truncated / refusal / budget spent).
+            var (code, reason, retryable) = XEmptyResponse.Classify(body);
+            if (retryable && attempt < maxRetries)
+            {
+                attempt++;
+                var delay = _resilience.RetryDelay(attempt);
+                _logger.LogWarning(
+                    "X agent turn {Turn} returned an empty response (reason={Reason}). Server-side data loss — " +
+                    "retrying in {Delay} (attempt {Attempt}/{Max}).",
+                    _turnIndex, reason ?? "(none)", delay, attempt, maxRetries);
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            _logger.LogError(
+                "X agent turn {Turn} unusable empty response → throwing AiEmptyResponseException "
+                + "[AI-E{Code}] (reason={Reason}, attempts={Attempts}).",
+                _turnIndex, (int)code, reason ?? "(none)", attempt + 1);
+            throw XEmptyResponse.Build($"agent turn {_turnIndex}", _context.Llm.Name, code, reason, attempt + 1);
+        }
     }
 
     private bool SeedInitialChat()
@@ -329,8 +366,10 @@ internal sealed class XAgentSession : IAgentSession
                         }
                     }
 
-                    // Append assistant message to history.
-                    if (finalText != null)
+                    // Append assistant message to history — but ONLY for real text.
+                    // A null/whitespace finalText means an empty turn that the retry
+                    // loop will re-issue; mutating history here would corrupt the resend.
+                    if (!string.IsNullOrWhiteSpace(finalText))
                     {
                         _input.Add(new XInputItem
                         {

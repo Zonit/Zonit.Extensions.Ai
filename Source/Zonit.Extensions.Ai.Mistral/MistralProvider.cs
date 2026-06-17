@@ -73,7 +73,7 @@ public sealed class MistralProvider : IModelProvider
         var textContent = mistralResponse.Choices?.FirstOrDefault()?.Message?.Content;
 
         if (string.IsNullOrEmpty(textContent))
-            throw new InvalidOperationException("No text in Mistral response");
+            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Mistral returned no text — server-side data loss; usually transient, re-run the operation.");
 
         var result = ParseResponse<TResponse>(textContent);
 
