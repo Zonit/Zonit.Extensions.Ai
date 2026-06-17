@@ -13,6 +13,9 @@
        overloads are internal; public callers use the fluent IAgentRequest / IChatRequest builders). -->
   <ItemGroup>
     <InternalsVisibleTo Include="Zonit.Extensions.Ai.Tests" />
+    <!-- The Anthropic provider's CLI transport binds scoped/sub-agent tool context for the
+         MCP bridge via the internal AgentToolContextBinder (SDK transport is Anthropic-only). -->
+    <InternalsVisibleTo Include="Zonit.Extensions.Ai.Anthropic" />
   </ItemGroup>
 
   <ItemGroup>

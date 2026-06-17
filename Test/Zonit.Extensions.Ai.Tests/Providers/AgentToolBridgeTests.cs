@@ -84,6 +84,46 @@ public class AgentToolBridgeTests
         (await RpcAsync(http, url, token, """{"jsonrpc":"2.0","id":2,"method":"tools/list"}""")).status.Should().Be(401);
     }
 
+    [Fact]
+    public async Task Bridge_ScopedTool_BoundWithContext_ReceivesItOnCall()
+    {
+        // A scoped tool (ToolBase<TScope,…>) needs server context the model never sees. The CLI calls
+        // tools over the bridge through the context-less ITool path, so AgentToolContextBinder must inject
+        // the captured context — otherwise the tool throws and the call yields nothing (the original bug).
+        var bound = AgentToolContextBinder.Bind([new ScopedEchoTool()], ["CTX"], chat: null);
+
+        await using var bridge = new AgentToolBridge(NullLogger<AgentToolBridge>.Instance);
+        var session = await bridge.StartAsync(bound, CancellationToken.None);
+        using var http = new HttpClient();
+
+        var call = await RpcAsync(http, session.Url, session.AuthToken,
+            """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"scoped_echo","arguments":{"value":"hi"}}}""");
+        call.status.Should().Be(200);
+        var result = call.json!.RootElement.GetProperty("result");
+        result.GetProperty("isError").GetBoolean().Should().BeFalse();
+        result.GetProperty("content")[0].GetProperty("text").GetString().Should().Be("CTX:hi");
+        call.json.Dispose();
+    }
+
+    [Fact]
+    public async Task Bridge_ScopedTool_BoundWithoutContext_ReportsToolError()
+    {
+        // No matching context supplied: a wiring mistake. The in-process runner throws to the developer;
+        // over the bridge there is no developer to reach, so the bound tool surfaces it as a tool error
+        // the model sees (isError=true) rather than failing silently.
+        var bound = AgentToolContextBinder.Bind([new ScopedEchoTool()], context: null, chat: null);
+
+        await using var bridge = new AgentToolBridge(NullLogger<AgentToolBridge>.Instance);
+        var session = await bridge.StartAsync(bound, CancellationToken.None);
+        using var http = new HttpClient();
+
+        var call = await RpcAsync(http, session.Url, session.AuthToken,
+            """{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"scoped_echo","arguments":{"value":"hi"}}}""");
+        call.status.Should().Be(200);
+        call.json!.RootElement.GetProperty("result").GetProperty("isError").GetBoolean().Should().BeTrue();
+        call.json.Dispose();
+    }
+
     private static async Task<(int status, JsonDocument? json)> RpcAsync(HttpClient http, Uri url, string? token, string body)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, url)
@@ -111,5 +151,26 @@ public class AgentToolBridgeTests
             var value = arguments.TryGetProperty("value", out var v) ? v.GetString() : "(none)";
             return Task.FromResult(JsonSerializer.SerializeToElement("echo:" + value));
         }
+    }
+
+    // Hand-rolled IScopedTool mirroring ToolBase<TScope,TInput,TOutput>: the context-less ITool path
+    // throws (as the real base does), and the real work runs only when given a context. TScope is string.
+    private sealed class ScopedEchoTool : IScopedTool
+    {
+        public string Name => "scoped_echo";
+        public string Description => "Echoes the input value, prefixed by the server context.";
+        public JsonElement InputSchema =>
+            JsonDocument.Parse("""{"type":"object","properties":{"value":{"type":"string"}}}""").RootElement;
+
+        public Type ContextType => typeof(string);
+
+        public Task<JsonElement> InvokeAsync(JsonElement arguments, object context, CancellationToken cancellationToken)
+        {
+            var value = arguments.TryGetProperty("value", out var v) ? v.GetString() : "(none)";
+            return Task.FromResult(JsonSerializer.SerializeToElement($"{context}:{value}"));
+        }
+
+        public Task<JsonElement> InvokeAsync(JsonElement arguments, CancellationToken cancellationToken)
+            => throw new AiToolContextException($"Tool '{Name}' is scoped and must be invoked with a context.");
     }
 }

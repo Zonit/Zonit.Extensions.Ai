@@ -68,7 +68,11 @@ internal sealed class CliAgentSession : IAgentSession
                         "Agent has tools but no IAgentToolBridge is registered — the Claude Code CLI cannot call them. " +
                         "Install Zonit.Extensions.Ai.Mcp.Server and call AddAiAgentToolBridge().");
 
-                bridgeSession = await _bridge.StartAsync(tools, cancellationToken).ConfigureAwait(false);
+                // The CLI invokes tools over the bridge through the context-less ITool path, so scoped
+                // tools (ToolBase<TScope,…>) and sub-agent tools must have their trusted context (and
+                // seeded chat) bound here — the in-process ToolExecutor cannot run on this transport.
+                var bridgeTools = AgentToolContextBinder.Bind(tools, _context.Context, _context.InitialChat);
+                bridgeSession = await _bridge.StartAsync(bridgeTools, cancellationToken).ConfigureAwait(false);
             }
 
             var invocation = BuildInvocation(bridgeSession);

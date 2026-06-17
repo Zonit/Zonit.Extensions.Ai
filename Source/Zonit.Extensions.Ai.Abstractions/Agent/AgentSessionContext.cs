@@ -34,4 +34,13 @@ public sealed class AgentSessionContext
     /// agent starts from scratch (classic <c>GenerateAsync</c> flow).
     /// </summary>
     public IReadOnlyList<ChatMessage>? InitialChat { get; init; }
+
+    /// <summary>
+    /// The trusted, per-call server context supplied via the agent call's <c>context:</c>
+    /// argument (never seen by the model). In-process the runner's tool executor resolves it
+    /// per scoped tool; a transport whose <b>external</b> runtime executes tools itself (e.g.
+    /// the Claude Code CLI over the loopback MCP bridge) needs it here to bind that context onto
+    /// scoped/sub-agent tools before exposing them. <c>null</c> when the caller passed no context.
+    /// </summary>
+    public IReadOnlyList<object>? Context { get; init; }
 }

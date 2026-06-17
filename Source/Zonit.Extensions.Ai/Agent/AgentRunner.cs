@@ -180,6 +180,10 @@ internal sealed class AgentRunner
             ResponseType = typeof(TResponse) == typeof(string) ? null : typeof(TResponse),
             Tools = resolvedTools,
             InitialChat = initialChat,
+            // Forwarded so transports whose external runtime executes tools (the Claude Code CLI
+            // over the MCP bridge) can bind it onto scoped/sub-agent tools. The in-process
+            // ToolExecutor below still receives callerContext directly for the HTTP path.
+            Context = callerContext,
         };
 
         await using var session = adapter.BeginSession(context);
