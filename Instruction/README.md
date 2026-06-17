@@ -13,6 +13,7 @@ New here? Start with [usage.md](./usage.md).
 | [usage.md](./usage.md) | Getting started, simple calls vs the fluent builder, prompt vs agent, each modality |
 | [providers.md](./providers.md) | Which provider NuGet to install for a capability (text, images, audio, embeddings) |
 | [configuration.md](./configuration.md) | DI registration, `appsettings.json`, resilience |
+| [sdk.md](./sdk.md) | Anthropic over the Claude Code CLI (`claude -p`): transports (Api/Sdk/Auto), CLI options, agents over the CLI |
 | [models.md](./models.md) | Capability interfaces, picking a model, reasoning and fast mode |
 | [prompts.md](./prompts.md) | Writing a prompt class (`PromptBase`, Scriban, structured output) |
 | [prompt-library.md](./prompt-library.md) | Ready-made prompts from `Zonit.Extensions.Ai.Prompts` |

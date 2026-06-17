@@ -101,7 +101,8 @@ public class AnthropicCliTransportTests
     {
         var runner = new FakeRunner();
         var apiHandler = MockHandler("""{"id":"api_1","content":[{"type":"text","text":"FROM_API"}],"usage":{"input_tokens":1,"output_tokens":1}}""");
-        var options = new AnthropicOptions { Transport = AnthropicTransport.Sdk, ApiKey = "sk-test" };
+        // Fallback to the HTTP API for CLI-unsupported requests happens only in Auto mode.
+        var options = new AnthropicOptions { Transport = AnthropicTransport.Auto, ApiKey = "sk-test" };
         var transport = CreateTransport(runner, options, apiHandler);
 
         var request = TextRequest("Describe this");
@@ -321,5 +322,36 @@ public class ClaudeCliLocatorTests
             wellKnownDirectories: []);
 
         act.Should().Throw<FileNotFoundException>();
+    }
+
+    [Fact]
+    public void OrderVersionDirsDescending_SortsBySemanticVersionNewestFirst()
+    {
+        // Real Claude Desktop layout: \Claude\claude-code\<version>\. Ordinal string sort would
+        // wrongly rank "2.1.9" above "2.1.170"; we must compare as versions so updates win.
+        var sep = Path.DirectorySeparatorChar;
+        var input = new[]
+        {
+            $"root{sep}claude-code{sep}2.1.9",
+            $"root{sep}claude-code{sep}2.1.170",
+            $"root{sep}claude-code{sep}2.1.70",
+            $"root{sep}claude-code{sep}10.0.0",
+        };
+
+        var ordered = ClaudeCliLocator.OrderVersionDirsDescending(input);
+
+        ordered.Select(Path.GetFileName).Should().Equal("10.0.0", "2.1.170", "2.1.70", "2.1.9");
+    }
+
+    [Fact]
+    public void OrderVersionDirsDescending_NonVersionNamesSortAfterVersioned()
+    {
+        var sep = Path.DirectorySeparatorChar;
+        var input = new[] { $"p{sep}1.2.3", $"p{sep}nightly", $"p{sep}0.9.0" };
+
+        var ordered = ClaudeCliLocator.OrderVersionDirsDescending(input);
+
+        // "nightly" parses to 0.0 and lands last; real versions keep their descending order.
+        ordered.Select(Path.GetFileName).Should().Equal("1.2.3", "0.9.0", "nightly");
     }
 }

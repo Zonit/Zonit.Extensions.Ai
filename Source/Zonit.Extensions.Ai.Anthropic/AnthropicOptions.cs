@@ -15,12 +15,19 @@ public enum AnthropicTransport
     /// Local Claude Code CLI (<c>claude -p</c>, the Claude Agent SDK) invoked as a
     /// subprocess. Authenticates with the machine's <c>claude login</c> session
     /// (subscription) instead of an API key — no <see cref="AiProviderOptions.ApiKey"/>
-    /// required. Requests the CLI cannot represent (image/PDF attachments, function
-    /// tools / the agent loop) transparently fall back to <see cref="Api"/> when an
-    /// <see cref="AiProviderOptions.ApiKey"/> is configured, otherwise they throw.
-    /// Configure via <see cref="AnthropicOptions.Cli"/>.
+    /// required. <b>SDK only — no API fallback</b>: a request the CLI cannot represent
+    /// (e.g. image/PDF attachments) throws. Configure via <see cref="AnthropicOptions.Cli"/>.
     /// </summary>
     Sdk = 1,
+
+    /// <summary>
+    /// Prefer the CLI, fall back to the HTTP API. A request goes to the CLI
+    /// (<see cref="Sdk"/>) first; if the CLI cannot represent it and an
+    /// <see cref="AiProviderOptions.ApiKey"/> is configured, it is sent via the API
+    /// (<see cref="Api"/>); with no key it throws. Best of both — subscription where
+    /// possible, key-backed coverage for the rest.
+    /// </summary>
+    Auto = 2,
 }
 
 /// <summary>
@@ -63,9 +70,10 @@ public sealed class AnthropicOptions : AiProviderOptions
     public const string SectionName = "Ai:Anthropic";
 
     /// <summary>
-    /// Which transport carries requests. <see cref="AnthropicTransport.Api"/> (default)
-    /// uses the HTTP Messages API with <see cref="AiProviderOptions.ApiKey"/>;
-    /// <see cref="AnthropicTransport.Sdk"/> shells out to the local <c>claude</c> CLI.
+    /// Which transport carries requests: <see cref="AnthropicTransport.Api"/> (default,
+    /// HTTP Messages API with <see cref="AiProviderOptions.ApiKey"/>),
+    /// <see cref="AnthropicTransport.Sdk"/> (local <c>claude</c> CLI only), or
+    /// <see cref="AnthropicTransport.Auto"/> (CLI first, API fallback when a key is set).
     /// Must be chosen on the first <c>AddAiAnthropic*</c> registration (provider
     /// registration is idempotent — the first call wins).
     /// </summary>

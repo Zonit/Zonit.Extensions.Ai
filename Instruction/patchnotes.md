@@ -3,6 +3,38 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.1.0 — 2026-06-17
+
+### Anthropic: Claude Code CLI transport, and tool-using agents over it
+
+- **Added** `AnthropicOptions.Transport` (`AnthropicTransport` enum): `Api` (default, HTTP Messages
+  API — unchanged behaviour), `Sdk` (run through the local **Claude Code CLI** `claude -p`, authed by
+  the machine's `claude login` subscription — no API key), and `Auto` (CLI first, fall back to the
+  HTTP API for what the CLI can't do when `ApiKey` is set, else throw). The transport is chosen
+  **explicitly** as the first argument — `AddAiAnthropic(AnthropicTransport.Sdk, …)` — or via
+  `"Ai:Anthropic:Transport"`, because the CLI is not behaviourally identical to the API (Claude Code
+  applies its own system prompt). See [`sdk.md`](./sdk.md).
+- **Added** `AnthropicCliOptions` (bound from `Ai:Anthropic:Cli`): `ExecutablePath` (else OS
+  auto-discovery), `PermissionMode`, `OAuthToken`, `AuthToken`, `WorkingDirectory`, `Timeout`,
+  `AdditionalArguments`, `AdditionalEnvironment`. On the SDK transport, prompt-cache markers are
+  ignored (the CLI caches automatically); requests the CLI can't represent (image/PDF attachments)
+  fall back to the API under `Auto`, or throw under `Sdk`.
+- **Added** the opt-in **`Zonit.Extensions.Ai.Sdk`** package + `AddAiAgentToolBridge()`. It hosts the
+  app's `ITool` set as a secured **loopback (`127.0.0.1`) MCP server** (per-run bearer token) so a
+  CLI-driven agent (`claude -p`) can call your C# tools. Required for tool-using agents on `Sdk`/`Auto`;
+  without it, `Auto` falls back to the HTTP API (when `ApiKey` is set) and `Sdk` throws. Hand-rolled
+  (`HttpListener` + `System.Text.Json`), no ASP.NET Core, AOT/trim-clean. (The `Zonit.Extensions.Ai.Mcp.Server`
+  name is reserved for a future general-purpose MCP server.) See [`sdk.md`](./sdk.md).
+- **Note** — on the CLI agent path the CLI owns the loop, so framework-side gates
+  (`MaxIterations`/`MaxParallelToolCalls`/`OnToolCall`/per-tool timeout) and nested-usage tracking do
+  not apply; token usage comes from the CLI's report. Use the `Api` transport when you need them.
+
+#### Why
+
+To let requests (and tool-using agents) run through a Claude **subscription** via the Claude Code CLI
+instead of a metered API key, on Windows and Linux — while keeping the HTTP API as the default and the
+`Auto` fallback for anything the CLI cannot do.
+
 ## 10.0.8 — 2026-06-17
 
 ### Resilience: one shared retry model for every provider

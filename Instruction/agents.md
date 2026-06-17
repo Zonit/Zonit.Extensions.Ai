@@ -154,6 +154,13 @@ await ai.Chat(new Haiku45(), routerPrompt, history)
     .RunAsync();
 ```
 
+## Running agents through the Claude Code CLI
+
+This same agent builder also runs on the Anthropic `Sdk`/`Auto` transport, where the **CLI owns the
+loop** and your C# tools are reached over a loopback MCP bridge (the opt-in `Zonit.Extensions.Ai.Sdk`
+package, `AddAiAgentToolBridge()`). Setup, routing, and the loop-ownership caveats are documented
+together in [`sdk.md`](./sdk.md).
+
 ## The audit trail
 
 `.RunAsync()` returns `ResultAgent<T>` — `Result<T>` plus `Iterations`, `ToolCalls`, `Request` and

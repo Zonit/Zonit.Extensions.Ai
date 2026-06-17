@@ -85,3 +85,11 @@ steady cadence (≈ 5 → 10 → 20 → 40 → 60 → 60 s with the defaults). I
 provider incident window instead of firing every attempt inside it; raise `MaxRetryAttempts` to cover
 longer outages. When the budget is spent on a still-empty turn the agent **throws** rather than
 returning an empty value — see [`errors.md`](./errors.md).
+
+## Anthropic: HTTP API or the Claude Code CLI
+
+The Anthropic provider can run through the local Claude Code CLI (`claude -p`) instead of the HTTP
+API. The transport defaults to `Api` and is chosen explicitly — `AddAiAnthropic(AnthropicTransport.Sdk)`
+or `"Ai:Anthropic:Transport"` in config. That is its own topic (transport modes, the API-vs-CLI
+behaviour difference, `Ai:Anthropic:Cli` options, auth, and tool-using agents over the CLI): see
+[`sdk.md`](./sdk.md).

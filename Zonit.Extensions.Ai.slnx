@@ -30,6 +30,7 @@
     <Project Path="Source/Zonit.Extensions.Ai.OpenAi/Zonit.Extensions.Ai.OpenAi.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Perplexity/Zonit.Extensions.Ai.Perplexity.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Prompts/Zonit.Extensions.Ai.Prompts.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.Sdk/Zonit.Extensions.Ai.Sdk.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.SourceGenerators/Zonit.Extensions.Ai.SourceGenerators.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Together/Zonit.Extensions.Ai.Together.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.X/Zonit.Extensions.Ai.X.csproj" />

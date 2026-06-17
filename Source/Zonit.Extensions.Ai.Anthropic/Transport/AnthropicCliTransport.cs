@@ -357,7 +357,7 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
 
     private async Task<AnthropicResponse> FallbackOrThrowAsync(string reason, Func<Task<AnthropicResponse>> apiCall)
     {
-        if (!string.IsNullOrEmpty(_options.ApiKey))
+        if (CanFallBackToApi)
         {
             _logger.LogDebug("Claude CLI cannot send {Reason}; falling back to the HTTP API transport.", reason);
             return await apiCall();
@@ -373,7 +373,7 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
         string operation,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(_options.ApiKey))
+        if (!CanFallBackToApi)
             throw UnsupportedException(reason);
 
         _logger.LogDebug("Claude CLI cannot stream {Reason}; falling back to the HTTP API transport.", reason);
@@ -381,9 +381,18 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
             yield return delta;
     }
 
-    private static NotSupportedException UnsupportedException(string reason)
+    /// <summary>
+    /// API fallback is allowed only in <see cref="AnthropicTransport.Auto"/> mode with an
+    /// <see cref="AiProviderOptions.ApiKey"/> configured. In <see cref="AnthropicTransport.Sdk"/>
+    /// mode the CLI is authoritative — unsupported requests throw rather than silently
+    /// switching transports.
+    /// </summary>
+    private bool CanFallBackToApi =>
+        _options.Transport == AnthropicTransport.Auto && !string.IsNullOrEmpty(_options.ApiKey);
+
+    private NotSupportedException UnsupportedException(string reason)
         => new(
-            $"The Claude Code CLI transport cannot send {reason}. " +
-            "Configure AnthropicOptions.ApiKey to allow automatic fallback to the HTTP API for such requests, " +
+            $"The Claude Code CLI transport cannot send {reason} (Transport={_options.Transport}). " +
+            "Use Transport=Auto with AnthropicOptions.ApiKey set to allow automatic fallback to the HTTP API, " +
             "or remove the unsupported content/tools.");
 }

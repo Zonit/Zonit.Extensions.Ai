@@ -624,6 +624,21 @@ var mcp = new Mcp(
     allowedTools: ["read_file", "create_issue"]);   // optional whitelist
 ```
 
+### Tools and agents over the Claude Code CLI
+
+On the Anthropic `Sdk`/`Auto` transport the agent loop runs inside the local **Claude Code CLI**
+(`claude -p`), which executes tools itself. To let it call **your** C# tools, install the opt-in
+bridge — it publishes your tool set as a secured loopback (`127.0.0.1`) MCP server:
+
+```csharp
+builder.Services.AddAiAnthropic(AnthropicTransport.Sdk); // agents via claude -p
+builder.Services.AddAiAgentToolBridge();                 // expose this app's tools to the CLI
+```
+
+Because the CLI owns the loop on this path, the framework-side gates above (`MaxIterations`,
+`OnToolCall`, …) and nested-usage tracking do not apply — use the `Api` transport when you need them.
+Full guide: [Instruction/sdk.md](Instruction/sdk.md).
+
 ### Per-call options
 
 Every knob is a chainable builder method:
@@ -816,6 +831,23 @@ Keep secrets in User Secrets, environment variables or a vault; do not hard-code
 Each provider extends a common `AiProviderOptions` (`ApiKey`, `BaseUrl`, `Timeout`) and adds its
 own fields where relevant.
 
+### Anthropic over the Claude Code CLI (SDK transport)
+
+The Anthropic provider can run through the local **Claude Code CLI** (`claude -p`) instead of the
+HTTP API — using your `claude login` **subscription**, no API key. The transport defaults to `Api`
+and is chosen **explicitly** as the first argument, because the CLI is not behaviourally identical to
+the API (Claude Code applies its own system prompt, so results can differ):
+
+```csharp
+builder.Services.AddAiAnthropic(AnthropicTransport.Sdk);                       // local claude -p
+builder.Services.AddAiAnthropic(AnthropicTransport.Auto, o => o.ApiKey = "…"); // CLI, API fallback
+```
+
+CLI settings (binary path, permission mode, tokens, timeout) live on `AnthropicCliOptions`
+(`Ai:Anthropic:Cli`); the binary is auto-discovered per OS. Tool-using **agents** over the CLI also
+need the opt-in `Zonit.Extensions.Ai.Sdk` package (`AddAiAgentToolBridge()`). Full guide:
+[Instruction/sdk.md](Instruction/sdk.md).
+
 ---
 
 ## Resilience
@@ -876,6 +908,7 @@ Install only what you use. Every package version and download count below is liv
 | **Zonit.Extensions.Ai** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.svg?label=) |
 | **Zonit.Extensions.Ai.Abstractions** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Abstractions.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Abstractions) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Abstractions.svg?label=) |
 | **Zonit.Extensions.Ai.Prompts** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Prompts.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Prompts) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Prompts.svg?label=) |
+| **Zonit.Extensions.Ai.Sdk** — opt-in; exposes your tools to the Claude Code CLI (`AddAiAgentToolBridge()`) | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Sdk.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Sdk) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Sdk.svg?label=) |
 
 ### Providers
 

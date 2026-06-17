@@ -36,6 +36,7 @@
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.OpenAi\Zonit.Extensions.Ai.OpenAi.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Anthropic\Zonit.Extensions.Ai.Anthropic.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Sdk\Zonit.Extensions.Ai.Sdk.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.X\Zonit.Extensions.Ai.X.csproj" />
     <!-- All remaining providers are referenced so ModelCatalogTests can reflect over
          the entire model surface and keep Instruction/models.generated.md complete. -->

@@ -1,37 +1,47 @@
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Zonit.Extensions.Ai.Anthropic;
 
 /// <summary>
-/// <see cref="IAgentProviderAdapter"/> implementation for Anthropic's Messages API.
+/// <see cref="IAgentProviderAdapter"/> for Anthropic. Routes an agent run to the right
+/// session per <see cref="AnthropicOptions.Transport"/>:
+/// <list type="bullet">
+///   <item><description><c>Api</c> → <see cref="AnthropicAgentSession"/> over the HTTP Messages API.</description></item>
+///   <item><description><c>Sdk</c>/<c>Auto</c> → <see cref="CliAgentSession"/> driving <c>claude -p</c>,
+///   which owns the loop and calls this app's C# tools over the loopback MCP bridge
+///   (<see cref="IAgentToolBridge"/>).</description></item>
+/// </list>
 /// </summary>
 /// <remarks>
-/// Unlike OpenAI's Responses API (server-side state via <c>previous_response_id</c>),
-/// Anthropic's Messages API is stateless — the client must send the full message
-/// history on every call. <see cref="AnthropicAgentSession"/> therefore maintains
-/// a growing <c>messages</c> buffer client-side.
+/// On the CLI transport, tool-using agents need <c>AddAiAgentToolBridge()</c> registered.
+/// When the CLI is unavailable or the bridge is missing, <c>Auto</c> falls back to the HTTP
+/// API (if an <see cref="AiProviderOptions.ApiKey"/> is set); <c>Sdk</c> throws.
 /// <para>
-/// Claude returns <c>tool_use</c> content blocks when it wants to invoke a tool;
-/// the client responds with a <c>user</c> message containing <c>tool_result</c>
-/// content blocks — one per pending call, correlated by <c>tool_use_id</c>.
+/// The constructor takes <see cref="IServiceProvider"/> rather than the internal
+/// <c>IClaudeCliRunner</c>/<see cref="IAgentToolBridge"/> directly because this type is
+/// public and a public constructor may not expose less-accessible parameter types (CS0051).
 /// </para>
 /// </remarks>
 public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
 {
     private readonly HttpClient _httpClient;
+    private readonly IServiceProvider _serviceProvider;
     private readonly IOptions<AnthropicOptions> _options;
     private readonly IOptions<AiOptions> _aiOptions;
     private readonly ILogger<AnthropicAgentAdapter> _logger;
 
     public AnthropicAgentAdapter(
         HttpClient httpClient,
+        IServiceProvider serviceProvider,
         IOptions<AnthropicOptions> options,
         IOptions<AiOptions> aiOptions,
         ILogger<AnthropicAgentAdapter> logger)
     {
         _httpClient = httpClient;
+        _serviceProvider = serviceProvider;
         _options = options;
         _aiOptions = aiOptions;
         _logger = logger;
@@ -44,7 +54,7 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
     // Matches the [RequiresUnreferencedCode]/[RequiresDynamicCode] on
     // IAgentProviderAdapter.BeginSession (mandatory per IL2046/IL3051 — the
     // annotations must match across interface implementations). The session it
-    // returns drives the agent loop, whose final-response parse and tool
+    // returns drives the agent runner, whose final-response parse and tool
     // execution may use reflection; this factory itself performs none.
     [RequiresUnreferencedCode("Returned session drives the agent runner, whose final-response parse and tools may use reflection.")]
     [RequiresDynamicCode("Returned session drives the agent runner, whose final-response parse and tools may use reflection.")]
@@ -56,24 +66,65 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
                 $"AnthropicAgentAdapter does not support model of type {context.Llm.GetType().FullName}.");
         }
 
-        // The agent loop executes the framework's C# tools in-process and needs the
-        // model to RETURN tool_use blocks — which the stateless HTTP Messages API
-        // provides. The Claude Code CLI runs its OWN loop and would execute tools
-        // itself, so routing the framework's tool loop through `claude -p` requires
-        // exposing those tools to the CLI over MCP (a planned follow-up). Until then,
-        // SDK-transport agent runs use the HTTP API when an ApiKey is configured.
-        if (_options.Value.Transport == AnthropicTransport.Sdk
-            && string.IsNullOrEmpty(_options.Value.ApiKey))
+        var options = _options.Value;
+        if (options.Transport == AnthropicTransport.Api)
+            return NewApiSession(context);
+
+        // Sdk / Auto: prefer the Claude Code CLI. The CLI owns the loop and executes
+        // tools itself; the framework's C# tools are exposed to it over the loopback MCP
+        // bridge. The CLI can serve this run iff the binary is found AND (no tools, or a
+        // bridge is registered to host them).
+        var hasTools = context.Tools.Count > 0;
+        var hasApiKey = !string.IsNullOrEmpty(options.ApiKey);
+        var bridge = _serviceProvider.GetService<IAgentToolBridge>();
+        var cliAvailable = TryResolveCli(options);
+
+        if (cliAvailable && (!hasTools || bridge is not null))
         {
-            throw new NotSupportedException(
-                "The Anthropic SDK (claude -p) transport does not yet run the tool-using agent loop " +
-                "(exposing your C# tools to the CLI over MCP is a planned follow-up). " +
-                "Configure AnthropicOptions.ApiKey so agent runs use the HTTP Messages API, " +
-                "or use a non-agent call (Generate/Chat/Stream) on the CLI transport.");
+            var runner = _serviceProvider.GetRequiredService<IClaudeCliRunner>();
+            return new CliAgentSession(context, runner, bridge, options, _aiOptions.Value.Resilience, _logger);
         }
 
+        if (options.Transport == AnthropicTransport.Auto && hasApiKey)
+        {
+            _logger.LogDebug(
+                "Anthropic agent: CLI {Reason}; falling back to the HTTP API (Transport=Auto).",
+                cliAvailable ? "has tools but no IAgentToolBridge is registered" : "executable was not found");
+            return NewApiSession(context);
+        }
+
+        throw new NotSupportedException(
+            BuildUnavailableMessage(options.Transport, cliAvailable, hasTools, bridge is not null));
+    }
+
+    private IAgentSession NewApiSession(AgentSessionContext context)
+    {
         EnsureHttpClientConfigured();
         return new AnthropicAgentSession(_httpClient, context, _aiOptions.Value.Resilience, _logger);
+    }
+
+    private static bool TryResolveCli(AnthropicOptions options)
+    {
+        try
+        {
+            ClaudeCliLocator.Resolve(options.Cli.ExecutablePath);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string BuildUnavailableMessage(AnthropicTransport transport, bool cliAvailable, bool hasTools, bool hasBridge)
+    {
+        var why = !cliAvailable
+            ? "the Claude Code CLI ('claude') was not found — install it and run `claude login`, or set AnthropicCliOptions.ExecutablePath"
+            : "the agent uses tools but no IAgentToolBridge is registered — install Zonit.Extensions.Ai.Mcp.Server and call AddAiAgentToolBridge()";
+        var fix = transport == AnthropicTransport.Auto
+            ? "Set AnthropicOptions.ApiKey to fall back to the HTTP API, or resolve the cause above."
+            : "Use Transport=Auto with AnthropicOptions.ApiKey set to fall back to the HTTP API, or resolve the cause above.";
+        return $"Cannot start an Anthropic agent on the {transport} transport: {why}. {fix}";
     }
 
     private bool _configured;
@@ -90,7 +141,7 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
         if (!_httpClient.DefaultRequestHeaders.Contains("anthropic-version"))
             _httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
-        // Opt-in to two betas (comma-separated; both no-ops when unused):
+        // Opt-in to betas (comma-separated; all no-ops when unused):
         //   • extended-cache-ttl-2025-04-11 — enables cache_control ttl="1h".
         //   • context-1m-2025-08-07 — unlocks the 1M-token context window on
         //     models that support it (Opus / Sonnet 4.6+); harmless otherwise.

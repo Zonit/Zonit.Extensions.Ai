@@ -51,3 +51,11 @@ builder.Services.AddAiOpenAi();                 // reads "Ai:OpenAi" (configurat
 
 Concrete model classes (`GPT5`, `GPTImage15`, `Sonnet46`) live in the chosen package under
 `Llm/`. Pick them with IntelliSense; do not hardcode names from memory.
+
+## Anthropic over the Claude Code CLI (subscription, no API key)
+
+`AddAiAnthropic()` uses the HTTP API by default. The **same** provider can instead run through the
+local **Claude Code CLI** (`claude -p`) — using your `claude login` subscription rather than an API
+key — via `AddAiAnthropic(AnthropicTransport.Sdk)` (or `Auto`). Tool-using **agents** on that path
+also need the opt-in `Zonit.Extensions.Ai.Sdk` package (`AddAiAgentToolBridge()`). Because the CLI is
+not behaviourally identical to the API, the choice is explicit — full guide: [`sdk.md`](./sdk.md).

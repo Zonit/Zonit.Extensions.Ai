@@ -3,8 +3,12 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Cross-platform discovery of the <c>claude</c> CLI executable. Resolution order:
 /// an explicit <see cref="AnthropicCliOptions.ExecutablePath"/>, then PATH, then the
-/// well-known install locations for the current OS. The auto-discovered result is
-/// cached for the process lifetime; an explicit path is validated on every call.
+/// well-known install locations for the current OS — npm global, the native installer's
+/// user-local <c>bin</c>, and the <b>Claude Desktop</b>-bundled CLI under its per-version
+/// folder (newest version first, so app updates are picked up automatically). The
+/// auto-discovered result is cached for the process lifetime; an explicit path is
+/// validated on every call. When nothing is found, set
+/// <see cref="AnthropicCliOptions.ExecutablePath"/> to the absolute path.
 /// </summary>
 internal static class ClaudeCliLocator
 {
@@ -78,7 +82,9 @@ internal static class ClaudeCliLocator
     }
 
     /// <summary>
-    /// OS-specific install locations probed after PATH (npm global bin, user-local bin, etc.).
+    /// OS-specific install locations probed after PATH: npm global bin, the native
+    /// installer's user-local <c>bin</c>, and the Claude Desktop-bundled CLI (per-version
+    /// folder, newest first).
     /// </summary>
     private static IReadOnlyList<string> WellKnownDirectories()
     {
@@ -87,16 +93,33 @@ internal static class ClaudeCliLocator
 
         if (OperatingSystem.IsWindows())
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);        // Roaming
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (!string.IsNullOrEmpty(appData)) dirs.Add(Path.Combine(appData, "npm"));
             if (!string.IsNullOrEmpty(home)) dirs.Add(Path.Combine(home, ".local", "bin"));
+            // Claude Desktop ships the CLI at <Roaming|Local>\Claude\claude-code\<version>\claude.exe
+            if (!string.IsNullOrEmpty(appData)) AddClaudeDesktopVersionDirs(dirs, Path.Combine(appData, "Claude", "claude-code"));
+            if (!string.IsNullOrEmpty(localAppData)) AddClaudeDesktopVersionDirs(dirs, Path.Combine(localAppData, "Claude", "claude-code"));
         }
-        else
+        else if (OperatingSystem.IsMacOS())
         {
             if (!string.IsNullOrEmpty(home))
             {
                 dirs.Add(Path.Combine(home, ".local", "bin"));
                 dirs.Add(Path.Combine(home, ".npm-global", "bin"));
+                AddClaudeDesktopVersionDirs(dirs, Path.Combine(home, "Library", "Application Support", "Claude", "claude-code"));
+            }
+            dirs.Add("/usr/local/bin");
+            dirs.Add("/opt/homebrew/bin");
+            dirs.Add("/usr/bin");
+        }
+        else // Linux and other Unix
+        {
+            if (!string.IsNullOrEmpty(home))
+            {
+                dirs.Add(Path.Combine(home, ".local", "bin"));
+                dirs.Add(Path.Combine(home, ".npm-global", "bin"));
+                AddClaudeDesktopVersionDirs(dirs, Path.Combine(home, ".config", "Claude", "claude-code"));
             }
             dirs.Add("/usr/local/bin");
             dirs.Add("/opt/homebrew/bin");
@@ -105,6 +128,35 @@ internal static class ClaudeCliLocator
 
         return dirs;
     }
+
+    /// <summary>
+    /// Claude Desktop installs the CLI under a per-version subfolder
+    /// (e.g. <c>…\claude-code\2.1.170\claude.exe</c>). Adds each version folder as a
+    /// candidate directory, newest first, so an app update is picked up without any config.
+    /// </summary>
+    private static void AddClaudeDesktopVersionDirs(List<string> dirs, string parent)
+    {
+        if (!System.IO.Directory.Exists(parent)) return;
+        string[] subdirs;
+        try { subdirs = System.IO.Directory.GetDirectories(parent); }
+        catch { return; } // unreadable — skip
+        dirs.AddRange(OrderVersionDirsDescending(subdirs));
+    }
+
+    /// <summary>Orders version subfolders newest-first (semantic version, then ordinal name).</summary>
+    internal static string[] OrderVersionDirsDescending(string[] directories)
+    {
+        var ordered = (string[])directories.Clone();
+        Array.Sort(ordered, static (a, b) =>
+        {
+            var byVersion = ParseVersion(Path.GetFileName(b)).CompareTo(ParseVersion(Path.GetFileName(a)));
+            return byVersion != 0 ? byVersion : string.CompareOrdinal(Path.GetFileName(b), Path.GetFileName(a));
+        });
+        return ordered;
+    }
+
+    private static Version ParseVersion(string? name)
+        => Version.TryParse(name, out var v) ? v : new Version(0, 0);
 
     private static string BuildNotFoundMessage(string? pathEnvironment, IReadOnlyList<string> wellKnownDirectories)
     {

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -103,7 +104,10 @@ public class AnthropicAgentSessionTests
         // Shared retry budget lives on AiOptions.Resilience — same knob the HTTP layer uses.
         var ai = Options.Create(new AiOptions { Resilience = { MaxRetryAttempts = maxRetries } });
 
-        var adapter = new AnthropicAgentAdapter(httpClient, anthropic, ai, NullLogger<AnthropicAgentAdapter>.Instance);
+        // Transport defaults to Api → the adapter routes to the HTTP session; an empty
+        // service provider is sufficient (no CLI runner / bridge needed on this path).
+        var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var adapter = new AnthropicAgentAdapter(httpClient, serviceProvider, anthropic, ai, NullLogger<AnthropicAgentAdapter>.Instance);
 
         return adapter.BeginSession(new AgentSessionContext
         {

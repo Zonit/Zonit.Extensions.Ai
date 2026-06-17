@@ -12,19 +12,23 @@ namespace Zonit.Extensions;
 /// <remarks>
 /// Provides extension methods for registering Anthropic as an AI provider.
 /// <para>
+/// The transport defaults to <see cref="AnthropicTransport.Api"/> (HTTP Messages API,
+/// API-key auth). The HTTP API and the local Claude Code CLI are <b>not</b> behaviourally
+/// identical (the CLI runs through Claude Code, which has its own system prompt), so the
+/// non-API transport must be chosen <b>explicitly</b> — pass it as the first argument
+/// rather than flipping a flag inside the options lambda. See <c>Instruction/sdk.md</c>.
+/// </para>
+/// <para>
 /// <b>Usage:</b>
 /// <code>
-/// // From appsettings.json configuration
+/// // HTTP API (default) — key from appsettings.json "Ai:Anthropic", inline, or options:
 /// services.AddAiAnthropic();
-/// 
-/// // With API key
 /// services.AddAiAnthropic("sk-ant-your-api-key");
-/// 
-/// // With custom configuration
-/// services.AddAiAnthropic(options =>
-/// {
-///     options.ApiKey = "sk-ant-...";
-/// });
+/// services.AddAiAnthropic(o => o.ApiKey = "sk-ant-...");
+///
+/// // Explicit transport (first argument), options second:
+/// services.AddAiAnthropic(AnthropicTransport.Sdk);                     // local claude -p
+/// services.AddAiAnthropic(AnthropicTransport.Auto, o => o.ApiKey = "sk-ant-..."); // CLI, API fallback
 /// </code>
 /// </para>
 /// </remarks>
@@ -47,7 +51,44 @@ public static class AnthropicServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Registers Anthropic provider with optional configuration.
+    /// Registers the Anthropic provider on an <b>explicit transport</b> — the recommended
+    /// way to choose between the HTTP API and the local Claude Code CLI. The two are not
+    /// behaviourally identical (the CLI runs through Claude Code, which has its own system
+    /// prompt), so the choice is made visibly here rather than hidden in the options lambda.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="AnthropicTransport.Api"/> — HTTP Messages API (needs <c>ApiKey</c>).
+    /// <see cref="AnthropicTransport.Sdk"/> — local <c>claude -p</c> only (subscription auth);
+    /// throws if the CLI is unavailable. <see cref="AnthropicTransport.Auto"/> — prefer the
+    /// CLI, fall back to the HTTP API for what it cannot do (needs <c>ApiKey</c>).
+    /// </para>
+    /// <para>
+    /// The <paramref name="transport"/> argument is authoritative — it is applied after
+    /// <paramref name="configure"/> and overrides any <c>Transport</c> set there or in
+    /// configuration. Use <paramref name="configure"/> for the key, CLI options, base URL, etc.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="transport">Which transport carries requests.</param>
+    /// <param name="configure">Optional configuration for keys, CLI options, base URL, etc.</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddAiAnthropic(
+        this IServiceCollection services,
+        AnthropicTransport transport,
+        Action<AnthropicOptions>? configure = null)
+    {
+        return services.AddAiAnthropic(o =>
+        {
+            configure?.Invoke(o);
+            o.Transport = transport;   // explicit argument wins over configure / configuration
+        });
+    }
+
+    /// <summary>
+    /// Registers Anthropic provider with optional configuration. The transport defaults to
+    /// <see cref="AnthropicTransport.Api"/> unless overridden in configuration
+    /// (<c>"Ai:Anthropic:Transport"</c>) or via the explicit-transport overload.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -93,9 +134,9 @@ public static class AnthropicServiceCollectionExtensions
         // request so a PostConfigure that flips Transport before the first resolution
         // still takes effect.
         services.AddTransient<IAnthropicTransport>(sp =>
-            sp.GetRequiredService<IOptions<AnthropicOptions>>().Value.Transport == AnthropicTransport.Sdk
-                ? sp.GetRequiredService<AnthropicCliTransport>()
-                : sp.GetRequiredService<AnthropicApiTransport>());
+            sp.GetRequiredService<IOptions<AnthropicOptions>>().Value.Transport == AnthropicTransport.Api
+                ? sp.GetRequiredService<AnthropicApiTransport>()
+                : sp.GetRequiredService<AnthropicCliTransport>());
 
         // Provider resolves IAnthropicTransport. Registered as a concrete service so
         // TryAddModelProvider's IModelProvider factory can resolve it.
@@ -119,44 +160,4 @@ public static class AnthropicServiceCollectionExtensions
 
         return services;
     }
-
-    /// <summary>
-    /// Registers the Anthropic provider on the <b>Claude Code CLI</b> transport
-    /// (<c>claude -p</c>) instead of the HTTP API. Requests authenticate with the
-    /// machine's <c>claude login</c> session — no API key required for plain
-    /// text / chat / streaming / structured-output calls.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Equivalent to <c>AddAiAnthropic(o =&gt; { o.Transport = AnthropicTransport.Sdk; … })</c>.
-    /// </para>
-    /// <para>
-    /// Requests the CLI cannot represent (image/PDF attachments, function tools / the
-    /// agent loop) fall back to the HTTP API when <see cref="AiProviderOptions.ApiKey"/>
-    /// is set, otherwise they throw. Set <see cref="AnthropicCliOptions.ExecutablePath"/>
-    /// when <c>claude</c> is not on PATH. The CLI binary is auto-discovered per OS.
-    /// </para>
-    /// </remarks>
-    /// <param name="services">The service collection.</param>
-    /// <param name="options">Optional additional configuration (applied after the transport is set to SDK).</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection AddAiAnthropicSdk(
-        this IServiceCollection services,
-        Action<AnthropicOptions>? options = null)
-    {
-        return services.AddAiAnthropic(o =>
-        {
-            o.Transport = AnthropicTransport.Sdk;
-            options?.Invoke(o);
-        });
-    }
-
-    /// <summary>
-    /// Alias for <see cref="AddAiAnthropicSdk(IServiceCollection, Action{AnthropicOptions})"/>
-    /// — registers the Anthropic provider on the Claude Code CLI transport.
-    /// </summary>
-    public static IServiceCollection AddAiAnthropicCli(
-        this IServiceCollection services,
-        Action<AnthropicOptions>? options = null)
-        => services.AddAiAnthropicSdk(options);
 }
