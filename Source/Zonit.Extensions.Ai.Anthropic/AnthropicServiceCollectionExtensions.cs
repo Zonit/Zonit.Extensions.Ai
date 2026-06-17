@@ -1,4 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Zonit.Extensions.Ai;
 using Zonit.Extensions.Ai.Anthropic;
 
@@ -77,11 +79,29 @@ public static class AnthropicServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
-        services.AddHttpClient<AnthropicProvider>()
+        // API transport — typed HttpClient with AI resilience (40min timeout, retry,
+        // circuit breaker). Also serves as the CLI transport's fallback for requests
+        // the CLI cannot represent (image/PDF attachments, tools / agent loop).
+        services.AddHttpClient<AnthropicApiTransport>()
             .AddAiResilienceHandler();
 
-        // Register as IModelProvider (idempotent, uses typed HttpClient)
+        // CLI (claude -p) transport + its process runner (stateless singleton).
+        services.TryAddSingleton<IClaudeCliRunner, ClaudeCliProcess>();
+        services.AddTransient<AnthropicCliTransport>();
+
+        // The active transport is selected by AnthropicOptions.Transport. Resolved per
+        // request so a PostConfigure that flips Transport before the first resolution
+        // still takes effect.
+        services.AddTransient<IAnthropicTransport>(sp =>
+            sp.GetRequiredService<IOptions<AnthropicOptions>>().Value.Transport == AnthropicTransport.Sdk
+                ? sp.GetRequiredService<AnthropicCliTransport>()
+                : sp.GetRequiredService<AnthropicApiTransport>());
+
+        // Provider resolves IAnthropicTransport. Registered as a concrete service so
+        // TryAddModelProvider's IModelProvider factory can resolve it.
+        services.AddTransient<AnthropicProvider>();
+
+        // Register as IModelProvider (idempotent).
         services.TryAddModelProvider<AnthropicProvider>();
 
         // Agent adapter — dedicated typed HttpClient with the STREAMING
@@ -99,4 +119,44 @@ public static class AnthropicServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the Anthropic provider on the <b>Claude Code CLI</b> transport
+    /// (<c>claude -p</c>) instead of the HTTP API. Requests authenticate with the
+    /// machine's <c>claude login</c> session — no API key required for plain
+    /// text / chat / streaming / structured-output calls.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Equivalent to <c>AddAiAnthropic(o =&gt; { o.Transport = AnthropicTransport.Sdk; … })</c>.
+    /// </para>
+    /// <para>
+    /// Requests the CLI cannot represent (image/PDF attachments, function tools / the
+    /// agent loop) fall back to the HTTP API when <see cref="AiProviderOptions.ApiKey"/>
+    /// is set, otherwise they throw. Set <see cref="AnthropicCliOptions.ExecutablePath"/>
+    /// when <c>claude</c> is not on PATH. The CLI binary is auto-discovered per OS.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The service collection.</param>
+    /// <param name="options">Optional additional configuration (applied after the transport is set to SDK).</param>
+    /// <returns>The service collection for chaining.</returns>
+    public static IServiceCollection AddAiAnthropicSdk(
+        this IServiceCollection services,
+        Action<AnthropicOptions>? options = null)
+    {
+        return services.AddAiAnthropic(o =>
+        {
+            o.Transport = AnthropicTransport.Sdk;
+            options?.Invoke(o);
+        });
+    }
+
+    /// <summary>
+    /// Alias for <see cref="AddAiAnthropicSdk(IServiceCollection, Action{AnthropicOptions})"/>
+    /// — registers the Anthropic provider on the Claude Code CLI transport.
+    /// </summary>
+    public static IServiceCollection AddAiAnthropicCli(
+        this IServiceCollection services,
+        Action<AnthropicOptions>? options = null)
+        => services.AddAiAnthropicSdk(options);
 }

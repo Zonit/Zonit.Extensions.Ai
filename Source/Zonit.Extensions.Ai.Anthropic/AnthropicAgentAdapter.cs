@@ -56,6 +56,22 @@ public sealed class AnthropicAgentAdapter : IAgentProviderAdapter
                 $"AnthropicAgentAdapter does not support model of type {context.Llm.GetType().FullName}.");
         }
 
+        // The agent loop executes the framework's C# tools in-process and needs the
+        // model to RETURN tool_use blocks — which the stateless HTTP Messages API
+        // provides. The Claude Code CLI runs its OWN loop and would execute tools
+        // itself, so routing the framework's tool loop through `claude -p` requires
+        // exposing those tools to the CLI over MCP (a planned follow-up). Until then,
+        // SDK-transport agent runs use the HTTP API when an ApiKey is configured.
+        if (_options.Value.Transport == AnthropicTransport.Sdk
+            && string.IsNullOrEmpty(_options.Value.ApiKey))
+        {
+            throw new NotSupportedException(
+                "The Anthropic SDK (claude -p) transport does not yet run the tool-using agent loop " +
+                "(exposing your C# tools to the CLI over MCP is a planned follow-up). " +
+                "Configure AnthropicOptions.ApiKey so agent runs use the HTTP Messages API, " +
+                "or use a non-agent call (Generate/Chat/Stream) on the CLI transport.");
+        }
+
         EnsureHttpClientConfigured();
         return new AnthropicAgentSession(_httpClient, context, _aiOptions.Value.Resilience, _logger);
     }

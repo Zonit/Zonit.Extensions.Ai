@@ -20,6 +20,11 @@ namespace Zonit.Extensions.Ai.Anthropic;
 [JsonSerializable(typeof(AnthropicCacheControl))]
 [JsonSerializable(typeof(AnthropicThinking))]
 [JsonSerializable(typeof(AnthropicOutputConfig))]
+// Claude Code CLI (claude -p) transport DTOs.
+[JsonSerializable(typeof(ClaudeCliResult))]
+[JsonSerializable(typeof(ClaudeCliUsage))]
+[JsonSerializable(typeof(ClaudeCliStreamLine))]
+[JsonSerializable(typeof(ClaudeCliMessage))]
 internal sealed partial class AnthropicJsonContext : JsonSerializerContext
 {
 }

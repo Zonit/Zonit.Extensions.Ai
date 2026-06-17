@@ -13,6 +13,11 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test access to internal transports / CLI runner / locator. -->
+    <InternalsVisibleTo Include="Zonit.Extensions.Ai.Tests" />
+  </ItemGroup>
   
   <ItemGroup>
     <ProjectReference Include="..\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />

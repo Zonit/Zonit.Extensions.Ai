@@ -295,10 +295,22 @@ public class AnthropicProviderTests
             BaseAddress = new Uri("https://api.anthropic.com")
         };
 
-        return new AnthropicProvider(
+        // The provider now resolves its transport from the container; wrap the mocked
+        // HttpClient in the real AnthropicApiTransport so these tests keep exercising
+        // the genuine HTTP request-build / response-parse path (proving the transport
+        // seam is behaviour-preserving).
+        var apiTransport = new AnthropicApiTransport(
             httpClient,
             Options.Create(_options),
-            _loggerMock.Object);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AnthropicApiTransport>.Instance);
+
+        return new AnthropicProvider(new SingleTransportProvider(apiTransport), _loggerMock.Object);
+    }
+
+    private sealed class SingleTransportProvider(IAnthropicTransport transport) : IServiceProvider
+    {
+        public object? GetService(Type serviceType)
+            => serviceType == typeof(IAnthropicTransport) ? transport : null;
     }
 
     private void SetupMockResponse(string responseJson, Action<string>? captureRequest = null)
