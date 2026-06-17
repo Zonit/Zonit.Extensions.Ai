@@ -28,6 +28,9 @@ public abstract class AgentBase<TOutput> : IAgent<TOutput>
     public virtual IReadOnlyList<Type> Tools => [];
 
     /// <inheritdoc />
+    public virtual IReadOnlyList<Mcp> Mcps => [];
+
+    /// <inheritdoc />
     public virtual bool ForwardChat => true;
 }
 
@@ -64,6 +67,9 @@ public abstract class AgentBase<
 
     /// <inheritdoc />
     public virtual IReadOnlyList<Type> Tools => [];
+
+    /// <inheritdoc />
+    public virtual IReadOnlyList<Mcp> Mcps => [];
 
     /// <inheritdoc />
     public virtual bool ForwardChat => true;

@@ -69,7 +69,11 @@ internal sealed class AgentToolAdapter : IAgentTool
         IAiProvider ai, string system, IReadOnlyList<ChatMessage> chat, IReadOnlyList<object>? context, CancellationToken ct)
     {
         var request = ai.Chat(_agent.Llm, system, chat);
-        ApplyToolsAndContext(t => request.AddTool(t), c => request.WithContext(c), context);
+        ApplyAgentConfig(
+            t => request.AddTool(t),
+            m => request.AddMcp(m.Name, m.Url, m.Token, AllowFilter(m.AllowedTools)),
+            c => request.WithContext(c),
+            context);
         return await request.RunAsync(ct).ConfigureAwait(false);
     }
 
@@ -78,18 +82,32 @@ internal sealed class AgentToolAdapter : IAgentTool
         IAiProvider ai, string system, IReadOnlyList<object>? context, CancellationToken ct)
     {
         var request = ai.Agent(_agent.Llm, system);
-        ApplyToolsAndContext(t => request.AddTool(t), c => request.WithContext(c), context);
+        ApplyAgentConfig(
+            t => request.AddTool(t),
+            m => request.AddMcp(m.Name, m.Url, m.Token, AllowFilter(m.AllowedTools)),
+            c => request.WithContext(c),
+            context);
         return await request.RunAsync(ct).ConfigureAwait(false);
     }
 
-    private void ApplyToolsAndContext(Action<ITool> addTool, Action<object> withContext, IReadOnlyList<object>? context)
+    // Wires the sub-agent's own tools, MCP servers and the forwarded trusted context onto the nested
+    // request. Tools and MCP are the sub-agent's own (the parent's are NOT inherited); context flows
+    // down so scoped tools still receive the trusted server data the model never sees.
+    private void ApplyAgentConfig(Action<ITool> addTool, Action<Mcp> addMcp, Action<object> withContext, IReadOnlyList<object>? context)
     {
         foreach (var toolType in _agent.Tools)
             addTool((ITool)_services.GetRequiredService(toolType));
+        foreach (var mcp in _agent.Mcps)
+            addMcp(mcp);
         if (context is not null)
             foreach (var item in context)
                 withContext(item);
     }
+
+    // Maps an Mcp.AllowedTools whitelist onto the fluent AddMcp configure callback. null = expose every
+    // tool (no configure); a list (incl. empty) is forwarded verbatim, preserving "empty = expose none".
+    private static Action<IMcpOptions>? AllowFilter(IReadOnlyList<string>? allowed)
+        => allowed is null ? null : o => o.AllowOnly([.. allowed]);
 
     private static JsonElement JsonString(string value)
     {

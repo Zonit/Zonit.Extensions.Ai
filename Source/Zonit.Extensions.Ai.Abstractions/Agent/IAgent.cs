@@ -49,10 +49,21 @@ public interface IAgent
     /// <summary>
     /// Tool types available <i>only</i> inside this sub-agent, resolved from DI when it runs.
     /// Empty by default. Declare them <c>typeof</c>-free with <see cref="Toolset"/>, e.g.
-    /// <c>Toolset.Of&lt;GenerateLinkTool, ContactSaveTool&gt;()</c>. Register each with
+    /// <c>Toolset.Of&lt;GenerateLinkTool, ContactSaveTool&gt;()</c> or the unbounded chain
+    /// <c>Toolset.Add&lt;GenerateLinkTool&gt;().Add&lt;ContactSaveTool&gt;()</c>. Register each with
     /// <c>AddAiTools&lt;T&gt;()</c> so it is DI-resolvable.
     /// </summary>
     IReadOnlyList<Type> Tools { get; }
+
+    /// <summary>
+    /// MCP servers attached <i>only</i> inside this sub-agent, alongside its own <see cref="Tools"/>.
+    /// Empty by default. Each <see cref="Mcp"/> is connected when the sub-agent runs and its remote
+    /// tools are exposed to the sub-agent's model under the <c>"{Name}.{tool}"</c> prefix (filtered by
+    /// <see cref="Mcp.AllowedTools"/>). Declare them with a collection expression, e.g.
+    /// <c>public override IReadOnlyList&lt;Mcp&gt; Mcps =&gt; [new("github", "https://mcp.example.com/sse", token)];</c>.
+    /// The parent's MCP servers are <b>not</b> inherited — a sub-agent only sees the servers it declares here.
+    /// </summary>
+    IReadOnlyList<Mcp> Mcps { get; }
 
     /// <summary>
     /// When the parent was started as a <b>chat</b> (<c>ai.Chat(...).AddAgent&lt;T&gt;()</c>), forward that

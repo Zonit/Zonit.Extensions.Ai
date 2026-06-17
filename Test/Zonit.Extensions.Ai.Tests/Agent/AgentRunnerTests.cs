@@ -276,6 +276,29 @@ public class AgentRunnerTests
         public override bool ForwardChat => false;
     }
 
+    /// <summary>Sub-agent that declares its own MCP server (with a tool whitelist) via <see cref="IAgent.Mcps"/>.</summary>
+    private sealed class McpAgent : AgentBase<string>
+    {
+        public override string Name => "mcp_agent";
+        public override string Description => "Uses its own MCP server.";
+        public override IAgentLlm Llm => new FakeModel();
+        public override string Prompt => "Do the job with your MCP server.";
+        public override IReadOnlyList<Mcp> Mcps =>
+            [new("github", "https://mcp.example.com/sse", "tok", new[] { "read_file" })];
+    }
+
+    /// <summary>MCP factory that records the servers it was asked to build (and exposes no tools).</summary>
+    private sealed class RecordingMcpFactory : IMcpToolFactory
+    {
+        public List<IReadOnlyList<Mcp>> Calls { get; } = new();
+
+        public Task<IReadOnlyList<ITool>> BuildAsync(IReadOnlyList<Mcp> servers, CancellationToken cancellationToken)
+        {
+            Calls.Add(servers);
+            return Task.FromResult<IReadOnlyList<ITool>>(Array.Empty<ITool>());
+        }
+    }
+
     #endregion
 
     private static AgentTurn FinalTurn(string text, TokenUsage? usage = null) => new()
@@ -996,6 +1019,40 @@ public class AgentRunnerTests
 
         adapter.SessionsCreated.Should().HaveCount(2);
         adapter.SessionsCreated[1].InitialChat.Should().BeNull(); // conversation NOT forwarded
+    }
+
+    [Fact]
+    public async Task AddAgent_ForwardsSubAgentMcpServers_IntoNestedRun()
+    {
+        // The sub-agent declares its OWN MCP server via Mcps. When the parent delegates to it, that
+        // server (with its whitelist) must be connected during the sub-agent's nested run — the parent
+        // declared no MCP servers of its own, so the only BuildAsync call is for the sub-agent.
+        var recording = new RecordingMcpFactory();
+        var (provider, adapter) = BuildProvider(s =>
+        {
+            s.AddSingleton<IMcpToolFactory>(recording); // last registration wins over the default
+            s.AddAiAgent<McpAgent>();
+        });
+
+        adapter.Turns.Enqueue(ToolCallTurn(("mcp_agent", "{}", "c1"))); // parent → delegate
+        adapter.Turns.Enqueue(FinalTurn("sub draft"));                 // sub-agent → final
+        adapter.Turns.Enqueue(FinalTurn("final reply"));               // parent → re-voiced
+
+        var chat = new ChatMessage[] { new User("zrób coś z mcp") };
+        var result = await provider.Chat(new FakeModel(), "router", chat)
+            .AddAgent<McpAgent>()
+            .RunAsync();
+
+        result.Value.Should().Be("final reply");
+
+        // Exactly one BuildAsync — the sub-agent's run — and it carried the sub-agent's own server.
+        recording.Calls.Should().ContainSingle();
+        var servers = recording.Calls[0];
+        servers.Should().ContainSingle();
+        servers[0].Name.Should().Be("github");
+        servers[0].Url.Should().Be("https://mcp.example.com/sse");
+        servers[0].Token.Should().Be("tok");
+        servers[0].AllowedTools.Should().Equal("read_file");
     }
 
     [Fact]

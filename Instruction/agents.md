@@ -140,15 +140,16 @@ Global defaults for these (when a call sets nothing) live under `Ai:Agent` in co
 
 ## Delegating to a sub-agent
 
-`.AddAgent<T>()` exposes a **sub-agent** — a specialist with its own model, tools and prompt — to the
-model as a callable delegation. The parent (often a cheap router/persona model) delegates by the
-sub-agent's `Description`; the sub-agent runs its own loop and returns text the parent re-voices.
-Trusted `.WithContext(...)` data and (under a chat parent) the conversation are forwarded down. Full
+`.AddAgent<T>()` exposes a **sub-agent** — a specialist with its own model, tools, MCP servers and
+prompt — to the model as a callable delegation. The parent (often a cheap router/persona model)
+delegates by the sub-agent's `Description`; the sub-agent runs its own loop and returns text the
+parent re-voices. Trusted `.WithContext(...)` data and (under a chat parent) the conversation are
+forwarded down; the sub-agent's own tools and MCP servers are **not** inherited from the parent. Full
 guide: [`subagents.md`](./subagents.md).
 
 ```csharp
 await ai.Chat(new Haiku45(), routerPrompt, history)
-    .AddAgent<ConversionAgent>()      // each: own model + own tools + own prompt
+    .AddAgent<ConversionAgent>()      // each: own model + own tools/MCP + own prompt
     .AddAgent<SupportAgent>()
     .WithContext(customer)            // forwarded to the sub-agents' scoped tools
     .RunAsync();

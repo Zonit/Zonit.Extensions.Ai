@@ -71,15 +71,50 @@ instruction becomes `Analyze GOLD on the 1d timeframe. Be concise.`
 
 ## Declaring tools without `typeof`
 
-`Toolset.Of<…>()` is the type-safe way to list a sub-agent's tools (each argument is constrained to
-`ITool`, so a wrong type is a compile error). Overloads cover one to six tools; for more (or a
-dynamic set) return any `IReadOnlyList<Type>` yourself.
+`Toolset` is the type-safe way to list a sub-agent's tools (each argument is constrained to `ITool`,
+so a wrong type is a compile error). Two shapes, pick by count:
 
 ```csharp
+// Fixed arity — Of<…>() overloads cover one to six tools:
 public override IReadOnlyList<Type> Tools => Toolset.Of<GenerateLinkTool, ContactSaveTool>();
+
+// Unbounded — chain Add<T>() as many times as you like (no six-tool ceiling):
+public override IReadOnlyList<Type> Tools =>
+    Toolset.Add<GenerateLinkTool>().Add<ContactSaveTool>().Add<PriceFeedTool>().Add<RefundTool>();
 ```
 
-Each tool type must be DI-resolvable — register it with `AddAiTools<T>()` ([`tools.md`](./tools.md)).
+Both return an `IReadOnlyList<Type>` and are `typeof`-free and AOT-clean. (For a *dynamic* set you can
+still return any `IReadOnlyList<Type>` you build yourself.) Each tool type must be DI-resolvable —
+register it with `AddAiTools<T>()` ([`tools.md`](./tools.md)).
+
+## Giving the sub-agent its own MCP servers
+
+A sub-agent can connect to external MCP servers, alongside its own `Tools`, by overriding `Mcps`.
+Each `Mcp` is connected when the sub-agent runs and its remote tools are exposed to the sub-agent's
+model under the `"{Name}.{tool}"` prefix (filtered by the optional whitelist). Declare them with a
+collection expression:
+
+```csharp
+public sealed class ResearchAgent : AgentBase<string>
+{
+    public override string Name        => "research";
+    public override string Description => "Researches a topic using web + GitHub MCP servers.";
+    public override IAgentLlm Llm      => new Sonnet46();
+    public override string Prompt      => "Research the user's topic and summarise the findings.";
+
+    public override IReadOnlyList<Type> Tools => Toolset.Of<SummariseTool>();   // its own local tools
+    public override IReadOnlyList<Mcp>  Mcps  =>                                // ...plus MCP servers
+    [
+        new("github", "https://mcp.example.com/sse", githubToken, new[] { "read_file", "search_code" }),
+        new("web",    "https://web-mcp.example.com/sse"),
+    ];
+}
+```
+
+The fourth argument is an optional tool whitelist (without the `"{Name}."` prefix): `null` exposes
+every tool the server reports, an empty list exposes none. The parent's MCP servers are **not**
+inherited — a sub-agent only sees the servers it declares here, the same way it only sees its own
+`Tools`. MCP servers are an HTTPS client connection ([`agents.md`](./agents.md)).
 
 ## Forwarding the conversation: `ForwardChat`
 
@@ -145,7 +180,10 @@ AOT-clean (no reflection on the invocation path).
 - `Name` is the delegation function name the parent model sees; `Description` says what the sub-agent
   does and when to delegate — the model relies on it, so write it well.
 - `Llm` is any `IAgentLlm` — route specialised work to a fitting (cheaper / stronger) model.
-- `Tools` lists the sub-agent's own tools with `Toolset.Of<…>()`; register each with `AddAiTools<T>()`.
+- `Tools` lists the sub-agent's own tools with `Toolset.Of<…>()` (≤6) or `Toolset.Add<…>().Add<…>()`
+  (unbounded); register each with `AddAiTools<T>()`.
+- `Mcps` lists the sub-agent's own MCP servers (optional, empty by default) — declared with a
+  collection expression of `new Mcp(...)`; not inherited from the parent.
 - Parametrized: `Prompt` is a Scriban template, `TInput` defines the fields — never hand-write the schema.
 - `ForwardChat` is `true` by default (forward the conversation under a chat parent); set `false` to isolate.
 - The sub-agent returns its final text; the parent re-voices it. Register with `AddAiAgent<T>()`,

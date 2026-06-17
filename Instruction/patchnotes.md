@@ -3,6 +3,29 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.2.0 — 2026-06-17
+
+### Sub-agents: their own MCP servers, and an unbounded tool builder
+
+- **Added** `IAgent.Mcps` (`IReadOnlyList<Mcp>`, empty by default, defaulted on both `AgentBase<TOutput>`
+  and `AgentBase<TInput, TOutput>`). A sub-agent can now declare its **own** MCP servers alongside its
+  own `Tools` — `public override IReadOnlyList<Mcp> Mcps => [new("github", "https://…/sse", token, …)];`.
+  When the parent delegates, those servers are connected for the sub-agent's nested run and their remote
+  tools are exposed under the `"{Name}.{tool}"` prefix (filtered by `Mcp.AllowedTools`: `null` = all,
+  empty = none). The parent's MCP servers are **not** inherited — a sub-agent only sees what it declares,
+  the same rule already used for `Tools`. See [`subagents.md`](./subagents.md).
+- **Added** `Toolset.Add<T>()` → `ToolsetBuilder`, a `typeof`-free, compile-checked, **unbounded** tool
+  chain: `Toolset.Add<A>().Add<B>().Add<C>()…`. The fixed-arity `Toolset.Of<…>()` overloads (one to six)
+  capped a sub-agent at six tools; `Add<T>()` removes that ceiling. The builder implements
+  `IReadOnlyList<Type>`, so it drops straight into `IAgent.Tools`; each `Add` returns a new immutable
+  builder (no shared-state surprises). `Of<…>()` and `Toolset.None` are unchanged.
+
+#### Why
+
+Sub-agents could already carry their own local tools but had no way to reach an external MCP server, and
+the `Toolset.Of<…>()` helper stopped at six tools. Both are now first-class: per-agent MCP and an
+arbitrary number of tools, with no `typeof` and no reflection (AOT/trim-clean).
+
 ## 10.1.0 — 2026-06-17
 
 ### Anthropic: Claude Code CLI transport, and tool-using agents over it
