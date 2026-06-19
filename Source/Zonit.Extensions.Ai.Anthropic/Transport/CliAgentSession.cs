@@ -32,6 +32,7 @@ internal sealed class CliAgentSession : IAgentSession
 
     private bool _completed;
     private AgentTurn? _finalTurn;
+    private string? _mcpConfigPath;
 
     public CliAgentSession(
         AgentSessionContext context,
@@ -102,6 +103,11 @@ internal sealed class CliAgentSession : IAgentSession
         {
             if (bridgeSession is not null)
                 await bridgeSession.DisposeAsync().ConfigureAwait(false);
+            if (_mcpConfigPath is not null)
+            {
+                try { System.IO.File.Delete(_mcpConfigPath); } catch { /* best effort */ }
+                _mcpConfigPath = null;
+            }
         }
     }
 
@@ -120,7 +126,13 @@ internal sealed class CliAgentSession : IAgentSession
         if (bridgeSession is not null)
         {
             args.Add("--mcp-config");
-            args.Add(BuildMcpConfig(bridgeSession));
+            // Pass the MCP config as a FILE PATH, not an inline JSON string. On Windows
+            // an npm-installed `claude` is a `.cmd` shim launched through `cmd.exe /c`,
+            // and cmd.exe mangles the quotes/braces of an inline `{"mcpServers":…}` arg —
+            // the CLI then loads no servers and the agent's tools silently never run.
+            // A temp-file path has no shell metacharacters and survives cmd.exe intact.
+            // (A native claude.exe handles inline JSON fine; the file is robust for both.)
+            args.Add(WriteMcpConfigFile(bridgeSession));
 
             // Pre-approve our bridge's tools so the CLI runs them unattended.
             foreach (var name in bridgeSession.ToolNames)
@@ -190,6 +202,22 @@ internal sealed class CliAgentSession : IAgentSession
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Serializes the bridge's MCP config to a temp <c>.json</c> file and returns its path.
+    /// Passing a path (not inline JSON) keeps the config intact when <c>claude</c> is a
+    /// Windows <c>.cmd</c> shim launched via <c>cmd.exe</c>. The file is deleted in
+    /// <see cref="RunTurnAsync"/>'s finally block once the CLI has consumed it.
+    /// </summary>
+    private string WriteMcpConfigFile(IAgentToolBridgeSession session)
+    {
+        var json = BuildMcpConfig(session);
+        var path = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), $"zonit-mcp-{Guid.NewGuid():N}.json");
+        System.IO.File.WriteAllText(path, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        _mcpConfigPath = path;
+        return path;
     }
 
     private static string BuildMcpConfig(IAgentToolBridgeSession session)

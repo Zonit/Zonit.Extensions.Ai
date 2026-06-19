@@ -33,14 +33,24 @@ public class CliAgentSessionTests
         turn.Usage!.OutputTokens.Should().Be(3);
         turn.Usage.InputTokens.Should().Be(7);
 
-        var args = runner.Last!.Arguments;
+        var args = runner.Last!.Arguments.ToList();
         args.Should().Contain("--model");
         args.Should().Contain("claude-sonnet-4-6");
         args.Should().Contain("--output-format");
         args.Should().Contain("json");
         args.Should().Contain("--mcp-config");
         args.Should().Contain("mcp__zonit__echo");
-        args.Should().Contain(a => a.Contains("127.0.0.1") && a.Contains("Bearer test-token"));
+
+        // The MCP config must be passed as a temp FILE PATH, not inline JSON: on Windows an
+        // npm `claude.cmd` is launched via cmd.exe, which mangles an inline {"mcpServers":…}
+        // arg and leaves the CLI with no tools. The fake runner read the file mid-run.
+        var mcpPath = args[args.IndexOf("--mcp-config") + 1];
+        mcpPath.Should().EndWith(".json");
+        mcpPath.Should().NotContain("{");
+        runner.McpConfigContent.Should().NotBeNull();
+        runner.McpConfigContent!.Should().Contain("127.0.0.1").And.Contain("Bearer test-token");
+        // The temp file is cleaned up once the run completes.
+        System.IO.File.Exists(mcpPath).Should().BeFalse();
     }
 
     [Fact]
@@ -197,16 +207,31 @@ internal sealed class FakeCliRunner : IClaudeCliRunner
     public string Json = """{"type":"result","result":"ok","session_id":"s","usage":{"input_tokens":1,"output_tokens":1}}""";
     public int ExitCode;
     public string Stderr = "";
+    /// <summary>Content of the --mcp-config file, captured mid-run (the real CLI reads it before exit).</summary>
+    public string? McpConfigContent;
 
     public Task<ClaudeProcessResult> RunAsync(ClaudeCliInvocation invocation, CancellationToken cancellationToken)
     {
         Last = invocation;
+        CaptureMcpConfig(invocation);
         return Task.FromResult(new ClaudeProcessResult
         {
             ExitCode = ExitCode,
             StandardOutput = Json,
             StandardError = Stderr,
         });
+    }
+
+    // Mimics the real CLI consuming the --mcp-config file while the process runs (before
+    // CliAgentSession's finally deletes it), so tests can assert on its content.
+    private void CaptureMcpConfig(ClaudeCliInvocation invocation)
+    {
+        var args = invocation.Arguments.ToList();
+        var idx = args.IndexOf("--mcp-config");
+        if (idx < 0 || idx + 1 >= args.Count) return;
+        var path = args[idx + 1];
+        if (System.IO.File.Exists(path))
+            McpConfigContent = System.IO.File.ReadAllText(path);
     }
 
     public async IAsyncEnumerable<string> StreamLinesAsync(

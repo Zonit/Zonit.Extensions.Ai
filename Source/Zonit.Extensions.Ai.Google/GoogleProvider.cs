@@ -434,7 +434,7 @@ public sealed class GoogleProvider : IModelProvider
                                 FunctionResponse = new GeminiFunctionResponse
                                 {
                                     Name = t.Name,
-                                    Response = JsonSerializer.Deserialize(t.ResultJson, GoogleJsonContext.Default.JsonElement)
+                                    Response = AsResponseObject(t.ResultJson)
                                 }
                             }
                         }
@@ -506,6 +506,29 @@ public sealed class GoogleProvider : IModelProvider
         {
             parts.Add(new GeminiPartItem { InlineData = new GeminiInlineData { MimeType = file.MediaType.Value, Data = file.Base64 } });
         }
+    }
+
+    /// <summary>
+    /// Gemini requires <c>functionResponse.response</c> to be a JSON object (protobuf
+    /// <c>Struct</c>). Tool output that is a scalar, array, or string would otherwise trip
+    /// HTTP 400 — wrap any non-object payload as <c>{ "result": &lt;value&gt; }</c>.
+    /// </summary>
+    private static JsonElement AsResponseObject(string json)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            return doc.RootElement.Clone();
+
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("result");
+            doc.RootElement.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+        using var wrapped = JsonDocument.Parse(ms.ToArray());
+        return wrapped.RootElement.Clone();
     }
 
     private static TResponse ParseResponse<

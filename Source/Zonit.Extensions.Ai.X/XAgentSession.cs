@@ -250,11 +250,14 @@ internal sealed class XAgentSession : IAgentSession
 
         if (_context.ResponseType is { } responseType)
         {
-            request.ResponseFormat = new XResponseFormat
+            // xAI's /v1/responses uses `text.format` for structured output (mirroring
+            // OpenAI's Responses API); the Chat Completions `response_format` field is
+            // rejected with HTTP 400 on this endpoint.
+            request.Text = new XTextConfig
             {
-                Type = "json_schema",
-                JsonSchema = new XJsonSchemaSpec
+                Format = new XTextFormat
                 {
+                    Type = "json_schema",
                     Name = "response",
                     Schema = AiSchemaRegistry.GetSchema(responseType),
                     Strict = true,

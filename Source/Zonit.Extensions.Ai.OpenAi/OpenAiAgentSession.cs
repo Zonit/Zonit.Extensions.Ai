@@ -114,20 +114,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
         request.Input = input;
 
-        if (_context.ResponseType is { } responseType)
-        {
-            request.Text = new OpenAiTextConfig
-            {
-                Format = new OpenAiTextFormat
-                {
-                    Type = "json_schema",
-                    Name = "response",
-                    Description = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
-                    Schema = AiSchemaRegistry.GetSchema(responseType),
-                    Strict = true,
-                },
-            };
-        }
+        request.Text = BuildStructuredFormat();
 
         switch (llm)
         {
@@ -215,6 +202,35 @@ internal sealed class OpenAiAgentSession : IAgentSession
             Model = _context.Llm.Name,
             PreviousResponseId = _previousResponseId,
             Input = input,
+            // Resend the structured-output format: the Responses API does NOT carry
+            // text.format across previous_response_id chaining, so without this the
+            // post-tool-call final answer comes back as free-form text and fails to
+            // parse into TResponse.
+            Text = BuildStructuredFormat(),
+        };
+    }
+
+    /// <summary>
+    /// Builds the structured-output <c>text.format</c> block when the agent expects a
+    /// typed result, or <c>null</c> for free-form text. MUST be sent on every request —
+    /// initial AND continuation — because the Responses API does not persist the
+    /// response format across <c>previous_response_id</c> chaining.
+    /// </summary>
+    private OpenAiTextConfig? BuildStructuredFormat()
+    {
+        if (_context.ResponseType is not { } responseType)
+            return null;
+
+        return new OpenAiTextConfig
+        {
+            Format = new OpenAiTextFormat
+            {
+                Type = "json_schema",
+                Name = "response",
+                Description = JsonSchemaGenerator.GetDescription(responseType) ?? "Response",
+                Schema = AiSchemaRegistry.GetSchema(responseType),
+                Strict = true,
+            },
         };
     }
 

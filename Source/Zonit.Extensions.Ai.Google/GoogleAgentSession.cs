@@ -137,7 +137,7 @@ internal sealed class GoogleAgentSession : IAgentSession
                                 FunctionResponse = new GeminiFunctionResponse
                                 {
                                     Name = t.Name,
-                                    Response = JsonSerializer.Deserialize(t.ResultJson, GoogleJsonContext.Default.JsonElement),
+                                    Response = AsResponseObject(t.ResultJson),
                                 },
                             },
                         },
@@ -178,11 +178,42 @@ internal sealed class GoogleAgentSession : IAgentSession
                 FunctionResponse = new GeminiFunctionResponse
                 {
                     Name = name,
-                    Response = JsonSerializer.Deserialize(r.Output.GetRawText(), GoogleJsonContext.Default.JsonElement),
+                    Response = AsResponseObject(r.Output),
                 },
             });
         }
         _contents.Add(new GeminiRequestContent { Role = "user", Parts = parts });
+    }
+
+    /// <summary>
+    /// Gemini requires <c>functionResponse.response</c> to be a JSON object
+    /// (protobuf <c>Struct</c>). Tools that return a scalar, array, or string —
+    /// a raw <see cref="ITool"/> or a sub-agent (<c>AgentToolAdapter</c> returns a
+    /// bare JSON string) — would otherwise trip HTTP 400. Wrap any non-object
+    /// payload as <c>{ "result": &lt;value&gt; }</c>; pass objects through unchanged.
+    /// </summary>
+    private static JsonElement AsResponseObject(string json)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+        return AsResponseObject(doc.RootElement);
+    }
+
+    /// <inheritdoc cref="AsResponseObject(string)" />
+    private static JsonElement AsResponseObject(JsonElement output)
+    {
+        if (output.ValueKind == JsonValueKind.Object)
+            return output.Clone();
+
+        using var ms = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(ms))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("result");
+            output.WriteTo(writer);
+            writer.WriteEndObject();
+        }
+        using var wrapped = JsonDocument.Parse(ms.ToArray());
+        return wrapped.RootElement.Clone();
     }
 
     private static void AppendInlineFiles(List<GeminiPartItem> parts, IReadOnlyList<Asset> files)

@@ -80,7 +80,38 @@ public class XAgentSessionTests
         turn.FinalText.Should().Be("Hello");
     }
 
-    private static IAgentSession BeginSession(string jsonBody, int maxRetries)
+    /// <summary>
+    /// Structured-output agents must send the schema via <c>text.format</c> — the
+    /// xAI Responses API rejects the Chat Completions <c>response_format</c> field
+    /// with HTTP 400 on <c>/v1/responses</c>. Regression guard for the bug where a
+    /// typed Grok agent failed before issuing a single tool call.
+    /// </summary>
+    [Fact]
+    public async Task RunTurnAsync_WithStructuredOutput_SendsTextFormat_NotResponseFormat()
+    {
+        string? captured = null;
+        await using var session = BeginSession(HealthyResponse, maxRetries: 0, typeof(Answer), req => captured = req);
+
+        await session.RunTurnAsync(null, CancellationToken.None);
+
+        captured.Should().NotBeNull();
+        captured!.Should().NotContain("response_format");
+        captured.Should().Contain("\"text\"");
+        captured.Should().Contain("\"format\"");
+        captured.Should().Contain("json_schema");
+        captured.Should().Contain("\"strict\":true");
+    }
+
+    private sealed class Answer
+    {
+        public string Message { get; init; } = "";
+    }
+
+    private static IAgentSession BeginSession(
+        string jsonBody,
+        int maxRetries,
+        Type? responseType = null,
+        Action<string>? captureRequest = null)
     {
         var handler = new Mock<HttpMessageHandler>();
         handler.Protected()
@@ -88,6 +119,11 @@ public class XAgentSessionTests
                 "SendAsync",
                 ItExpr.IsAny<HttpRequestMessage>(),
                 ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>(async (req, _) =>
+            {
+                if (captureRequest is not null && req.Content is not null)
+                    captureRequest(await req.Content.ReadAsStringAsync());
+            })
             .ReturnsAsync(() => new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
@@ -104,7 +140,7 @@ public class XAgentSessionTests
         {
             Llm = new Grok43(),
             Prompt = new StringPrompt { Text = "Produce the brief." },
-            ResponseType = null,
+            ResponseType = responseType,
             Tools = Array.Empty<ITool>(),
         });
     }

@@ -575,11 +575,11 @@ public sealed class XProvider : IModelProvider
 
         if (responseType != typeof(string))
         {
-            request.ResponseFormat = new XResponseFormat
+            request.Text = new XTextConfig
             {
-                Type = "json_schema",
-                JsonSchema = new XJsonSchemaSpec
+                Format = new XTextFormat
                 {
+                    Type = "json_schema",
                     Name = "response",
                     Schema = AiSchemaRegistry.GetSchema(responseType),
                     Strict = true
@@ -686,11 +686,11 @@ public sealed class XProvider : IModelProvider
 
         if (responseType != typeof(string))
         {
-            request.ResponseFormat = new XResponseFormat
+            request.Text = new XTextConfig
             {
-                Type = "json_schema",
-                JsonSchema = new XJsonSchemaSpec
+                Format = new XTextFormat
                 {
+                    Type = "json_schema",
                     Name = "response",
                     Schema = AiSchemaRegistry.GetSchema(responseType),
                     Strict = true
@@ -1029,7 +1029,12 @@ internal sealed class XResponsesRequest
     /// </summary>
     public XReasoningSpec? Reasoning { get; set; }
     public List<XTool>? Tools { get; set; }
-    public XResponseFormat? ResponseFormat { get; set; }
+    /// <summary>
+    /// Structured-output config for the Responses API. xAI's <c>/v1/responses</c>
+    /// uses <c>text.format</c> (mirroring OpenAI's Responses API) and rejects the
+    /// Chat Completions <c>response_format</c> field with HTTP 400.
+    /// </summary>
+    public XTextConfig? Text { get; set; }
     /// <summary>
     /// Conversation-scoped cache key. Routes consecutive requests to the
     /// same xAI server so the prefix prompt-cache stays warm across an agent
@@ -1059,15 +1064,16 @@ internal sealed class XContentPart
     public string? ImageUrl { get; set; }
 }
 
-internal sealed class XResponseFormat
+internal sealed class XTextConfig
 {
-    public string Type { get; set; } = "";
-    public XJsonSchemaSpec? JsonSchema { get; set; }
+    public XTextFormat? Format { get; set; }
 }
 
-internal sealed class XJsonSchemaSpec
+internal sealed class XTextFormat
 {
+    public string Type { get; set; } = "";
     public string Name { get; set; } = "";
+    public string? Description { get; set; }
     public JsonElement Schema { get; set; }
     public bool Strict { get; set; }
 }

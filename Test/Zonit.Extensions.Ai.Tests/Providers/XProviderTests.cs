@@ -206,9 +206,12 @@ public class XProviderTests
         // Act
         await provider.GenerateAsync(model, prompt, CancellationToken.None);
 
-        // Assert
+        // Assert — the Responses API uses `text.format`, NOT the Chat Completions
+        // `response_format` field (which xAI rejects with HTTP 400 on /v1/responses).
         capturedRequest.Should().NotBeNull();
-        capturedRequest.Should().Contain("response_format");
+        capturedRequest.Should().NotContain("response_format");
+        capturedRequest.Should().Contain("\"text\"");
+        capturedRequest.Should().Contain("\"format\"");
         capturedRequest.Should().Contain("json_schema");
         capturedRequest.Should().Contain("\"strict\":true");
     }
