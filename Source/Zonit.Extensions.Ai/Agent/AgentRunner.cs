@@ -159,8 +159,16 @@ internal sealed class AgentRunner
         // valid for the entire loop and are disposed at the end.
         await using var runScope = _scopeFactory.CreateAsyncScope();
 
-        // 1. Resolve tools (caller-provided + DI registry + MCP-exposed).
-        var resolvedTools = await ResolveToolsAsync(runScope.ServiceProvider, callerTools, callerMcps, options, runToken).ConfigureAwait(false);
+        // Build the trusted context bag once for the whole run, from the caller's WithContext(...)
+        // values. The SAME instance is shared by every tool (so in-place mutations and Set<T> are
+        // visible to later tools and the host), forwarded to sub-agents, and used to gate tool
+        // visibility below.
+        var aiContext = new RunContext(callerContext);
+
+        // 1. Resolve tools (caller-provided + DI registry + MCP-exposed), then drop any whose
+        //    IsAvailable(context) gate is unmet — evaluated once here, so the tool set is fixed for
+        //    the run (a tool cannot be removed mid-turn); the next run re-evaluates a changed context.
+        var resolvedTools = await ResolveToolsAsync(runScope.ServiceProvider, callerTools, callerMcps, options, aiContext, runToken).ConfigureAwait(false);
 
         // 2. Pick a provider adapter.
         var adapter = _adapters.FirstOrDefault(a => a.SupportsAgent(llm))
@@ -181,16 +189,16 @@ internal sealed class AgentRunner
             Tools = resolvedTools,
             InitialChat = initialChat,
             // Forwarded so transports whose external runtime executes tools (the Claude Code CLI
-            // over the MCP bridge) can bind it onto scoped/sub-agent tools. The in-process
-            // ToolExecutor below still receives callerContext directly for the HTTP path.
-            Context = callerContext,
+            // over the MCP bridge) can bind it onto contextual/sub-agent tools. The in-process
+            // ToolExecutor below shares the same bag for the HTTP path.
+            Context = aiContext,
         };
 
         await using var session = adapter.BeginSession(context);
 
         var executor = new ToolExecutor(
             resolvedTools,
-            callerContext,
+            aiContext,
             initialChat,
             maxParallel,
             perCallTimeout,
@@ -433,6 +441,7 @@ internal sealed class AgentRunner
         IReadOnlyList<ITool>? callerTools,
         IReadOnlyList<Mcp>? callerMcps,
         AgentOptions? options,
+        IRunContext context,
         CancellationToken cancellationToken)
     {
         // DI defaults are applied ONLY when the caller didn't express an
@@ -501,7 +510,20 @@ internal sealed class AgentRunner
             deduped = deduped.Where(t => allowSet.Contains(t.Name)).ToList();
         }
 
-        return deduped;
+        // Visibility gate: a conditional tool (a sub-agent with an IsAvailable override) is exposed
+        // only when the trusted context satisfies its predicate. Evaluated once per run.
+        var visible = new List<ITool>(deduped.Count);
+        foreach (var t in deduped)
+        {
+            if (t is IConditionalTool conditional && !conditional.IsAvailable(context))
+            {
+                _logger.LogDebug("Agent tool '{Tool}' hidden by IsAvailable(context).", t.Name);
+                continue;
+            }
+            visible.Add(t);
+        }
+
+        return visible;
     }
 
     private static AgentPartialResult BuildPartial(

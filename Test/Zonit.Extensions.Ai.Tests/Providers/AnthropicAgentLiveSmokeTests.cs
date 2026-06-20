@@ -137,7 +137,7 @@ public class AnthropicAgentLiveSmokeTests
     {
         public override string Name => "get_secret_code";
         public override string Description => "Returns the secret access code. Call this to learn the code.";
-        public override Task<SecretOutput> ExecuteAsync(SecretInput input, CancellationToken ct)
+        public override Task<SecretOutput> ExecuteAsync(IRunContext context, SecretInput input, CancellationToken ct)
             => Task.FromResult(new SecretOutput { Code = "ZX-9173-QQ" });
     }
 
@@ -153,7 +153,7 @@ public class AnthropicAgentLiveSmokeTests
     {
         public override string Name => "add";
         public override string Description => "Adds two numbers and returns their sum.";
-        public override Task<NumOutput> ExecuteAsync(NumInput input, CancellationToken ct)
+        public override Task<NumOutput> ExecuteAsync(IRunContext context, NumInput input, CancellationToken ct)
             => Task.FromResult(new NumOutput { Result = input.A + input.B });
     }
 
@@ -161,7 +161,7 @@ public class AnthropicAgentLiveSmokeTests
     {
         public override string Name => "multiply";
         public override string Description => "Multiplies two numbers and returns their product.";
-        public override Task<NumOutput> ExecuteAsync(NumInput input, CancellationToken ct)
+        public override Task<NumOutput> ExecuteAsync(IRunContext context, NumInput input, CancellationToken ct)
             => Task.FromResult(new NumOutput { Result = input.A * input.B });
     }
 

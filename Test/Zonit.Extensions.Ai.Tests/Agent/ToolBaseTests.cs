@@ -16,7 +16,7 @@ public class ToolBaseTests
         public override string Name => "echo";
         public override string Description => "Echoes the input message back.";
 
-        public override Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
             => Task.FromResult(new Output { Echo = input.Message });
 
         public class Input
@@ -36,7 +36,7 @@ public class ToolBaseTests
         public override string Name => "failing";
         public override string Description => "Always throws.";
 
-        public override Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
             => throw new InvalidOperationException("boom");
 
         public class Input { public string? Ignored { get; init; } }

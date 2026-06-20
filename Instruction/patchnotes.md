@@ -3,6 +3,76 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.2.2 — 2026-06-20
+
+### Tool context is now a typed bag (`IRunContext`); sub-agents can hide themselves (`IsAvailable`)
+
+**Breaking.** A tool's trusted server context moved from a single typed `TScope` to a typed **bag**
+passed as the first parameter of `ExecuteAsync`. This lets one tool read many context models — and
+*write* back into them — instead of being limited to one overloaded context object.
+
+- **Removed** `ToolBase<TScope, TInput, TOutput>` (the three-generic scoped base) and the internal
+  `IScopedTool`. `ToolBase` is back to two generics: `ToolBase<TInput, TOutput>`.
+- **Changed** the tool entry point to take the run context first:
+  `ExecuteAsync(IRunContext context, TInput input, CancellationToken ct)`. **Every** tool override
+  gains the `IRunContext context` first parameter (tools that need no context simply ignore it).
+- **Added** `IRunContext` (+ `RunContext`, public, in `Zonit.Extensions.Ai.Abstractions`; reflection-free,
+  AOT/trim-clean). A type-keyed bag mirroring ASP.NET Core's `IFeatureCollection`:
+  - `Get<T>()` → value or `null`; `GetRequired<T>()` → value or throws `AiToolContextException` **to
+    the caller** (a wiring mistake, never reported to the model); `TryGet<T>(out T?)`; `Has<T>()`;
+    `Set<T>(value)`; `Values`.
+  - The bag holds your instances **by reference**, so a tool can write a server-resolved value into a
+    context model (e.g. stamp a worker id) instead of returning it through the model — keeping it out
+    of the token stream where the model could alter it. Mutability follows the model's own accessors
+    (`set` vs `init`). Backed by a `ConcurrentDictionary` (structurally safe under parallel tool calls;
+    making the held models thread-safe is yours to decide).
+- **Added** `IAgent.IsAvailable(IRunContext context)` (default `true`, overridable on `AgentBase`).
+  Return `false` and the sub-agent is omitted from the parent model's tool set — declarative
+  permission / scenario gating. Evaluated **once** when the run's tool set is assembled (a sub-agent
+  can't be removed mid-run); the next run re-evaluates against a refreshed context. Keep it
+  synchronous and side-effect-free — load permission data into the context *before* the run.
+- **Unchanged** `.WithContext(...)` on the fluent builder still seeds the values (call once per
+  distinct type); the runner now builds one `IRunContext` per run, shares it across every tool, and
+  forwards it to sub-agents.
+
+#### Migration
+
+```csharp
+// Before (≤ 10.2.x) — single TScope, resolved by type into the first parameter:
+public sealed class GetMyOrdersTool : ToolBase<UserContext, Input, Output>
+{
+    public override Task<Output> ExecuteAsync(UserContext context, Input input, CancellationToken ct)
+    {
+        var userId = context.UserId;
+        ...
+    }
+}
+
+// After (11.0.0) — two generics; read what you need from the bag:
+public sealed class GetMyOrdersTool : ToolBase<Input, Output>
+{
+    public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken ct)
+    {
+        var user = context.GetRequired<UserContext>();   // same throw-if-missing guarantee
+        var userId = user.UserId;
+        ...
+    }
+}
+```
+
+A plain tool that read no context simply adds the unused first parameter:
+`ExecuteAsync(Input input, …)` → `ExecuteAsync(IRunContext context, Input input, …)`. `.WithContext(...)`
+call sites are unchanged. See [`tools.md`](./tools.md) and [`subagents.md`](./subagents.md).
+
+#### Why
+
+The single-`TScope` model forced one overloaded context object and capped a tool at exactly one
+context type — a tool needing data from two models couldn't get it, and the object grew bloated. The
+bag lets each tool pull only the models it cares about, register as many as needed, and write
+server-resolved values back so sensitive ids never round-trip through the model. `IsAvailable` builds
+permissions, plans and scenarios straight into agent assembly instead of leaving the model to police
+itself.
+
 ## 10.2.0 — 2026-06-17
 
 ### Sub-agents: their own MCP servers, and an unbounded tool builder

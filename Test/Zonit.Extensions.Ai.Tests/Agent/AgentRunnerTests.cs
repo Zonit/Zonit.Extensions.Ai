@@ -79,7 +79,7 @@ public class AgentRunnerTests
         public override string Name => "echo";
         public override string Description => "Echoes the input.";
 
-        public override Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
             => Task.FromResult(new Output { Echo = input.Message });
 
         public class Input { public required string Message { get; init; } }
@@ -89,30 +89,51 @@ public class AgentRunnerTests
     private sealed record UserCtx(Guid UserId, string UserName);
     private sealed record BillingCtx(string Plan);
 
-    /// <summary>Scoped tool: combines server context (UserCtx) with the model's input.</summary>
-    private sealed class ScopedEchoTool : ToolBase<UserCtx, ScopedEchoTool.Input, ScopedEchoTool.Output>
+    /// <summary>Context-reading tool: combines server context (UserCtx) with the model's input.</summary>
+    private sealed class ScopedEchoTool : ToolBase<ScopedEchoTool.Input, ScopedEchoTool.Output>
     {
         public override string Name => "scoped_echo";
         public override string Description => "Echoes the input prefixed with the context user.";
 
-        public override Task<Output> ExecuteAsync(UserCtx context, Input input, CancellationToken cancellationToken)
-            => Task.FromResult(new Output { Echo = $"{context.UserName}:{input.Message}" });
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
+            => Task.FromResult(new Output { Echo = $"{context.GetRequired<UserCtx>().UserName}:{input.Message}" });
 
         public class Input { public required string Message { get; init; } }
         public class Output { public required string Echo { get; init; } }
     }
 
-    /// <summary>Scoped tool that needs a different context type than <see cref="ScopedEchoTool"/>.</summary>
-    private sealed class BillingScopedTool : ToolBase<BillingCtx, BillingScopedTool.Input, BillingScopedTool.Output>
+    /// <summary>Context-reading tool that needs a different context type than <see cref="ScopedEchoTool"/>.</summary>
+    private sealed class BillingScopedTool : ToolBase<BillingScopedTool.Input, BillingScopedTool.Output>
     {
         public override string Name => "billing_plan";
         public override string Description => "Returns the context billing plan.";
 
-        public override Task<Output> ExecuteAsync(BillingCtx context, Input input, CancellationToken cancellationToken)
-            => Task.FromResult(new Output { Plan = context.Plan });
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
+            => Task.FromResult(new Output { Plan = context.GetRequired<BillingCtx>().Plan });
 
         public class Input { public string? Ignored { get; init; } }
         public class Output { public required string Plan { get; init; } }
+    }
+
+    /// <summary>Mutable context model — a tool resolves and writes its id server-side (never via the model).</summary>
+    private sealed class WorkerCtx { public int Id { get; set; } public string Name { get; set; } = ""; }
+
+    /// <summary>Tool that resolves a worker and writes the result back into the context, not into its model reply.</summary>
+    private sealed class AssignWorkerTool : ToolBase<AssignWorkerTool.Input, AssignWorkerTool.Output>
+    {
+        public override string Name => "assign_worker";
+        public override string Description => "Assigns the chosen worker into the trusted context.";
+
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
+        {
+            var worker = context.GetRequired<WorkerCtx>();
+            worker.Id = input.Id;
+            worker.Name = input.Name;
+            return Task.FromResult(new Output { Ok = true });
+        }
+
+        public class Input { public required int Id { get; init; } public required string Name { get; init; } }
+        public class Output { public bool Ok { get; init; } }
     }
 
     private sealed class ThrowingTool : ToolBase<ThrowingTool.Input, ThrowingTool.Output>
@@ -120,7 +141,7 @@ public class AgentRunnerTests
         public override string Name => "explode";
         public override string Description => "Always throws.";
 
-        public override Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
             => throw new InvalidOperationException("planned failure");
 
         public class Input { public string? Ignored { get; init; } }
@@ -186,7 +207,7 @@ public class AgentRunnerTests
         public override string Name => "nest";
         public override string Description => "Calls a sub-model N times.";
 
-        public override async Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override async Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
         {
             var outputs = new List<string>();
             for (var i = 0; i < _calls; i++)
@@ -210,7 +231,7 @@ public class AgentRunnerTests
         public override string Name => "nest_agent";
         public override string Description => "Runs a sub-agent.";
 
-        public override async Task<Output> ExecuteAsync(Input input, CancellationToken cancellationToken)
+        public override async Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
         {
             var r = await _ai.Agent(new FakeModel(), "sub").RunAsync(cancellationToken);
             return new Output { Sub = r.Value };
@@ -220,8 +241,8 @@ public class AgentRunnerTests
         public class Output { public required string Sub { get; init; } }
     }
 
-    /// <summary>Scoped tool used inside a sub-agent — records the forwarded context user into a shared sink.</summary>
-    private sealed class RecordingScopedTool : ToolBase<UserCtx, RecordingScopedTool.Input, RecordingScopedTool.Output>
+    /// <summary>Context-reading tool used inside a sub-agent — records the forwarded context user into a shared sink.</summary>
+    private sealed class RecordingScopedTool : ToolBase<RecordingScopedTool.Input, RecordingScopedTool.Output>
     {
         private readonly List<string> _seen;
         public RecordingScopedTool(List<string> seen) => _seen = seen;
@@ -229,10 +250,11 @@ public class AgentRunnerTests
         public override string Name => "record";
         public override string Description => "Records the context user.";
 
-        public override Task<Output> ExecuteAsync(UserCtx context, Input input, CancellationToken cancellationToken)
+        public override Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken cancellationToken)
         {
-            _seen.Add(context.UserName);
-            return Task.FromResult(new Output { Echo = $"{context.UserName}:{input.Message}" });
+            var user = context.GetRequired<UserCtx>();
+            _seen.Add(user.UserName);
+            return Task.FromResult(new Output { Echo = $"{user.UserName}:{input.Message}" });
         }
 
         public class Input { public required string Message { get; init; } }
@@ -285,6 +307,19 @@ public class AgentRunnerTests
         public override string Prompt => "Do the job with your MCP server.";
         public override IReadOnlyList<Mcp> Mcps =>
             [new("github", "https://mcp.example.com/sse", "tok", new[] { "read_file" })];
+    }
+
+    /// <summary>Permission marker carried in the trusted context.</summary>
+    private sealed class AdminPass { }
+
+    /// <summary>Sub-agent visible only when the trusted context grants <see cref="AdminPass"/>.</summary>
+    private sealed class GatedAgent : AgentBase<string>
+    {
+        public override string Name => "gated";
+        public override string Description => "Admin-only sub-agent.";
+        public override IAgentLlm Llm => new FakeModel();
+        public override string Prompt => "Do the admin-only job.";
+        public override bool IsAvailable(IRunContext context) => context.Has<AdminPass>();
     }
 
     /// <summary>MCP factory that records the servers it was asked to build (and exposes no tools).</summary>
@@ -507,6 +542,27 @@ public class AgentRunnerTests
 
         result.Value.Should().Be("done");
         result.ToolCalls[0].Output!.Value.GetProperty("echo").GetString().Should().Be("hi");
+    }
+
+    [Fact]
+    public async Task ContextTool_MutatesContextModel_VisibleToHostAfterRun()
+    {
+        // The "GetWorker" scenario: a tool resolves a value and writes it back into the trusted
+        // context instead of returning it through the model. The id never enters the token stream
+        // (no round-trip the model could tamper with); the host reads its own mutated instance.
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(ToolCallTurn(("assign_worker", """{"id":2,"name":"Test"}""", "c1")));
+        adapter.Turns.Enqueue(FinalTurn("done"));
+
+        var worker = new WorkerCtx();
+        await provider.GenerateAsync(
+            new FakeModel(),
+            "assign the worker",
+            tools: new ITool[] { new AssignWorkerTool() },
+            context: new object[] { worker });
+
+        worker.Id.Should().Be(2);
+        worker.Name.Should().Be("Test");
     }
 
     #endregion
@@ -1053,6 +1109,39 @@ public class AgentRunnerTests
         servers[0].Url.Should().Be("https://mcp.example.com/sse");
         servers[0].Token.Should().Be("tok");
         servers[0].AllowedTools.Should().Equal("read_file");
+    }
+
+    [Fact]
+    public async Task AddAgent_IsAvailableFalse_HidesSubAgentFromModel()
+    {
+        // The sub-agent gates itself on AdminPass in the context. Without it, IsAvailable(context)
+        // returns false and the sub-agent is never exposed to the parent model — it cannot delegate.
+        var (provider, adapter) = BuildProvider(s => s.AddAiAgent<GatedAgent>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Agent(new FakeModel(), "q")
+            .AddAgent<GatedAgent>()
+            .RunAsync(); // no AdminPass in context
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AddAgent_IsAvailableTrue_ExposesSubAgent()
+    {
+        // With AdminPass present, the same sub-agent's IsAvailable(context) returns true and it is
+        // exposed to the parent model as a delegate tool.
+        var (provider, adapter) = BuildProvider(s => s.AddAiAgent<GatedAgent>());
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.Agent(new FakeModel(), "q")
+            .AddAgent<GatedAgent>()
+            .WithContext(new AdminPass())
+            .RunAsync();
+
+        adapter.SessionsCreated.Should().ContainSingle()
+            .Which.Tools.Select(t => t.Name).Should().Contain("gated");
     }
 
     [Fact]

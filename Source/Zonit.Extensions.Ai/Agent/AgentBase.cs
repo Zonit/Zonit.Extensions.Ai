@@ -32,6 +32,9 @@ public abstract class AgentBase<TOutput> : IAgent<TOutput>
 
     /// <inheritdoc />
     public virtual bool ForwardChat => true;
+
+    /// <inheritdoc />
+    public virtual bool IsAvailable(IRunContext context) => true;
 }
 
 /// <summary>
@@ -73,6 +76,9 @@ public abstract class AgentBase<
 
     /// <inheritdoc />
     public virtual bool ForwardChat => true;
+
+    /// <inheritdoc />
+    public virtual bool IsAvailable(IRunContext context) => true;
 
     JsonElement IInputAgent.InputSchema => _schema.Value;
 }

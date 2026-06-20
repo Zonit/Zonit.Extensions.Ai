@@ -14,7 +14,7 @@ namespace Zonit.Extensions.Ai;
 /// usage tree under this tool's node (cost/token roll-up) and is bounded by the agent nesting-depth
 /// guard — identical to a hand-written tool that injects <see cref="IAiProvider"/> and runs a sub-agent.
 /// </remarks>
-internal sealed class AgentToolAdapter : IAgentTool
+internal sealed class AgentToolAdapter : IAgentTool, IConditionalTool
 {
     private static readonly JsonElement _emptySchema = BuildEmptySchema();
 
@@ -33,15 +33,20 @@ internal sealed class AgentToolAdapter : IAgentTool
 
     public JsonElement InputSchema => _agent is IInputAgent input ? input.InputSchema : _emptySchema;
 
+    /// <inheritdoc />
+    // Gates whether this sub-agent is exposed to the parent model for the current run (e.g. a
+    // permission/scenario check over the trusted context). Evaluated once when the tool set is built.
+    public bool IsAvailable(IRunContext context) => _agent.IsAvailable(context);
+
     // A sub-agent always needs the ambient chat / context; the runner routes through the
-    // IAgentTool overload. This plain path (no context, no chat) is only hit if an agent tool is
-    // invoked outside the agent loop — run it with what we have rather than fail.
+    // IAgentTool overload. This plain path (no chat) is only hit if an agent tool is invoked
+    // outside the agent loop — run it with an empty context rather than fail.
     Task<JsonElement> ITool.InvokeAsync(JsonElement arguments, CancellationToken cancellationToken)
-        => InvokeAsync(arguments, context: null, chat: null, cancellationToken);
+        => InvokeAsync(arguments, new RunContext(), chat: null, cancellationToken);
 
     public async Task<JsonElement> InvokeAsync(
         JsonElement arguments,
-        IReadOnlyList<object>? context,
+        IRunContext context,
         IReadOnlyList<ChatMessage>? chat,
         CancellationToken cancellationToken)
     {
@@ -66,7 +71,7 @@ internal sealed class AgentToolAdapter : IAgentTool
 
     // Continues the (forwarded) conversation: system instruction + the parent's chat history.
     private async Task<Result<string>> RunWithChatAsync(
-        IAiProvider ai, string system, IReadOnlyList<ChatMessage> chat, IReadOnlyList<object>? context, CancellationToken ct)
+        IAiProvider ai, string system, IReadOnlyList<ChatMessage> chat, IRunContext context, CancellationToken ct)
     {
         var request = ai.Chat(_agent.Llm, system, chat);
         ApplyAgentConfig(
@@ -79,7 +84,7 @@ internal sealed class AgentToolAdapter : IAgentTool
 
     // Runs the sub-agent as a standalone task (no conversation forwarded).
     private async Task<Result<string>> RunAsTaskAsync(
-        IAiProvider ai, string system, IReadOnlyList<object>? context, CancellationToken ct)
+        IAiProvider ai, string system, IRunContext context, CancellationToken ct)
     {
         var request = ai.Agent(_agent.Llm, system);
         ApplyAgentConfig(
@@ -91,17 +96,18 @@ internal sealed class AgentToolAdapter : IAgentTool
     }
 
     // Wires the sub-agent's own tools, MCP servers and the forwarded trusted context onto the nested
-    // request. Tools and MCP are the sub-agent's own (the parent's are NOT inherited); context flows
-    // down so scoped tools still receive the trusted server data the model never sees.
-    private void ApplyAgentConfig(Action<ITool> addTool, Action<Mcp> addMcp, Action<object> withContext, IReadOnlyList<object>? context)
+    // request. Tools and MCP are the sub-agent's own (the parent's are NOT inherited); the context
+    // values flow down so the sub-agent's tools still receive the trusted server data the model never
+    // sees (forwarding the values re-seeds a bag for the nested run — in-place mutations propagate
+    // since the same instances are passed).
+    private void ApplyAgentConfig(Action<ITool> addTool, Action<Mcp> addMcp, Action<object> withContext, IRunContext context)
     {
         foreach (var toolType in _agent.Tools)
             addTool((ITool)_services.GetRequiredService(toolType));
         foreach (var mcp in _agent.Mcps)
             addMcp(mcp);
-        if (context is not null)
-            foreach (var item in context)
-                withContext(item);
+        foreach (var item in context.Values)
+            withContext(item);
     }
 
     // Maps an Mcp.AllowedTools whitelist onto the fluent AddMcp configure callback. null = expose every

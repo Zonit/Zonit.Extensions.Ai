@@ -491,7 +491,8 @@ public sealed class SaveNoteTool(INoteStore store)
     public override string Name        => "save_note";
     public override string Description => "Persists a note and returns its id.";
 
-    public override async Task<Output> ExecuteAsync(Input input, CancellationToken ct)
+    // context = the run's trusted IRunContext bag (first); input = model arguments (second).
+    public override async Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken ct)
     {
         var id = await store.SaveAsync(input.Title, input.Body, ct);
         return new Output { Id = id };
@@ -514,24 +515,25 @@ retry with different arguments or fall back, controlled by `ToolExceptionPolicy`
 
 Some tools must act on data that has to come from the server — the signed-in user's id, the
 tenant, a permission scope. Putting it in the tool's input is unsafe: input is part of the schema,
-so the model fills it in and could send anything. Inherit `ToolBase<TScope, TInput, TOutput>`
-instead — `TScope` comes **first** (trusted server data), then the model's `TInput`. The caller
-supplies the value per call via `context:`; it never reaches the model, so it cannot be read or
-forged through the prompt and flows untouched through the whole pipeline.
+so the model fills it in and could send anything. Read it from the `IRunContext context` parameter
+instead. The caller supplies values per call with `.WithContext(...)`; they never reach the model,
+so they cannot be read or forged through the prompt and flow untouched through the whole pipeline.
+The context is a **typed bag** — register many models and pull only what each tool needs with
+`context.Get<T>()` (null when absent) or `context.GetRequired<T>()` (throws when absent).
 
 ```csharp
 public sealed record UserContext(Guid UserId, string UserName, Guid TenantId);
 
 public sealed class GetMyOrdersTool(IOrderRepository orders)
-    : ToolBase<UserContext, GetMyOrdersTool.Input, GetMyOrdersTool.Output>
+    : ToolBase<GetMyOrdersTool.Input, GetMyOrdersTool.Output>
 {
     public override string Name        => "get_my_orders";
     public override string Description => "Lists the signed-in user's orders.";
 
-    // context = trusted server data (first); input = model arguments (second).
-    public override async Task<Output> ExecuteAsync(UserContext context, Input input, CancellationToken ct)
+    public override async Task<Output> ExecuteAsync(IRunContext context, Input input, CancellationToken ct)
     {
-        var rows = await orders.GetForUserAsync(context.UserId, input.Status, ct);
+        var user = context.GetRequired<UserContext>();   // trusted; never seen by the model
+        var rows = await orders.GetForUserAsync(user.UserId, input.Status, ct);
         return new Output { Count = rows.Count };
     }
 
@@ -540,22 +542,22 @@ public sealed class GetMyOrdersTool(IOrderRepository orders)
 }
 ```
 
-Supply the context on the builder with `.WithContext(...)` — each scoped tool resolves the value
-matching its `TScope` by type:
+Supply the values on the builder with `.WithContext(...)` — call it once per distinct type:
 
 ```csharp
 var user = new UserContext(currentUser.Id, currentUser.Name, currentUser.TenantId);
 
 await ai.Agent(new GPT5(), prompt)
     .AddTool<GetMyOrdersTool>()
-    .WithContext(user)                // call .WithContext again per extra scoped context type
+    .WithContext(user)                // call .WithContext again per extra context model
     .RunAsync();
 ```
 
-The runner guarantees `context` is non-null and correctly typed before calling, so you never
-null-check a *missing* context. If a scoped tool runs but no matching value was supplied, the
-runner throws `AiToolContextException` to **you** (a wiring mistake caught at first run), never to
-the model. Validate the context's *contents* (permissions, etc.) inside the tool as usual.
+`GetRequired<T>()` with no matching `.WithContext(...)` value throws `AiToolContextException` to
+**you** (a wiring mistake caught at first run), never to the model; use `Get<T>()` when absence is
+acceptable. The bag holds your instances **by reference**, so a tool can also *write* a server-resolved
+value back into a context model (e.g. stamp a worker id) — later tools and the host read it without it
+round-tripping through the model. Validate a value's *contents* (permissions, etc.) inside the tool as usual.
 
 ### Sub-agents: delegate to a specialist
 

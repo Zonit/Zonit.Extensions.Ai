@@ -87,10 +87,11 @@ public class AgentToolBridgeTests
     [Fact]
     public async Task Bridge_ScopedTool_BoundWithContext_ReceivesItOnCall()
     {
-        // A scoped tool (ToolBase<TScope,…>) needs server context the model never sees. The CLI calls
-        // tools over the bridge through the context-less ITool path, so AgentToolContextBinder must inject
-        // the captured context — otherwise the tool throws and the call yields nothing (the original bug).
-        var bound = AgentToolContextBinder.Bind([new ScopedEchoTool()], ["CTX"], chat: null);
+        // A context-reading tool (ToolBase<TInput,TOutput> using IRunContext) needs server context the
+        // model never sees. The CLI calls tools over the bridge through the context-less ITool path, so
+        // AgentToolContextBinder must inject the captured context bag — otherwise the tool throws and the
+        // call yields nothing (the original bug).
+        var bound = AgentToolContextBinder.Bind([new ScopedEchoTool()], new RunContext(new object[] { "CTX" }), chat: null);
 
         await using var bridge = new AgentToolBridge(NullLogger<AgentToolBridge>.Instance);
         var session = await bridge.StartAsync(bound, CancellationToken.None);
@@ -153,24 +154,24 @@ public class AgentToolBridgeTests
         }
     }
 
-    // Hand-rolled IScopedTool mirroring ToolBase<TScope,TInput,TOutput>: the context-less ITool path
-    // throws (as the real base does), and the real work runs only when given a context. TScope is string.
-    private sealed class ScopedEchoTool : IScopedTool
+    // Hand-rolled IContextualTool mirroring ToolBase<TInput,TOutput>: the context-less ITool path
+    // throws (a context-required tool with no bag), and the real work runs only when given the context
+    // bag. The required context value is a string.
+    private sealed class ScopedEchoTool : IContextualTool
     {
         public string Name => "scoped_echo";
         public string Description => "Echoes the input value, prefixed by the server context.";
         public JsonElement InputSchema =>
             JsonDocument.Parse("""{"type":"object","properties":{"value":{"type":"string"}}}""").RootElement;
 
-        public Type ContextType => typeof(string);
-
-        public Task<JsonElement> InvokeAsync(JsonElement arguments, object context, CancellationToken cancellationToken)
+        public Task<JsonElement> InvokeAsync(JsonElement arguments, IRunContext context, CancellationToken cancellationToken)
         {
+            var prefix = context.GetRequired<string>();
             var value = arguments.TryGetProperty("value", out var v) ? v.GetString() : "(none)";
-            return Task.FromResult(JsonSerializer.SerializeToElement($"{context}:{value}"));
+            return Task.FromResult(JsonSerializer.SerializeToElement($"{prefix}:{value}"));
         }
 
         public Task<JsonElement> InvokeAsync(JsonElement arguments, CancellationToken cancellationToken)
-            => throw new AiToolContextException($"Tool '{Name}' is scoped and must be invoked with a context.");
+            => throw new AiToolContextException($"Tool '{Name}' requires context and must be invoked with it.");
     }
 }

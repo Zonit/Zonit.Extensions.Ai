@@ -130,10 +130,25 @@ public override bool ForwardChat => false;   // run isolated, even under a chat 
 
 ## Trusted context flows down to the sub-agent's tools
 
-`.WithContext(...)` on the parent is forwarded into the sub-agent, so its scoped tools
-(`ToolBase<TScope, TInput, TOutput>`) receive the trusted server data the model never sees — the
-sub-agent itself doesn't read it, it just carries it through. See
-[`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+`.WithContext(...)` on the parent is forwarded into the sub-agent, so its tools receive the same
+trusted `IRunContext` values (read with `context.Get<T>()`) that the model never sees — the sub-agent
+itself doesn't read it, it just carries it through. See
+[`tools.md`](./tools.md#reading-trusted-server-data-the-model-must-not-see-iruncontext).
+
+## Showing a sub-agent only when the context allows: `IsAvailable`
+
+Override `IsAvailable(IRunContext context)` to gate whether the parent model is even **shown** this
+sub-agent. It returns `true` by default; return `false` and the sub-agent is omitted from the parent's
+tool set, so the model cannot delegate to it. Drive it from trusted context — permissions, plan,
+tenant — to express access rules declaratively:
+
+```csharp
+public override bool IsAvailable(IRunContext context) => context.Has<AdminPass>();
+```
+
+It is evaluated **once** when the run's tool set is assembled (a sub-agent can't be removed mid-run);
+the next run re-evaluates against a possibly refreshed context. Keep it synchronous and side-effect
+free — load any permission data into the context *before* the run rather than doing I/O here.
 
 ## Registering and exposing
 

@@ -18,18 +18,29 @@ namespace Zonit.Extensions.Ai;
 /// <see cref="JsonSchemaGenerator"/>.
 /// </para>
 /// <para>
+/// <see cref="ExecuteAsync"/> receives the run's <see cref="IRunContext"/> bag <b>first</b>: trusted
+/// server data (current user / tenant / permissions) supplied via the agent call's
+/// <c>WithContext(...)</c> and never exposed to the model. Read only the models you need with
+/// <c>context.Get&lt;T&gt;()</c> / <c>context.GetRequired&lt;T&gt;()</c>; the bag is empty (not null)
+/// when the caller supplied no context. You can also mutate a context model in place — e.g. write the
+/// id of a record you resolved — so later tools and the host see it without it round-tripping through
+/// the model.
+/// </para>
+/// <para>
 /// You may throw any exception from <see cref="ExecuteAsync"/>. The agent
 /// runner catches it and forwards the error to the model as a tool result
 /// (see <see cref="ToolExceptionPolicy"/>). Claude and GPT models handle
 /// such errors gracefully — they can retry with different arguments,
 /// fall back to another tool, or explain the failure to the user.
+/// (An <see cref="AiToolContextException"/> — e.g. from <c>GetRequired&lt;T&gt;()</c> — is the
+/// exception: it signals a wiring mistake and propagates to the caller, never to the model.)
 /// </para>
 /// </remarks>
 [RequiresUnreferencedCode("ToolBase uses reflection to build a JSON schema from TInput.")]
 [RequiresDynamicCode("ToolBase uses reflection and runtime JSON (de)serialization.")]
 public abstract class ToolBase<
     [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] TInput,
-    TOutput> : ITool
+    TOutput> : IContextualTool
     where TInput : class
 {
     private static readonly JsonSerializerOptions _serializerOptions = new()
@@ -58,19 +69,33 @@ public abstract class ToolBase<
     public JsonElement InputSchema => _schema.Value;
 
     /// <summary>
-    /// Executes the tool logic. Throw any exception to signal an error —
-    /// the runner will wrap it into a tool-result the model can react to
-    /// (default policy <see cref="ToolExceptionPolicy.ReturnErrorToModel"/>).
+    /// Executes the tool logic. <paramref name="context"/> is the run's trusted context bag (never
+    /// null; empty when no context was supplied) — read your server data with
+    /// <c>context.Get&lt;T&gt;()</c>, never from <paramref name="input"/>, which the model controls.
+    /// Throw any exception to signal an error — the runner wraps it into a tool result the model can
+    /// react to (default policy <see cref="ToolExceptionPolicy.ReturnErrorToModel"/>); an
+    /// <see cref="AiToolContextException"/> instead propagates to the caller.
     /// </summary>
+    /// <param name="context">The run's <see cref="IRunContext"/> bag. Never seen by the model.</param>
     /// <param name="input">Deserialized arguments supplied by the model.</param>
     /// <param name="cancellationToken">Cancellation token, honored by the agent runner's timeouts.</param>
-    public abstract Task<TOutput> ExecuteAsync(TInput input, CancellationToken cancellationToken);
+    public abstract Task<TOutput> ExecuteAsync(IRunContext context, TInput input, CancellationToken cancellationToken);
 
     /// <inheritdoc />
+    async Task<JsonElement> IContextualTool.InvokeAsync(JsonElement arguments, IRunContext context, CancellationToken cancellationToken)
+    {
+        var input = Deserialize(arguments);
+        var output = await ExecuteAsync(context, input, cancellationToken).ConfigureAwait(false);
+        return Serialize(output);
+    }
+
+    // Context-less path: only hit when a tool is invoked outside the agent loop (e.g. directly in a
+    // test, or an external runtime that didn't bind context). Runs with an empty context — Get<T>()
+    // returns null and GetRequired<T>() throws, exactly as for a run with no WithContext(...) values.
     async Task<JsonElement> ITool.InvokeAsync(JsonElement arguments, CancellationToken cancellationToken)
     {
         var input = Deserialize(arguments);
-        var output = await ExecuteAsync(input, cancellationToken).ConfigureAwait(false);
+        var output = await ExecuteAsync(new RunContext(), input, cancellationToken).ConfigureAwait(false);
         return Serialize(output);
     }
 

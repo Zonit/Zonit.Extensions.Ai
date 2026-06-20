@@ -79,22 +79,23 @@ await ai.Agent(new GPT5(), prompt).AddDefaultTools().AddDefaultMcp().RunAsync();
 ## Trusted server data: `.WithContext(...)`
 
 `.WithContext(value)` delivers per-call server data — the current user, tenant, permission scope —
-to scoped tools (`ToolBase<TScope, TInput, TOutput>`). Values are matched to each scoped tool's
-`TScope` **by type** and are **never** sent to the model, so it cannot read or forge them. Call it
-once per distinct context type the exposed tools require.
+into the run's **`IRunContext`** bag. Every tool receives the bag as the first parameter of
+`ExecuteAsync` and reads only the models it needs with `context.Get<T>()` / `context.GetRequired<T>()`;
+values are **never** sent to the model, so it cannot read or forge them. Call it once per distinct
+type, registering as many models as you like.
 
 ```csharp
 var user = new UserContext(currentUser.Id, currentUser.Name);
 
 await ai.Agent(new GPT5(), prompt)
-    .AddTool<GetMyOrdersTool>()      // ToolBase<UserContext, …>
+    .AddTool<GetMyOrdersTool>()      // reads context.GetRequired<UserContext>()
     .WithContext(user)
     .RunAsync();
 ```
 
-A scoped tool whose `TScope` has no matching `.WithContext(...)` value throws
+A tool that calls `GetRequired<T>()` with no matching `.WithContext(...)` value throws
 `AiToolContextException` to the caller (a wiring mistake) rather than reporting it to the model.
-Authoring scoped tools: [`tools.md`](./tools.md#tools-that-need-server-data-the-model-must-not-see-tscope).
+Authoring context-reading tools: [`tools.md`](./tools.md#reading-trusted-server-data-the-model-must-not-see-iruncontext).
 
 ## External MCP servers
 

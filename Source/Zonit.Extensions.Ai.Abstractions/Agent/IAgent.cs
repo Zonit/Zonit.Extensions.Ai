@@ -73,6 +73,18 @@ public interface IAgent
     /// run (<c>ai.Agent(...)</c>) has no conversation, so nothing is forwarded regardless of this flag.
     /// </summary>
     bool ForwardChat { get; }
+
+    /// <summary>
+    /// Whether this sub-agent is exposed to the parent model for the current run, given the trusted
+    /// <see cref="IRunContext"/>. Default <c>true</c>. Override it (via <c>AgentBase</c>) to gate the
+    /// sub-agent on permissions / scenario data carried in the context: when it returns <c>false</c> the
+    /// parent model never sees the sub-agent, so it cannot delegate to it. Evaluated once when the run's
+    /// tool set is assembled — a sub-agent cannot be removed mid-run; the next run re-evaluates against a
+    /// (possibly refreshed) context. Keep it synchronous and side-effect-free: load any permission data
+    /// into the context <i>before</i> the run rather than doing I/O here.
+    /// </summary>
+    /// <param name="context">The run's trusted context bag (the same one tools receive).</param>
+    bool IsAvailable(IRunContext context) => true;
 }
 
 /// <summary>

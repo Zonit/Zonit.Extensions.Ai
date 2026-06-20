@@ -14,7 +14,7 @@ public class AgentRegistrationTests
     {
         public override string Name => "tool_a";
         public override string Description => "A";
-        public override Task<Out> ExecuteAsync(In input, CancellationToken ct) => Task.FromResult(new Out());
+        public override Task<Out> ExecuteAsync(IRunContext context, In input, CancellationToken ct) => Task.FromResult(new Out());
         public class In { }
         public class Out { }
     }
@@ -23,7 +23,7 @@ public class AgentRegistrationTests
     {
         public override string Name => "tool_b";
         public override string Description => "B";
-        public override Task<Out> ExecuteAsync(In input, CancellationToken ct) => Task.FromResult(new Out());
+        public override Task<Out> ExecuteAsync(IRunContext context, In input, CancellationToken ct) => Task.FromResult(new Out());
         public class In { }
         public class Out { }
     }
@@ -32,7 +32,7 @@ public class AgentRegistrationTests
     {
         public override string Name => "tool_a";   // intentional duplicate of ToolA
         public override string Description => "dup";
-        public override Task<Out> ExecuteAsync(In input, CancellationToken ct) => Task.FromResult(new Out());
+        public override Task<Out> ExecuteAsync(IRunContext context, In input, CancellationToken ct) => Task.FromResult(new Out());
         public class In { }
         public class Out { }
     }
