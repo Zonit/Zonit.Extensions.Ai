@@ -150,6 +150,22 @@ It is evaluated **once** when the run's tool set is assembled (a sub-agent can't
 the next run re-evaluates against a possibly refreshed context. Keep it synchronous and side-effect
 free — load any permission data into the context *before* the run rather than doing I/O here.
 
+### Gating on the conversation: `ConversationInfo`
+
+The framework seeds one value into the run context itself: `ConversationInfo`, carrying
+`MessageCount` (the messages forwarded into this run) and a derived `IsEmpty`. Read it like any other
+context value to gate a sub-agent on whether the conversation has started — e.g. an "opener" that
+greets the user, shown only on an empty conversation:
+
+```csharp
+public override bool IsAvailable(IRunContext context)
+    => context.Get<ConversationInfo>()?.IsEmpty == true;
+```
+
+The count reflects the conversation as it stood when the run began, so it is valid in `IsAvailable`
+(evaluated before the loop) and in a tool's `ExecuteAsync`. A plain `ai.Agent(...)` run has no
+history, so `MessageCount` is `0`. Each sub-agent run is seeded with its own `ConversationInfo`.
+
 ## Registering and exposing
 
 Register the sub-agent and its tools, then expose it on a parent run with `.AddAgent<T>()` (works on

@@ -165,6 +165,13 @@ internal sealed class AgentRunner
         // visibility below.
         var aiContext = new RunContext(callerContext);
 
+        // Seed framework-owned facts about this run's conversation so tools and sub-agents can read
+        // them like any other context value (context.Get<ConversationInfo>()). Set<T> overwrites by
+        // type, so a sub-agent run replaces the forwarded parent value with its own. The count is
+        // known here, before ResolveToolsAsync evaluates IsAvailable, so it can gate sub-agents
+        // (e.g. an "opener" shown only on an empty conversation).
+        aiContext.Set(new ConversationInfo { MessageCount = initialChat?.Count ?? 0 });
+
         // 1. Resolve tools (caller-provided + DI registry + MCP-exposed), then drop any whose
         //    IsAvailable(context) gate is unmet — evaluated once here, so the tool set is fixed for
         //    the run (a tool cannot be removed mid-turn); the next run re-evaluates a changed context.
