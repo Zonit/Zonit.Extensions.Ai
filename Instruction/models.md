@@ -20,7 +20,7 @@ the compiler stops you from, for example, asking an embedding model to generate 
 Concrete model classes live in the provider package under its `Llm/` folder. Use IntelliSense;
 do not invent or memorise model names, because they change every release. Verified examples at
 the time of writing: OpenAI `GPT5`, `GPT52`, `O3`, `GPTImage15`, `TextEmbedding3Large`,
-`GPT4oTranscribe`; Anthropic `Sonnet46`, `Opus48`, `Haiku45`. For the capability each package provides,
+`GPT4oTranscribe`; Anthropic `Sonnet5`, `Opus48`, `Haiku45`. For the capability each package provides,
 see [`providers.md`](./providers.md).
 
 > 📋 For the complete, always-current list of **every** model — provider, context window,

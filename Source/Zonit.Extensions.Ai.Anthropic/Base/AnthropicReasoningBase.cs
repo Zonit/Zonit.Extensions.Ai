@@ -14,6 +14,19 @@ public abstract class AnthropicAdaptiveBase : AnthropicBase, IReasoningLlm
 
     /// <summary>Resolved global effort, or <c>null</c> when thinking is disabled.</summary>
     protected abstract ReasoningEffort? GetReasonEffort();
+
+    /// <summary>
+    /// <c>true</c> for adaptive-thinking models whose API enables thinking by
+    /// default when the <c>thinking</c> field is omitted entirely (currently
+    /// Claude Sonnet 5) — unlike Sonnet 4.6 / Opus 4.7 / Opus 4.8, where
+    /// omitting <c>thinking</c> already means "no thinking". When this is
+    /// <c>true</c> and <see cref="GetReasonEffort"/> resolves to no effort,
+    /// the provider sends an explicit <c>thinking: { "type": "disabled" }</c>
+    /// instead of leaving the field unset, so that not setting a model's
+    /// <c>Reason</c> property keeps meaning "no thinking" consistently
+    /// across every model in this SDK. Defaults to <c>false</c>.
+    /// </summary>
+    protected internal virtual bool ThinkingEnabledByDefault => false;
 }
 
 /// <summary>

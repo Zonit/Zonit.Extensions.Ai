@@ -149,6 +149,53 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithSonnet5DefaultReason_ShouldSendExplicitThinkingDisabled()
+    {
+        // Unlike every other adaptive model here, Sonnet 5 enables thinking on
+        // the wire when `thinking` is simply omitted. Leaving Reason unset must
+        // still mean "no thinking" — so the provider has to send an explicit
+        // disable instead of omitting the field (see ThinkingEnabledByDefault).
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var model = new Sonnet5();
+        var prompt = new TestPrompt { Text = "Say hello" };
+
+        // Act
+        await provider.GenerateAsync(model, prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("\"thinking\"");
+        capturedRequest.Should().Contain("\"disabled\"");
+        capturedRequest.Should().NotContain("adaptive");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithSonnet5ReasonExtra_ShouldSendAdaptiveThinkingWithXHighEffort()
+    {
+        // Reason.Extra is the Opus-tier "xhigh" level — Sonnet 4.6 doesn't
+        // expose it, but Sonnet 5 does (per Anthropic's Sonnet 5 migration guide).
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Thought about it"}],"usage":{"input_tokens":10,"output_tokens":50}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var model = new Sonnet5 { Reason = Sonnet5.ReasonType.Extra };
+        var prompt = new TestPrompt { Text = "Think about this" };
+
+        // Act
+        await provider.GenerateAsync(model, prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("\"adaptive\"");
+        capturedRequest.Should().Contain("\"xhigh\"");
+    }
+
+    [Fact]
     public async Task GenerateAsync_ShouldReturnCorrectResult()
     {
         // Arrange

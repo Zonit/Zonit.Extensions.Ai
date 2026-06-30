@@ -14,6 +14,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <see cref="AnthropicReasoningBase{TReason}.Reason"/> instead of
 /// <see cref="AnthropicLegacyThinkingBase.ThinkingBudget"/>.
 /// </remarks>
+[Obsolete("Claude Sonnet 4.6 is being phased out — migrate to Sonnet5 (claude-sonnet-5). Still functional, but Anthropic will retire older models.")]
 public class Sonnet46 : AnthropicReasoningBase<Sonnet46.ReasonType>, IAgentLlm
 {
     /// <summary>

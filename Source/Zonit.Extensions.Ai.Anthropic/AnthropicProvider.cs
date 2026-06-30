@@ -52,7 +52,7 @@ public sealed class AnthropicProvider : IModelProvider
     /// <summary>
     /// Applies the model's thinking configuration to <paramref name="request"/>.
     /// <para>
-    /// Two payload shapes:
+    /// Payload shapes:
     /// <list type="bullet">
     ///   <item><description><b>Adaptive</b> (Sonnet 4.6+, Opus 4.7+ — i.e. <see cref="AnthropicAdaptiveBase"/>):
     ///   sends <c>thinking.type = "adaptive"</c> together with a sibling
@@ -61,7 +61,14 @@ public sealed class AnthropicProvider : IModelProvider
     ///   <item><description><b>Legacy enabled</b> (Sonnet 4.5, Opus 4.5/4.6 with explicit
     ///   <see cref="AnthropicLegacyThinkingBase.ThinkingBudget"/>): sends
     ///   <c>thinking.type = "enabled"</c> with a numeric <c>budget_tokens</c>.</description></item>
-    ///   <item><description><b>Disabled</b>: <c>thinking</c> stays unset.</description></item>
+    ///   <item><description><b>Disabled (opt-out)</b>: for models where
+    ///   <see cref="AnthropicAdaptiveBase.ThinkingEnabledByDefault"/> is
+    ///   <c>true</c> (currently Sonnet 5), sends an explicit
+    ///   <c>thinking.type = "disabled"</c> so omitting <c>Reason</c> still
+    ///   means "no thinking" rather than relying on Anthropic's per-model
+    ///   default.</description></item>
+    ///   <item><description><b>Disabled (omitted)</b>: every other model —
+    ///   <c>thinking</c> stays unset.</description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -116,6 +123,15 @@ public sealed class AnthropicProvider : IModelProvider
                 // act across tool calls. For Opus this is 128k, not a 64k cap.
                 _ => llm.MaxOutputTokens,
             };
+        }
+
+        // Opt-out path: models whose API enables thinking by default when
+        // `thinking` is omitted (currently Sonnet 5). Send an explicit
+        // disable so an unset `Reason` still means "no thinking" here too.
+        if (llm is AnthropicAdaptiveBase adaptiveBase && adaptiveBase.ThinkingEnabledByDefault)
+        {
+            request.Thinking = new AnthropicThinking { Type = "disabled" };
+            return 0;
         }
 
         // Legacy fixed-budget path: Sonnet 4.5, Opus 4.5/4.6, Haiku 4.5.
@@ -269,7 +285,7 @@ public sealed class AnthropicProvider : IModelProvider
             body.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase))
         {
             message += $" - the prompt exceeded model '{llm.Name}'s {llm.MaxInputTokens}-token context window. "
-                     + "Route this step to a 1M-context model (Opus46/Opus47/Opus48 or Sonnet46) or reduce the input.";
+                     + "Route this step to a 1M-context model (Opus46/Opus47/Opus48, Sonnet46 or Sonnet5) or reduce the input.";
         }
 
         return message;

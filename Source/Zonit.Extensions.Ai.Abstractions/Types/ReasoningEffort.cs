@@ -26,8 +26,9 @@ public enum ReasoningEffort
     High,
 
     /// <summary>
-    /// Extra effort. Anthropic Claude Opus 4.7 / 4.8 only — additional level above
-    /// <see cref="High"/> that allocates substantially more thinking tokens. Maps to
+    /// Extra effort — additional level above <see cref="High"/> that allocates
+    /// substantially more thinking tokens. Anthropic Claude Opus 4.7 / 4.8,
+    /// Fable 5, Mythos 5 and Sonnet 5 only (not Sonnet 4.6 or earlier). Maps to
     /// the current API wire value <c>"xhigh"</c> (Anthropic's display name for this
     /// level is "Extra"; the wire string will likely follow). Not supported by
     /// OpenAI o-series, GPT-5 series, or xAI Grok models.
@@ -35,9 +36,9 @@ public enum ReasoningEffort
     Extra,
 
     /// <summary>
-    /// Maximum effort — model uses its full thinking capacity. Anthropic Claude
-    /// Sonnet 4.6 and Opus 4.7 only (adaptive thinking). Slowest but highest
-    /// accuracy. Not supported by OpenAI or xAI providers.
+    /// Maximum effort — model uses its full thinking capacity. Anthropic
+    /// adaptive-thinking models (Sonnet 4.6+, Opus 4.7+, Fable 5, Mythos 5).
+    /// Slowest but highest accuracy. Not supported by OpenAI or xAI providers.
     /// </summary>
     Max
 }

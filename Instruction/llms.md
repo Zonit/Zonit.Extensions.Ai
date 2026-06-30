@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 121 models across 16 providers.
+Total: 122 models across 16 providers.
 
 ## Alibaba
 
@@ -45,7 +45,8 @@ Total: 121 models across 16 providers.
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus48` | `claude-opus-4-8` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
 | `Sonnet45` ⚠️ | `claude-sonnet-4-5-20250929` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
-| `Sonnet46` | `claude-sonnet-4-6` | 1,000,000 | 64,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Sonnet46` ⚠️ | `claude-sonnet-4-6` | 1,000,000 | 64,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Sonnet5` | `claude-sonnet-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 
 ### Pricing — USD / 1M tokens
 
@@ -60,6 +61,7 @@ Total: 121 models across 16 providers.
 | `Opus48` | $5 | $0.5 | $6.25 | $25 |
 | `Sonnet45` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet46` | $3 | $0.3 | $3.75 | $15 |
+| `Sonnet5` | $3 | $0.3 | $3.75 | $15 |
 
 ## Baidu
 
@@ -453,5 +455,6 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet46 (adaptive thinking). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Sonnet46` | `claude-sonnet-4-6` | Claude Sonnet 4.6 is being phased out — migrate to Sonnet5 (claude-sonnet-5). Still functional, but Anthropic will retire older models. |
 | OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost. |
 
