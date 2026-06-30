@@ -103,6 +103,20 @@ public class JsonResponseParserTests
     }
 
     [Fact]
+    public void DeserializeStructured_DoubleEncoded_StringifiedPayloadInBareObject_Recovers()
+    {
+        // EXACT production shape (2026-06-30 incident): NOT array-wrapped — a bare object
+        // whose single property value is the whole valid payload as a JSON string, e.g.
+        // {"signals":"{\"signals\":[…]}"}. Root is an object, so the array path never fires.
+        var glitch = "{\"items\":" + JsonSerializer.Serialize(ValidCollection) + "}";
+
+        var value = JsonResponseParser.DeserializeStructured<CollectionResponse>(glitch);
+
+        value.Tags.Should().Equal("a", "b");
+        value.Items.Should().ContainSingle().Which.Weight.Should().Be(7);
+    }
+
+    [Fact]
     public void DeserializeStructured_WholeBodyAsJsonStringLiteral_Recovers()
     {
         var glitch = JsonSerializer.Serialize(ValidCollection); // "{\"tags\":…}"
