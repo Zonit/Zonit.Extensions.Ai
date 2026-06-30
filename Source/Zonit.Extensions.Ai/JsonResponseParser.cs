@@ -229,7 +229,9 @@ public static partial class JsonResponseParser
     /// using the source-generated <see cref="JsonTypeInfo{T}"/> registered for the type —
     /// i.e. <b>AOT-safe with no reflection</b> for the documented
     /// <see cref="PromptBase{TResponse}"/> pattern. Unwraps an optional top-level
-    /// <c>{ "result": … }</c> envelope some providers add.
+    /// <c>{ "result": … }</c> envelope some providers add, and — on a failed parse —
+    /// recovers from double-encoded output (the payload wrapped in a 1-element array
+    /// and/or handed back as a stringified-JSON value) before surfacing the error.
     /// </summary>
     /// <remarks>
     /// Routes through <see cref="ProviderResponseOptions"/>, whose resolver chain prefers the
@@ -250,6 +252,43 @@ public static partial class JsonResponseParser
         var payload = UnwrapResultEnvelope(json);
 
         var info = (JsonTypeInfo<TResponse>)ProviderResponseOptions.GetTypeInfo(typeof(TResponse));
+
+        // Fast path: a well-formed payload deserializes directly. Healthy responses
+        // never reach the recovery below, so there is no added cost for them.
+        try
+        {
+            var value = JsonSerializer.Deserialize(payload, info);
+            if (value is not null)
+                return value;
+        }
+        catch (JsonException)
+        {
+            // Fall through to the recovery pass.
+        }
+
+        // Recovery for double-encoded structured output. Models occasionally wrap the
+        // real payload in a 1-element array and/or hand back the body as a stringified
+        // JSON property value — e.g. Anthropic on large outputs returning
+        // [{"signals":"{\"signals\":[…]}"}] instead of {"signals":[…]}. Peel those shells
+        // (bounded depth) and retry through the SAME AOT-safe JsonTypeInfo. Every candidate
+        // is still strictly validated here, so a wrong peel just fails and we fall through
+        // to the canonical error below — recovery never invents data.
+        foreach (var candidate in StructuredRecoveryCandidates(payload, 0))
+        {
+            try
+            {
+                var recovered = JsonSerializer.Deserialize(candidate, info);
+                if (recovered is not null)
+                    return recovered;
+            }
+            catch (JsonException)
+            {
+                // Try the next candidate.
+            }
+        }
+
+        // Nothing recovered: reproduce the original error (with its Path/line info) so the
+        // provider's diagnostic wrapper and existing tests see the same exception as before.
         return JsonSerializer.Deserialize(payload, info)
             ?? throw new JsonException($"Deserialization returned null for type {typeof(TResponse).Name}");
     }
@@ -274,6 +313,94 @@ public static partial class JsonResponseParser
             // Not parseable as an envelope — let the typed deserialize surface the error.
         }
         return json;
+    }
+
+    /// <summary>Maximum nesting of double-encoding shells (array wrap / stringified-JSON value)
+    /// that <see cref="DeserializeStructured"/> peels before giving up.</summary>
+    private const int MaxStructuredRecoveryDepth = 4;
+
+    /// <summary>
+    /// Yields alternative payloads to retry when a structured response fails to deserialize,
+    /// peeling the shells models sometimes add: a single-element (or stringified) array wrapper,
+    /// the whole body returned as a JSON string literal, and object property values that are
+    /// themselves stringified JSON (e.g. <c>[{"signals":"{\"signals\":[…]}"}]</c>). Structural
+    /// inspection only (<see cref="JsonDocument"/>), so it stays AOT/trim-safe; the caller
+    /// re-validates every candidate through the typed <see cref="JsonTypeInfo{T}"/>, so
+    /// over-generating candidates is harmless.
+    /// </summary>
+    private static IEnumerable<string> StructuredRecoveryCandidates(string json, int depth)
+    {
+        if (depth >= MaxStructuredRecoveryDepth)
+            yield break;
+
+        string? unwrappedString = null;
+        List<string>? inner = null;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            switch (root.ValueKind)
+            {
+                case JsonValueKind.String:
+                    // Whole body returned as a JSON string literal: "{…}" or "[…]".
+                    var s = root.GetString();
+                    if (LooksLikeJson(s))
+                        unwrappedString = s;
+                    break;
+
+                case JsonValueKind.Array:
+                    // Array wrapper: recurse into object/array elements and any element
+                    // that is itself stringified JSON.
+                    foreach (var el in root.EnumerateArray())
+                    {
+                        if (el.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+                            (inner ??= []).Add(el.GetRawText());
+                        else if (el.ValueKind == JsonValueKind.String && LooksLikeJson(el.GetString()))
+                            (inner ??= []).Add(el.GetString()!);
+                    }
+                    break;
+
+                case JsonValueKind.Object:
+                    // A property whose value is stringified JSON. The wrapper key is
+                    // unpredictable, so key off the value's shape, not its name.
+                    foreach (var prop in root.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.String && LooksLikeJson(prop.Value.GetString()))
+                            (inner ??= []).Add(prop.Value.GetString()!);
+                    }
+                    break;
+            }
+        }
+        catch (JsonException)
+        {
+            yield break;
+        }
+
+        if (unwrappedString is not null)
+        {
+            yield return unwrappedString;
+            foreach (var c in StructuredRecoveryCandidates(unwrappedString, depth + 1))
+                yield return c;
+        }
+
+        if (inner is not null)
+        {
+            foreach (var candidate in inner)
+            {
+                yield return candidate;
+                foreach (var c in StructuredRecoveryCandidates(candidate, depth + 1))
+                    yield return c;
+            }
+        }
+    }
+
+    /// <summary>True when <paramref name="s"/> looks like a JSON object or array (cheap structural guard).</summary>
+    private static bool LooksLikeJson(string? s)
+    {
+        if (string.IsNullOrWhiteSpace(s))
+            return false;
+        var t = s.AsSpan().TrimStart();
+        return t.Length > 0 && (t[0] == '{' || t[0] == '[');
     }
 
     /// <summary>

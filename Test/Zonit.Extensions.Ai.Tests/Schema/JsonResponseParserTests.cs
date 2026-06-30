@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using Xunit;
 using Zonit.Extensions.Ai;
@@ -67,6 +68,70 @@ public class JsonResponseParserTests
 
         value.Name.Should().Be("Grace");
         value.Tag.Should().Be(SampleEnum.Maintainer);
+    }
+
+    // --- Recovery from the double-encoded structured output models occasionally emit ---
+    // (observed with Anthropic on large outputs: the real {"signals":[…]} returned wrapped
+    // in a 1-element array and/or as a stringified-JSON property value). DeserializeStructured
+    // is the structured-output path every provider's ParseResponse calls.
+
+    private const string ValidCollection =
+        """{"tags":["a","b"],"numbers":[1,2,3],"items":[{"value":"x","weight":7}]}""";
+
+    [Fact]
+    public void DeserializeStructured_ArrayWrappedObject_Recovers()
+    {
+        var glitch = "[" + ValidCollection + "]";
+
+        var value = JsonResponseParser.DeserializeStructured<CollectionResponse>(glitch);
+
+        value.Tags.Should().Equal("a", "b");
+        value.Items.Should().ContainSingle().Which.Value.Should().Be("x");
+    }
+
+    [Fact]
+    public void DeserializeStructured_DoubleEncoded_StringifiedPayloadInArray_Recovers()
+    {
+        // Faithful to the production incident: the valid object handed back as a
+        // stringified-JSON property value, wrapped in a 1-element array.
+        var glitch = "[{\"items\":" + JsonSerializer.Serialize(ValidCollection) + "}]";
+
+        var value = JsonResponseParser.DeserializeStructured<CollectionResponse>(glitch);
+
+        value.Numbers.Should().Equal(1, 2, 3);
+        value.Items.Should().ContainSingle().Which.Weight.Should().Be(7);
+    }
+
+    [Fact]
+    public void DeserializeStructured_WholeBodyAsJsonStringLiteral_Recovers()
+    {
+        var glitch = JsonSerializer.Serialize(ValidCollection); // "{\"tags\":…}"
+
+        var value = JsonResponseParser.DeserializeStructured<CollectionResponse>(glitch);
+
+        value.Tags.Should().Equal("a", "b");
+    }
+
+    [Fact]
+    public void DeserializeStructured_HealthyPayload_WithJsonLookingStringField_IsNotAltered()
+    {
+        // A legitimate string value that merely *looks* like JSON must survive untouched —
+        // the healthy payload parses on the fast path and never reaches recovery.
+        const string json = """{"tags":[],"numbers":[],"items":[{"value":"{not json}","weight":1}]}""";
+
+        var value = JsonResponseParser.DeserializeStructured<CollectionResponse>(json);
+
+        value.Items.Should().ContainSingle().Which.Value.Should().Be("{not json}");
+    }
+
+    [Fact]
+    public void DeserializeStructured_GenuinelyMalformed_StillThrows()
+    {
+        const string broken = """{"tags":["a", }""";
+
+        var act = () => JsonResponseParser.DeserializeStructured<CollectionResponse>(broken);
+
+        act.Should().Throw<JsonException>();
     }
 
 #pragma warning restore IL2026, IL3050
