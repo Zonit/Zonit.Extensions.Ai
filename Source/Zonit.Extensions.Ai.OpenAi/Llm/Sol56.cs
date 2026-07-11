@@ -10,10 +10,12 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// </summary>
 /// <remarks>
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
-/// input doubles beyond 272K (per OpenAI pricing notes). Wire alias
-/// <c>gpt-5.6-sol</c>.
+/// input doubles beyond 272K (per OpenAI pricing notes). Model id
+/// <c>gpt-5.6-sol</c> (also aliased <c>gpt-5.6</c>). Supports the full
+/// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
+/// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
-public class Sol56 : OpenAiReasoningBase, IAgentLlm
+public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.6-sol";

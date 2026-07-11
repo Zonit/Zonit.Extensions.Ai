@@ -10,7 +10,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// $30 / $180 per 1M tokens (standard). Batch pricing available at half the
 /// standard rate. No cached input discount. Responses API and Batch API only.
 /// </remarks>
-public class GPT55Pro : OpenAiReasoningBase, IAgentLlm
+public class GPT55Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.5-pro";

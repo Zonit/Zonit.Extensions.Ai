@@ -128,7 +128,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
                 var hasReasoning = false;
                 if (((IReasoningLlm)reasoning).Reason.HasValue)
                 {
-                    r.Effort = ((IReasoningLlm)reasoning).Reason!.Value.ToString().ToLowerInvariant();
+                    r.Effort = OpenAiReasoningBase.EffortToWire(((IReasoningLlm)reasoning).Reason!.Value);
                     hasReasoning = true;
                 }
                 if (((IReasoningLlm)reasoning).ReasonSummary.HasValue)

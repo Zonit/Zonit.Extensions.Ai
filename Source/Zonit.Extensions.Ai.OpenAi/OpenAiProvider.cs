@@ -510,9 +510,10 @@ public sealed class OpenAiProvider : IModelProvider
             var reasoning = new OpenAiReasoningConfig();
             var hasReasoning = false;
 
-            if (reasoningLlm.Reason.HasValue)
+            var effort = ((IReasoningLlm)reasoningLlm).Reason;
+            if (effort.HasValue)
             {
-                reasoning.Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+                reasoning.Effort = OpenAiReasoningBase.EffortToWire(effort.Value);
                 hasReasoning = true;
             }
 
@@ -724,9 +725,10 @@ public sealed class OpenAiProvider : IModelProvider
         {
             var reasoning = new OpenAiReasoningConfig();
             var hasReasoning = false;
-            if (reasoningLlm.Reason.HasValue)
+            var effort = ((IReasoningLlm)reasoningLlm).Reason;
+            if (effort.HasValue)
             {
-                reasoning.Effort = reasoningLlm.Reason.Value.ToString().ToLowerInvariant();
+                reasoning.Effort = OpenAiReasoningBase.EffortToWire(effort.Value);
                 hasReasoning = true;
             }
             if (reasoningLlm.ReasonSummary.HasValue)

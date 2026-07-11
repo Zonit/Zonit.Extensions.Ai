@@ -376,7 +376,7 @@ Reasoning models expose effort, summary and verbosity controls through typed pro
 var result = await ai.GenerateAsync(
     new GPT52
     {
-        Reason    = OpenAiReasoningBase.ReasonType.High,
+        Reason    = OpenAiReasonEffort.High,
         Verbosity = OpenAiReasoningBase.VerbosityType.Low,
     },
     new ProofPrompt { Statement = "root 2 is irrational" });

@@ -6,7 +6,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
 /// input cost doubles beyond 272K.
 /// </summary>
-public class GPT54 : OpenAiReasoningBase, IAgentLlm
+public class GPT54 : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.4";

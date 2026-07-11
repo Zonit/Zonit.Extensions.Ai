@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-5 Pro - Version of GPT-5 that produces smarter and more precise responses.
 /// </summary>
-public class GPT5Pro : OpenAiReasoningBase, IAgentLlm
+public class GPT5Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5-pro";

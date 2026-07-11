@@ -8,9 +8,11 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// </summary>
 /// <remarks>
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
-/// input doubles beyond 272K. Wire alias <c>gpt-5.6-luna</c>.
+/// input doubles beyond 272K. Model id <c>gpt-5.6-luna</c>. Supports the full
+/// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
+/// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
-public class Luna56 : OpenAiReasoningBase, IAgentLlm
+public class Luna56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.6-luna";

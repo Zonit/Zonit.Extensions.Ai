@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// O3 - OpenAI's reasoning model optimized for complex problems.
 /// </summary>
-public class O3 : OpenAiReasoningBase, IAgentLlm
+public class O3 : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "o3-2025-04-16";

@@ -9,9 +9,11 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// </summary>
 /// <remarks>
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
-/// input doubles beyond 272K. Wire alias <c>gpt-5.6-terra</c>.
+/// input doubles beyond 272K. Model id <c>gpt-5.6-terra</c>. Supports the full
+/// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
+/// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
-public class Terra56 : OpenAiReasoningBase, IAgentLlm
+public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.6-terra";
