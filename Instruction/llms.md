@@ -283,8 +283,11 @@ Total: 123 models across 16 providers.
 | `GPTImage15` | `gpt-image-1.5` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage1Mini` | `gpt-image-1-mini` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage2` | `gpt-image-2` | 128,000 | — | Text, Image → Image | image | — |
+| `Luna56` | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch |
 | `O3` | `o3-2025-04-16` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `O3Pro` | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Sol56` | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
 | `TextEmbedding3Small` | `text-embedding-3-small` | 8,191 | 1,536 | Text → Embedding | embedding | — |
 | `Whisper1` ⚠️ | `whisper-1` | — | — | Audio → Text | audio | — |
@@ -317,8 +320,11 @@ Total: 123 models across 16 providers.
 | `GPTImage15` | $5 | — | — | $0 |
 | `GPTImage1Mini` | $2 | — | — | $0 |
 | `GPTImage2` | $5 | — | — | $0 |
+| `Luna56` | $1 | $0.1 | — | $6 |
 | `O3` | $2 | $0.5 | — | $8 |
 | `O3Pro` | $20 | $5 | — | $80 |
+| `Sol56` | $5 | $0.5 | — | $30 |
+| `Terra56` | $2.5 | $0.25 | — | $15 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
 | `TextEmbedding3Small` | $0.02 | — | — | $0 |
 | `Whisper1` | $0 | — | — | $0 |
