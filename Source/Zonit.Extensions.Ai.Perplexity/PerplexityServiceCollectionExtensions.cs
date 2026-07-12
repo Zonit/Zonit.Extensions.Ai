@@ -61,7 +61,7 @@ public static class PerplexityServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<PerplexityProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<PerplexityOptions>();
 
         services.TryAddModelProvider<PerplexityProvider>();
 

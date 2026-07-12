@@ -61,7 +61,7 @@ public static class GroqServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<GroqProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<GroqOptions>();
 
         services.TryAddModelProvider<GroqProvider>();
 

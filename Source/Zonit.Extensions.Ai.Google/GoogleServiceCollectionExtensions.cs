@@ -79,7 +79,7 @@ public static class GoogleServiceCollectionExtensions
 
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<GoogleProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<GoogleOptions>();
 
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<GoogleProvider>();
@@ -88,7 +88,7 @@ public static class GoogleServiceCollectionExtensions
         // SSE for the entire turn duration; the regular per-attempt timeout
         // would cancel long-running reasoning streams.
         services.AddHttpClient<GoogleAgentAdapter>()
-            .AddAiStreamingResilienceHandler();
+            .AddAiStreamingResilienceHandler<GoogleOptions>();
         services.AddTransient<IAgentProviderAdapter>(
             sp => sp.GetRequiredService<GoogleAgentAdapter>());
 

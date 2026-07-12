@@ -61,7 +61,7 @@ public static class YiServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<YiProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<YiOptions>();
 
         services.TryAddModelProvider<YiProvider>();
 

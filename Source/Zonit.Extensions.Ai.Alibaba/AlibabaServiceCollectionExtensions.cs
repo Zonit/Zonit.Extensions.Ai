@@ -61,7 +61,7 @@ public static class AlibabaServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<AlibabaProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<AlibabaOptions>();
 
         services.TryAddModelProvider<AlibabaProvider>();
 

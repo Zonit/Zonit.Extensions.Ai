@@ -61,7 +61,7 @@ public static class ZhipuServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<ZhipuProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<ZhipuOptions>();
 
         services.TryAddModelProvider<ZhipuProvider>();
 

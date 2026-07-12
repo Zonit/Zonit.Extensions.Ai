@@ -61,7 +61,7 @@ public static class TogetherServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<TogetherProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<TogetherOptions>();
 
         services.TryAddModelProvider<TogetherProvider>();
 

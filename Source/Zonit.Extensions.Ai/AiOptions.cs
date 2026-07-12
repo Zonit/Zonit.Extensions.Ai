@@ -36,6 +36,63 @@ public sealed class AiOptions
     /// exception handling). Bound from the <c>"Ai:Agent"</c> configuration section.
     /// </summary>
     public AiAgentOptions Agent { get; set; } = new();
+
+    /// <summary>
+    /// Global outbound HTTP proxy applied to every provider's API traffic.
+    /// Bound from the <c>"Ai:Proxy"</c> configuration section. Providers opt out
+    /// individually via <see cref="AiProviderOptions.UseProxy"/>.
+    /// </summary>
+    public AiProxyOptions Proxy { get; set; } = new();
+}
+
+/// <summary>
+/// Global outbound HTTP proxy for AI provider traffic. Bound from the
+/// <c>"Ai:Proxy"</c> configuration section. When <see cref="Address"/> is set and
+/// <see cref="Enabled"/> is <c>true</c>, every provider routes its API calls
+/// through the proxy — unless that provider opts out via
+/// <see cref="AiProviderOptions.UseProxy"/>.
+/// </summary>
+/// <remarks>
+/// Typical use: reach a provider that geoblocks your region (e.g. Grok 4.5 is
+/// EU-locked) by exiting through a proxy in an allowed region. Supports HTTP and
+/// SOCKS proxies — set <see cref="Address"/> to e.g. <c>http://host:8080</c> or
+/// <c>socks5://host:1080</c>. Leaving <see cref="Address"/> null disables the
+/// proxy (default) — no proxy is applied and behavior is unchanged.
+/// <para>
+/// Example appsettings.json:
+/// <code>
+/// {
+///   "Ai": {
+///     "Proxy": {
+///       "Address": "http://us-proxy.example.com:8080",
+///       "Username": "user",
+///       "Password": "pass"
+///     }
+///   }
+/// }
+/// </code>
+/// </para>
+/// </remarks>
+public sealed class AiProxyOptions
+{
+    /// <summary>
+    /// Global kill switch. When <c>false</c>, no provider uses the proxy even if
+    /// <see cref="Address"/> is set. Default: <c>true</c> (proxy is active whenever
+    /// an <see cref="Address"/> is configured).
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>
+    /// Proxy URI — e.g. <c>http://host:8080</c>, <c>https://host:8443</c> or
+    /// <c>socks5://host:1080</c>. <c>null</c>/empty disables the proxy entirely.
+    /// </summary>
+    public string? Address { get; set; }
+
+    /// <summary>Optional username for authenticated proxies.</summary>
+    public string? Username { get; set; }
+
+    /// <summary>Optional password for authenticated proxies.</summary>
+    public string? Password { get; set; }
 }
 
 /// <summary>
@@ -375,4 +432,14 @@ public abstract class AiProviderOptions
     /// If not set, uses the global <see cref="AiResilienceOptions.HttpClientTimeout"/>.
     /// </remarks>
     public TimeSpan? Timeout { get; set; }
+
+    /// <summary>
+    /// Whether this provider routes its HTTP traffic through the global proxy
+    /// (<see cref="AiOptions"/>.<see cref="AiOptions.Proxy"/>) when one is
+    /// configured. Default: <c>true</c> — configure a proxy once and every
+    /// provider uses it. Set to <c>false</c> to exclude a single provider (e.g.
+    /// keep the proxy for X/Grok but let Anthropic connect directly). Has no
+    /// effect when no global proxy is configured.
+    /// </summary>
+    public bool UseProxy { get; set; } = true;
 }

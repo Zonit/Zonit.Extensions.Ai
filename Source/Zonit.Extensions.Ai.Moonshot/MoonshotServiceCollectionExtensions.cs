@@ -61,7 +61,7 @@ public static class MoonshotServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<MoonshotProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<MoonshotOptions>();
 
         services.TryAddModelProvider<MoonshotProvider>();
 

@@ -61,7 +61,7 @@ public static class CohereServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<CohereProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<CohereOptions>();
 
         services.TryAddModelProvider<CohereProvider>();
 

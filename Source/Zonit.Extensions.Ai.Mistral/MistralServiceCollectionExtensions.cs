@@ -73,7 +73,7 @@ public static class MistralServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<MistralProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<MistralOptions>();
 
         services.TryAddModelProvider<MistralProvider>();
 

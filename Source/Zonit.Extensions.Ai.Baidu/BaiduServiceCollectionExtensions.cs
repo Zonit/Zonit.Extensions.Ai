@@ -61,7 +61,7 @@ public static class BaiduServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<BaiduProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<BaiduOptions>();
 
         services.TryAddModelProvider<BaiduProvider>();
 

@@ -47,6 +47,35 @@ builder.Services.AddAiOpenAi(o =>                             // or full options
 });
 ```
 
+## Proxy
+
+Route provider traffic through an outbound **HTTP or SOCKS proxy** — set it once under `Ai:Proxy`
+and **every** provider uses it. Handy to reach a region-locked model (for example Grok 4.5 is
+EU-blocked) through an exit node in an allowed region.
+
+```json
+{
+  "Ai": {
+    "Proxy": {
+      "Address": "http://us-proxy.example.com:8080",   // or "socks5://host:1080"
+      "Username": "user",                                // optional (authenticated proxies)
+      "Password": "pass"                                 // optional
+    }
+  }
+}
+```
+
+No `Address` means no proxy — the default, behaviour unchanged. Set `"Enabled": false` to keep the
+address on file but switch the proxy off globally.
+
+Opt a single provider **out** with `UseProxy` (default `true`) — every provider tunnels except the
+ones you exclude:
+
+```csharp
+builder.Services.AddAiX();                                 // Grok  → through the proxy
+builder.Services.AddAiAnthropic(o => o.UseProxy = false);  // Claude → connects directly
+```
+
 ## Resilience
 
 One section, `Ai:Resilience`, governs retry, timeout and circuit-breaker behaviour for **every

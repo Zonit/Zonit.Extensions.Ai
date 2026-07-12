@@ -61,7 +61,7 @@ public static class FireworksServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<FireworksProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<FireworksOptions>();
 
         services.TryAddModelProvider<FireworksProvider>();
 

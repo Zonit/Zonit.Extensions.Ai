@@ -73,7 +73,7 @@ public static class DeepSeekServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<DeepSeekProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<DeepSeekOptions>();
 
         services.TryAddModelProvider<DeepSeekProvider>();
 

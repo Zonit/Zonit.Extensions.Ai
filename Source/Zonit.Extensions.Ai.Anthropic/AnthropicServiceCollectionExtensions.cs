@@ -124,7 +124,7 @@ public static class AnthropicServiceCollectionExtensions
         // circuit breaker). Also serves as the CLI transport's fallback for requests
         // the CLI cannot represent (image/PDF attachments, tools / agent loop).
         services.AddHttpClient<AnthropicApiTransport>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<AnthropicOptions>();
 
         // CLI (claude -p) transport + its process runner (stateless singleton).
         services.TryAddSingleton<IClaudeCliRunner, ClaudeCliProcess>();
@@ -154,7 +154,7 @@ public static class AnthropicServiceCollectionExtensions
         // 600 s. Stream liveness is enforced client-side by the inter-
         // event SSE watchdog and HTTP/2 keepalive PING frames.
         services.AddHttpClient<AnthropicAgentAdapter>()
-            .AddAiStreamingResilienceHandler();
+            .AddAiStreamingResilienceHandler<AnthropicOptions>();
         services.AddTransient<IAgentProviderAdapter>(
             sp => sp.GetRequiredService<AnthropicAgentAdapter>());
 

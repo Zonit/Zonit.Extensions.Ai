@@ -91,7 +91,7 @@ public static class OpenAiServiceCollectionExtensions
 
         // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
         services.AddHttpClient<OpenAiProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<OpenAiOptions>();
 
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<OpenAiProvider>();
@@ -104,7 +104,7 @@ public static class OpenAiServiceCollectionExtensions
         // run longer than the 10-min non-streaming AttemptTimeout for
         // reasoning models. See AddAiStreamingResilienceHandler docstring.
         services.AddHttpClient<OpenAiAgentAdapter>()
-            .AddAiStreamingResilienceHandler();
+            .AddAiStreamingResilienceHandler<OpenAiOptions>();
         services.AddTransient<IAgentProviderAdapter>(
             sp => sp.GetRequiredService<OpenAiAgentAdapter>());
 

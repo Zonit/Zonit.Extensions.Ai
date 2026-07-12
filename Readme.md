@@ -835,6 +835,12 @@ Keep secrets in User Secrets, environment variables or a vault; do not hard-code
 Each provider extends a common `AiProviderOptions` (`ApiKey`, `BaseUrl`, `Timeout`) and adds its
 own fields where relevant.
 
+### Proxy
+
+There is built-in **proxy support**: point every provider at an outbound HTTP or SOCKS proxy under
+`Ai:Proxy`, and exclude individual providers with `UseProxy = false`. Useful for region-locked
+endpoints. See [Instruction/configuration.md](Instruction/configuration.md).
+
 ### Anthropic over the Claude Code CLI (SDK transport)
 
 The Anthropic provider can run through the local **Claude Code CLI** (`claude -p`) instead of the

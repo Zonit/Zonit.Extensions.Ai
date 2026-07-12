@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+using System.Net;
 using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http.Resilience;
@@ -30,7 +32,22 @@ public static class HttpClientBuilderExtensions
     /// <param name="builder">The HttpClient builder.</param>
     /// <returns>The HttpClient builder for chaining.</returns>
     public static IHttpClientBuilder AddAiResilienceHandler(this IHttpClientBuilder builder)
-        => AddAiResilienceHandlerCore(builder, streaming: false);
+        => AddAiResilienceHandlerCore(builder, streaming: false, useProxyResolver: null);
+
+    /// <summary>
+    /// <inheritdoc cref="AddAiResilienceHandler(IHttpClientBuilder)"/>
+    /// <para>
+    /// This overload also reads the provider's <typeparamref name="TOptions"/> so that
+    /// its <see cref="AiProviderOptions.UseProxy"/> flag can exclude the provider from the
+    /// global <see cref="AiProxyOptions"/> proxy while every other provider keeps using it.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TOptions">The provider's options type.</typeparam>
+    public static IHttpClientBuilder AddAiResilienceHandler<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions>(
+        this IHttpClientBuilder builder)
+        where TOptions : AiProviderOptions
+        => AddAiResilienceHandlerCore(builder, streaming: false, useProxyResolver: UseProxyResolver<TOptions>);
 
     /// <summary>
     /// Adds resilience handling for <i>streaming</i> AI clients (SSE-based
@@ -61,9 +78,33 @@ public static class HttpClientBuilderExtensions
     /// <param name="builder">The HttpClient builder.</param>
     /// <returns>The HttpClient builder for chaining.</returns>
     public static IHttpClientBuilder AddAiStreamingResilienceHandler(this IHttpClientBuilder builder)
-        => AddAiResilienceHandlerCore(builder, streaming: true);
+        => AddAiResilienceHandlerCore(builder, streaming: true, useProxyResolver: null);
 
-    private static IHttpClientBuilder AddAiResilienceHandlerCore(IHttpClientBuilder builder, bool streaming)
+    /// <summary>
+    /// <inheritdoc cref="AddAiStreamingResilienceHandler(IHttpClientBuilder)"/>
+    /// <para>
+    /// This overload also reads the provider's <typeparamref name="TOptions"/> so that its
+    /// <see cref="AiProviderOptions.UseProxy"/> flag can exclude the provider from the
+    /// global <see cref="AiProxyOptions"/> proxy.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TOptions">The provider's options type.</typeparam>
+    public static IHttpClientBuilder AddAiStreamingResilienceHandler<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions>(
+        this IHttpClientBuilder builder)
+        where TOptions : AiProviderOptions
+        => AddAiResilienceHandlerCore(builder, streaming: true, useProxyResolver: UseProxyResolver<TOptions>);
+
+    private static bool UseProxyResolver<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] TOptions>(
+        IServiceProvider serviceProvider)
+        where TOptions : AiProviderOptions
+        => serviceProvider.GetService<IOptions<TOptions>>()?.Value.UseProxy ?? true;
+
+    private static IHttpClientBuilder AddAiResilienceHandlerCore(
+        IHttpClientBuilder builder,
+        bool streaming,
+        Func<IServiceProvider, bool>? useProxyResolver)
     {
         // Configure HttpClient timeout to be higher than total pipeline timeout
         // to let the resilience handler manage timeouts
@@ -80,7 +121,7 @@ public static class HttpClientBuilderExtensions
         // half-closed, then block on InitialFillAsync until the resilience
         // timeout fires — even though the request has only been idle for
         // ~30 seconds.
-        builder.ConfigurePrimaryHttpMessageHandler(_ => CreateAiSocketsHandler());
+        builder.ConfigurePrimaryHttpMessageHandler(sp => CreateAiSocketsHandler(sp, useProxyResolver));
 
         // Use standard resilience handler and configure from options
         if (streaming)
@@ -104,32 +145,72 @@ public static class HttpClientBuilderExtensions
     /// enough for an intermediary to drop it, and multi-connection fallback so
     /// a single stuck stream cannot starve subsequent requests.
     /// </summary>
-    private static SocketsHttpHandler CreateAiSocketsHandler() => new()
+    private static SocketsHttpHandler CreateAiSocketsHandler(
+        IServiceProvider serviceProvider,
+        Func<IServiceProvider, bool>? useProxyResolver)
     {
-        // Recycle every connection after 5 min so DNS / TLS / load-balancer
-        // changes propagate and very-long-lived sockets don't accumulate
-        // server-side state we cannot see.
-        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        var handler = new SocketsHttpHandler
+        {
+            // Recycle every connection after 5 min so DNS / TLS / load-balancer
+            // changes propagate and very-long-lived sockets don't accumulate
+            // server-side state we cannot see.
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
 
-        // Default is 1 min, but typical edge proxies (Cloudflare ~100s, many
-        // corp NATs ~60s) drop idle connections silently. Closing them on the
-        // client side first means we open a fresh socket on the next request
-        // instead of writing into a black hole.
-        PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
+            // Default is 1 min, but typical edge proxies (Cloudflare ~100s, many
+            // corp NATs ~60s) drop idle connections silently. Closing them on the
+            // client side first means we open a fresh socket on the next request
+            // instead of writing into a black hole.
+            PooledConnectionIdleTimeout = TimeSpan.FromSeconds(30),
 
-        // HTTP/2 keepalive: send a PING frame every 30 s while a request is
-        // in flight, fail fast if no pong comes back within 15 s. This is the
-        // mechanism that turns "10-minute hang then timeout" into "we notice
-        // the dead connection immediately and the resilience handler retries".
-        KeepAlivePingDelay = TimeSpan.FromSeconds(30),
-        KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
-        KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
+            // HTTP/2 keepalive: send a PING frame every 30 s while a request is
+            // in flight, fail fast if no pong comes back within 15 s. This is the
+            // mechanism that turns "10-minute hang then timeout" into "we notice
+            // the dead connection immediately and the resilience handler retries".
+            KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+            KeepAlivePingTimeout = TimeSpan.FromSeconds(15),
+            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
 
-        // Allow opening additional HTTP/2 connections if the existing one is
-        // saturated or stalling — by default a single connection is multiplexed
-        // and a stuck stream blocks unrelated traffic.
-        EnableMultipleHttp2Connections = true,
-    };
+            // Allow opening additional HTTP/2 connections if the existing one is
+            // saturated or stalling — by default a single connection is multiplexed
+            // and a stuck stream blocks unrelated traffic.
+            EnableMultipleHttp2Connections = true,
+        };
+
+        // Route through the global proxy (Ai:Proxy) unless this provider opted out
+        // via AiProviderOptions.UseProxy. Used e.g. to reach a region-locked model
+        // (Grok 4.5 is EU-blocked) through an allowed-region exit node.
+        var useProxy = useProxyResolver?.Invoke(serviceProvider) ?? true;
+        if (useProxy)
+        {
+            var proxy = ResolveProxy(serviceProvider.GetService<IOptions<AiOptions>>()?.Value.Proxy);
+            if (proxy is not null)
+            {
+                handler.Proxy = proxy;
+                handler.UseProxy = true;
+            }
+        }
+
+        return handler;
+    }
+
+    /// <summary>
+    /// Builds an <see cref="IWebProxy"/> from <see cref="AiProxyOptions"/>, or
+    /// <c>null</c> when no proxy should apply (options null, <see cref="AiProxyOptions.Enabled"/>
+    /// false, or no <see cref="AiProxyOptions.Address"/>). Supports HTTP and SOCKS
+    /// addresses; attaches credentials when a username is configured. Internal for
+    /// deterministic unit testing.
+    /// </summary>
+    internal static IWebProxy? ResolveProxy(AiProxyOptions? options)
+    {
+        if (options is null || !options.Enabled || string.IsNullOrWhiteSpace(options.Address))
+            return null;
+
+        var proxy = new WebProxy(options.Address);
+        if (!string.IsNullOrEmpty(options.Username))
+            proxy.Credentials = new NetworkCredential(options.Username, options.Password);
+
+        return proxy;
+    }
 
     /// <summary>
     /// Configures resilience settings from AiOptions.

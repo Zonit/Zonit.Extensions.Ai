@@ -74,7 +74,7 @@ public static class XServiceCollectionExtensions
             services.PostConfigure(options);
 
         services.AddHttpClient<XProvider>()
-            .AddAiResilienceHandler();
+            .AddAiResilienceHandler<XOptions>();
 
         services.TryAddModelProvider<XProvider>();
 
@@ -82,7 +82,7 @@ public static class XServiceCollectionExtensions
         // SSE for the entire turn duration; the regular per-attempt timeout
         // would cancel long-running reasoning streams.
         services.AddHttpClient<XAgentAdapter>()
-            .AddAiStreamingResilienceHandler();
+            .AddAiStreamingResilienceHandler<XOptions>();
         services.AddTransient<IAgentProviderAdapter>(
             sp => sp.GetRequiredService<XAgentAdapter>());
 
