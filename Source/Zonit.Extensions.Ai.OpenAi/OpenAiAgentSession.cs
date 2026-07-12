@@ -11,10 +11,14 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// Stateful agent session for OpenAI Responses API.
 /// </summary>
 /// <remarks>
-/// Uses <c>previous_response_id</c> to chain iterations — only the user prompt,
-/// tool schemas and structured-output format are sent in the first call; every
-/// subsequent call sends only the new tool results (function_call_output items).
-/// This mirrors OpenAI's recommended pattern for tool-calling agents.
+/// Uses <c>previous_response_id</c> to chain iterations: the conversation history
+/// (messages, function calls and their outputs) lives server-side, so each
+/// continuation sends only the new tool results as <c>input</c>. Request-level
+/// parameters are NOT inherited across the chain, however — <c>tools</c>,
+/// <c>instructions</c>, <c>max_output_tokens</c>, reasoning config and
+/// <c>text.format</c> are re-sent on every turn via <see cref="ApplyPerRequestConfig"/>.
+/// (Omitting <c>tools</c> on continuations left the model with no tools on
+/// turn 2+, so it stopped after a single call — the OpenAI "not an agent" symptom.)
 /// </remarks>
 internal sealed class OpenAiAgentSession : IAgentSession
 {
@@ -24,6 +28,11 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
     private string? _previousResponseId;
     private int _turnIndex;
+
+    // System instruction resent on every turn. The Responses API does not carry
+    // `instructions` across previous_response_id chaining, so we cache it on the
+    // first turn (chat-seeded runs only) and re-send it on every continuation.
+    private string? _instructions;
 
     // Cache of call_id → tool name; used to build function_call_output items.
     private readonly Dictionary<string, string> _pendingCalls = new(StringComparer.Ordinal);
@@ -72,11 +81,9 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
     private OpenAiResponsesRequest BuildInitialRequest()
     {
-        var llm = _context.Llm;
         var request = new OpenAiResponsesRequest
         {
-            Model = llm.Name,
-            MaxOutputTokens = llm.MaxTokens,
+            Model = _context.Llm.Name,
         };
 
         var prompt = _context.Prompt;
@@ -85,11 +92,13 @@ internal sealed class OpenAiAgentSession : IAgentSession
         var seededFromChat = SeedInitialChatInto(input, prompt.Files);
 
         // When seeded from chat[], prompt.Text becomes the system instruction
-        // (per IAiProvider.ChatAsync semantics). Standalone agent runs inject
+        // (per IAiProvider.ChatAsync semantics). It is cached in _instructions and
+        // re-sent on every turn (the Responses API does not carry `instructions`
+        // across previous_response_id chaining). Standalone agent runs inject
         // prompt.Text as the initial user message instead — see the !seededFromChat
         // branch below.
         if (seededFromChat && !string.IsNullOrEmpty(prompt.Text))
-            request.Instructions = prompt.Text;
+            _instructions = prompt.Text;
 
         if (!seededFromChat)
         {
@@ -114,69 +123,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
         request.Input = input;
 
-        request.Text = BuildStructuredFormat();
-
-        switch (llm)
-        {
-            case OpenAiChatBase chat:
-                if (chat.Temperature < 1.0) request.Temperature = chat.Temperature;
-                if (chat.TopP < 1.0) request.TopP = chat.TopP;
-                break;
-
-            case OpenAiReasoningBase reasoning:
-                var r = new OpenAiReasoningConfig();
-                var hasReasoning = false;
-                if (((IReasoningLlm)reasoning).Reason.HasValue)
-                {
-                    r.Effort = OpenAiReasoningBase.EffortToWire(((IReasoningLlm)reasoning).Reason!.Value);
-                    hasReasoning = true;
-                }
-                if (((IReasoningLlm)reasoning).ReasonSummary.HasValue)
-                {
-                    r.Summary = ((IReasoningLlm)reasoning).ReasonSummary!.Value.ToString().ToLowerInvariant();
-                    hasReasoning = true;
-                }
-                if (hasReasoning) request.Reasoning = r;
-
-                if (((IReasoningLlm)reasoning).OutputVerbosity.HasValue)
-                {
-                    request.Text ??= new OpenAiTextConfig();
-                    request.Text.Verbosity = ((IReasoningLlm)reasoning).OutputVerbosity!.Value.ToString().ToLowerInvariant();
-                }
-                break;
-        }
-
-        if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
-            request.Store = true;
-
-        var tools = new List<OpenAiToolItem>();
-        if (llm is OpenAiBase ob && ob.Tools is { Length: > 0 } native)
-        {
-            foreach (var t in native)
-                tools.Add(OpenAiProvider.BuildToolItem(llm, t));
-        }
-        foreach (var custom in _context.Tools)
-        {
-            // OpenAI strict function tools require `additionalProperties:false`
-            // on every object node AND every property listed in `required`.
-            // That is a *subset* of JSON Schema; MCP servers ship plain JSON
-            // Schema with optional fields, so forcing Strict=true on raw MCP
-            // input schemas trips HTTP 400 invalid_function_parameters
-            // ("'additionalProperties' is required to be supplied and to be
-            // false"). Only opt in when the schema already declares the
-            // contract at the root — authors of hand-rolled schemas can flip
-            // it on by emitting `additionalProperties:false` themselves.
-            tools.Add(new OpenAiToolItem
-            {
-                Type = "function",
-                Name = custom.Name,
-                Description = custom.Description,
-                Parameters = custom.InputSchema,
-                Strict = HasStrictRoot(custom.InputSchema) ? true : null,
-            });
-        }
-        if (tools.Count > 0)
-            request.Tools = tools;
+        ApplyPerRequestConfig(request);
 
         return request;
     }
@@ -197,17 +144,119 @@ internal sealed class OpenAiAgentSession : IAgentSession
             });
         }
 
-        return new OpenAiResponsesRequest
+        var request = new OpenAiResponsesRequest
         {
             Model = _context.Llm.Name,
             PreviousResponseId = _previousResponseId,
             Input = input,
-            // Resend the structured-output format: the Responses API does NOT carry
-            // text.format across previous_response_id chaining, so without this the
-            // post-tool-call final answer comes back as free-form text and fails to
-            // parse into TResponse.
-            Text = BuildStructuredFormat(),
         };
+
+        // The Responses API does NOT carry request-level parameters across
+        // previous_response_id chaining — only conversation *items* (messages,
+        // function calls/outputs) are inherited. Every turn must therefore re-send
+        // the full per-request config. Omitting `tools` in particular leaves the
+        // model with no tools on turn 2+, so it stops after a single tool call and
+        // may even claim "tools are unavailable". Configure exactly like turn 1.
+        ApplyPerRequestConfig(request);
+
+        return request;
+    }
+
+    /// <summary>
+    /// Applies the per-request configuration shared by the initial and every
+    /// continuation turn — instructions, max output tokens, sampling / reasoning
+    /// knobs, structured-output format and the tool list. The Responses API does
+    /// not persist any of these across <c>previous_response_id</c>, so they are
+    /// re-sent on every request.
+    /// </summary>
+    private void ApplyPerRequestConfig(OpenAiResponsesRequest request)
+    {
+        var llm = _context.Llm;
+
+        request.MaxOutputTokens = llm.MaxTokens;
+
+        if (_instructions is not null)
+            request.Instructions = _instructions;
+
+        request.Text = BuildStructuredFormat();
+
+        switch (llm)
+        {
+            case OpenAiChatBase chat:
+                if (chat.Temperature < 1.0) request.Temperature = chat.Temperature;
+                if (chat.TopP < 1.0) request.TopP = chat.TopP;
+                break;
+
+            case OpenAiReasoningBase reasoning:
+                var r = new OpenAiReasoningConfig();
+                var hasReasoning = false;
+                var effort = ((IReasoningLlm)reasoning).Reason;
+                if (effort.HasValue)
+                {
+                    r.Effort = OpenAiReasoningBase.EffortToWire(effort.Value);
+                    hasReasoning = true;
+                }
+                if (((IReasoningLlm)reasoning).ReasonSummary.HasValue)
+                {
+                    r.Summary = ((IReasoningLlm)reasoning).ReasonSummary!.Value.ToString().ToLowerInvariant();
+                    hasReasoning = true;
+                }
+                if (hasReasoning) request.Reasoning = r;
+
+                if (((IReasoningLlm)reasoning).OutputVerbosity.HasValue)
+                {
+                    request.Text ??= new OpenAiTextConfig();
+                    request.Text.Verbosity = ((IReasoningLlm)reasoning).OutputVerbosity!.Value.ToString().ToLowerInvariant();
+                }
+                break;
+        }
+
+        if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
+            request.Store = true;
+
+        var tools = BuildToolsList();
+        if (tools.Count > 0)
+            request.Tools = tools;
+    }
+
+    /// <summary>
+    /// Builds the tool list (native provider tools + agent-registered function
+    /// tools) sent on every turn. See <see cref="ApplyPerRequestConfig"/> for why
+    /// the list is rebuilt and re-sent rather than relying on server-side state.
+    /// </summary>
+    private List<OpenAiToolItem> BuildToolsList()
+    {
+        var llm = _context.Llm;
+        var tools = new List<OpenAiToolItem>();
+
+        if (llm is OpenAiBase ob && ob.Tools is { Length: > 0 } native)
+        {
+            foreach (var t in native)
+                tools.Add(OpenAiProvider.BuildToolItem(llm, t));
+        }
+
+        foreach (var custom in _context.Tools)
+        {
+            // OpenAI strict function tools require `additionalProperties:false`
+            // on every object node AND every property listed in `required`.
+            // That is a *subset* of JSON Schema; MCP servers ship plain JSON
+            // Schema with optional fields, so forcing Strict=true on raw MCP
+            // input schemas trips HTTP 400 invalid_function_parameters
+            // ("'additionalProperties' is required to be supplied and to be
+            // false"). Only opt in when the schema already declares the
+            // contract at the root — authors of hand-rolled schemas can flip
+            // it on by emitting `additionalProperties:false` themselves.
+            tools.Add(new OpenAiToolItem
+            {
+                Type = "function",
+                Name = custom.Name,
+                Description = custom.Description,
+                Parameters = custom.InputSchema,
+                Strict = HasStrictRoot(custom.InputSchema) ? true : null,
+            });
+        }
+
+        return tools;
     }
 
     /// <summary>
