@@ -11,7 +11,8 @@ the compiler stops you from, for example, asking an embedding model to generate 
 | `IReasoningLlm` | Configurable reasoning effort, summary, verbosity |
 | `IImageLlm` | Image generation |
 | `IEmbeddingLlm` | Text embeddings |
-| `IAudioLlm` | Audio transcription |
+| `IAudioLlm` | Audio transcription (speech → text) |
+| `ISpeechLlm` | Speech synthesis / TTS (text → speech) |
 | `IVideoLlm` | Video generation |
 | `IFast` | Opt-in fast inference tier (premium pricing) |
 
@@ -40,6 +41,77 @@ ILlm model = quality switch
 };
 var result = await ai.GenerateAsync(model, prompt, ct);
 ```
+
+## Speech (text-to-speech)
+
+`ISpeechLlm` models turn **text into audio** — the mirror of `IAudioLlm` transcription. Install a
+TTS provider (`Zonit.Extensions.Ai.ElevenLabs`, register with `AddAiElevenLabs()`), pick a model,
+set the voice and output format on the instance, then pass the text:
+
+```csharp
+using Zonit.Extensions.Ai.ElevenLabs;
+
+var speech = new ElevenMultilingualV2
+{
+    Voice  = ElevenVoices.Rachel,               // any voice id — see below
+    Format = ElevenAudioFormat.Mp3_44100_128,   // enum, not a raw string
+};
+
+Result<Asset> audio = await ai.GenerateAsync(speech, "Cześć, jak się masz?", ct);
+await File.WriteAllBytesAsync("out.mp3", audio.Value.Data, ct);   // Asset carries bytes in .Data
+```
+
+The configuration lives on the model object (same convention as image models), so the positional
+call takes only the text. Cost is per input character: `ai.CalculateCost(speech, text.Length)`.
+
+**Choosing a model.** Concrete `Eleven*` classes live under the package's `Llm/` folder and appear
+in [`llms.md`](./llms.md). Rough guide: `ElevenV3` (most expressive, 70+ languages),
+`ElevenMultilingualV2` (quality, 29 languages), `ElevenTurboV2_5` (balanced), `ElevenFlashV2_5`
+(lowest latency). Pick with IntelliSense.
+
+**Voice.** A voice is a string id, because providers expose thousands of premade voices plus your
+own cloned/designed ones — too many to enumerate. `ElevenVoices` is a small catalog of premade ids
+for convenience (`ElevenVoices.Rachel`), but **any** id works, including a cloned-voice id from your
+account: `new ElevenMultilingualV2 { Voice = "xxxx" }`. (Professional/cloned voices
+may require a higher ElevenLabs subscription tier; the API returns a clear 403 if your plan can't use
+one.)
+
+**Format.** `ElevenAudioFormat` is an enum (fixed set, IDE-discoverable) whose members map to the
+API's `output_format` wire value — MP3 at several bitrates, raw PCM, and μ-law for telephony.
+
+**Tuning delivery.** `Stability`, `SimilarityBoost`, `Style` and `UseSpeakerBoost` are init
+properties on the model with sensible defaults; override them for more or less expressive output.
+
+### Creating your own model
+
+The `Eleven*` classes cover the current engines, but the set of models changes — you can add one
+(or a preconfigured variant) yourself without waiting for a package update. Derive from
+`ElevenLabsSpeechBase` and set `Name` to the ElevenLabs `model_id`:
+
+```csharp
+using Zonit.Extensions.Ai.ElevenLabs;
+
+// A brand-new engine id not yet in the package:
+public sealed class ElevenSomethingNew : ElevenLabsSpeechBase
+{
+    public override string Name => "eleven_something_new";   // the model_id sent to the API
+    public override int MaxCharacters => 40_000;             // reject longer text up front
+    public override decimal PricePerThousandCharacters => 0.30m; // your plan's rate, for cost math
+}
+```
+
+Because it derives from the same base, it flows through `ai.GenerateAsync(speech, text)` exactly like
+the built-ins. Often you don't even need a subclass — just build a preconfigured instance where you
+need it (voice and delivery are init properties):
+
+```csharp
+var narrator = new ElevenMultilingualV2 { Voice = ElevenVoices.Adam, Stability = 0.7 };
+var line = await ai.GenerateAsync(narrator, "Rozdział pierwszy.", ct);
+```
+
+Custom subclasses you define in your own project do **not** appear in the generated
+[`llms.md`](./llms.md) (that catalog reflects only the provider packages) — that is expected; the
+catalog lists what ships in the box, your models are yours.
 
 ## Reasoning models
 

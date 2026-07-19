@@ -42,8 +42,8 @@ One API covers every provider, every modality, and the agentic stack.
 
 | | |
 | :--- | :--- |
-| **16 providers** | OpenAI · Anthropic · Google · xAI · DeepSeek · Mistral · Groq · Together · Fireworks · Cohere · Perplexity · Alibaba · Baidu · Zhipu · Moonshot · 01.AI |
-| **Every modality** | text · structured output (JSON Schema) · images · embeddings · audio transcription · video · streaming |
+| **17 providers** | OpenAI · Anthropic · Google · xAI · DeepSeek · Mistral · Groq · Together · Fireworks · Cohere · Perplexity · Alibaba · Baidu · Zhipu · Moonshot · 01.AI · ElevenLabs |
+| **Every modality** | text · structured output (JSON Schema) · images · embeddings · audio transcription · speech / TTS · video · streaming |
 | **Agentic** | typed tools · external MCP servers · parallel tool calls · streaming events · full audit trail |
 | **Production** | token usage and computed cost (including nested) · retry, timeout, circuit-breaker · reasoning and fast modes · AOT- and trim-ready (`net10.0`) |
 | **AI-assistant ready** | ships instructions for **GitHub Copilot, Claude Code and Cursor**; your coding agent learns the library on install ([details](#ai-assistant-ready)) |
@@ -203,7 +203,8 @@ stops you from, for example, asking an embedding model to generate an image.
 | `IReasoningLlm` | Configurable reasoning effort, summaries, verbosity |
 | `IImageLlm`     | Image generation |
 | `IEmbeddingLlm` | Text embeddings |
-| `IAudioLlm`     | Audio transcription |
+| `IAudioLlm`     | Audio transcription (speech → text) |
+| `ISpeechLlm`    | Speech synthesis / TTS (text → speech) |
 | `IVideoLlm`     | Video generation |
 | `IFast`         | Opt-in fast inference tier (premium pricing) |
 
@@ -278,7 +279,8 @@ model's capability interface:
 | `GenerateAsync(imageLlm, string)` / `(…, IPrompt<Asset>)` | `IImageLlm`     | `Result<Asset>` |
 | `GenerateAsync(videoLlm, string)` / `(…, IPrompt<Asset>)` | `IVideoLlm`     | `Result<Asset>` |
 | `GenerateAsync(embeddingLlm, string)`   | `IEmbeddingLlm` | `Result<float[]>` |
-| `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm`     | `Result<string>` |
+| `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm`     | `Result<string>` — transcription |
+| `GenerateAsync(speechLlm, string)`      | `ISpeechLlm`    | `Result<Asset>` — TTS audio |
 | `ChatAsync(llm, prompt, history)`       | `ILlm`          | `Result<T>` — multi-turn, no tools |
 | `StreamAsync(llm, string)` · `ChatStreamAsync(llm, prompt, history)` | `ILlm` | `IAsyncEnumerable<string>` (tokens) |
 | `CalculateCost(...)` / `EstimateCost(...)` | various     | `Price` |
@@ -358,12 +360,31 @@ Result<float[]> embedding = await ai.GenerateAsync(
 float[] vector = embedding.Value;
 ```
 
-### Audio transcription
+### Audio transcription (speech → text)
 
 ```csharp
 var audio = new Asset(await File.ReadAllBytesAsync("speech.mp3"), "speech.mp3");
 var text  = await ai.GenerateAsync(new GPT4oTranscribe(), audio, language: "en");
 Console.WriteLine(text.Value);
+```
+
+### Speech synthesis / TTS (text → speech)
+
+Needs a TTS provider — `dotnet add package Zonit.Extensions.Ai.ElevenLabs`, then
+`AddAiElevenLabs()`. Voice and output format live on the model instance:
+
+```csharp
+using Zonit.Extensions.Ai.ElevenLabs;
+
+var speech = await ai.GenerateAsync(
+    new ElevenMultilingualV2
+    {
+        Voice  = ElevenVoices.Rachel,               // any voice id (premade or cloned)
+        Format = ElevenAudioFormat.Mp3_44100_128,
+    },
+    "Cześć, jak się masz?");
+
+await File.WriteAllBytesAsync("out.mp3", speech.Value.Data);   // audio bytes in .Value.Data
 ```
 
 ---
@@ -940,9 +961,10 @@ Install only what you use. Every package version and download count below is liv
 | Zhipu | **Zonit.Extensions.Ai.Zhipu** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Zhipu.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Zhipu) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Zhipu.svg?label=) |
 | Moonshot | **Zonit.Extensions.Ai.Moonshot** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Moonshot.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Moonshot) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Moonshot.svg?label=) |
 | 01.AI | **Zonit.Extensions.Ai.Yi** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.Yi.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.Yi) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.Yi.svg?label=) |
+| ElevenLabs (text-to-speech) | **Zonit.Extensions.Ai.ElevenLabs** | [![v](https://img.shields.io/nuget/v/Zonit.Extensions.Ai.ElevenLabs.svg?label=)](https://www.nuget.org/packages/Zonit.Extensions.Ai.ElevenLabs) | ![dt](https://img.shields.io/nuget/dt/Zonit.Extensions.Ai.ElevenLabs.svg?label=) |
 
 Each provider is registered with its matching extension method: `AddAiOpenAi()`,
-`AddAiAnthropic()`, `AddAiGoogle()`, `AddAiX()`, `AddAiGroq()`, and so on.
+`AddAiAnthropic()`, `AddAiGoogle()`, `AddAiX()`, `AddAiGroq()`, `AddAiElevenLabs()`, and so on.
 
 ---
 

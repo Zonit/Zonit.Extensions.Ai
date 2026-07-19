@@ -31,7 +31,7 @@ public class ModelCatalogTests
     [
         "OpenAi", "Anthropic", "Google", "X", "Mistral", "DeepSeek", "Cohere",
         "Baidu", "Groq", "Moonshot", "Zhipu", "Alibaba", "Yi", "Together",
-        "Fireworks", "Perplexity",
+        "Fireworks", "Perplexity", "ElevenLabs",
     ];
 
     [Fact]
@@ -181,6 +181,7 @@ public class ModelCatalogTests
         Add("video", typeof(IVideoLlm));
         Add("embedding", typeof(IEmbeddingLlm));
         Add("audio", typeof(IAudioLlm));
+        Add("speech", typeof(ISpeechLlm));
         Add("fast", typeof(IFast));
 
         return caps.Count == 0 ? "—" : string.Join(", ", caps);

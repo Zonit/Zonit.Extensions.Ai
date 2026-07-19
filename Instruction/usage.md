@@ -81,7 +81,8 @@ plain-`string` form alongside the `IPrompt<T>` form.
 | `GenerateAsync(imageLlm, string)` / `(imageLlm, IPrompt<Asset>)` | `IImageLlm` | `Result<Asset>` |
 | `GenerateAsync(videoLlm, string)` / `(videoLlm, IPrompt<Asset>)` | `IVideoLlm` | `Result<Asset>` |
 | `GenerateAsync(embeddingLlm, string)` | `IEmbeddingLlm` | `Result<float[]>` |
-| `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm` | `Result<string>` |
+| `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm` | `Result<string>` — transcription |
+| `GenerateAsync(speechLlm, string)` | `ISpeechLlm` | `Result<Asset>` — TTS audio |
 | `ChatAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `Result<T>` — multi-turn, **no tools** |
 | `StreamAsync(llm, string)` | `ILlm` | `IAsyncEnumerable<string>` — text tokens |
 | `ChatStreamAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `IAsyncEnumerable<string>` — chat tokens, no tools |
@@ -143,9 +144,16 @@ await File.WriteAllBytesAsync("out.png", img.Value.Data, ct);
 // Embeddings. Returns Result<float[]>.
 float[] vec = (await ai.GenerateAsync(new TextEmbedding3Large(), "vectorise me", ct)).Value;
 
-// Audio transcription. Returns Result<string>.
+// Audio transcription (speech → text). Returns Result<string>.
 var audio = new Asset(await File.ReadAllBytesAsync("speech.mp3"), "speech.mp3");
 string text = (await ai.GenerateAsync(new GPT4oTranscribe(), audio, language: "en", ct)).Value;
+
+// Speech synthesis / TTS (text → speech). Returns Result<Asset>; bytes in .Value.Data.
+// Needs a TTS provider (providers.md); voice + format live on the model (models.md).
+var tts = await ai.GenerateAsync(
+    new ElevenMultilingualV2 { Voice = ElevenVoices.Rachel, Format = ElevenAudioFormat.Mp3_44100_128 },
+    "Cześć, jak się masz?", ct);
+await File.WriteAllBytesAsync("out.mp3", tts.Value.Data, ct);
 ```
 
 ## One example: the fluent builder (advanced)

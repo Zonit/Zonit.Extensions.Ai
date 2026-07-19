@@ -41,6 +41,7 @@
     <!-- All remaining providers are referenced so ModelCatalogTests can reflect over
          the entire model surface and keep Instruction/models.generated.md complete. -->
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Google\Zonit.Extensions.Ai.Google.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.ElevenLabs\Zonit.Extensions.Ai.ElevenLabs.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Mistral\Zonit.Extensions.Ai.Mistral.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.DeepSeek\Zonit.Extensions.Ai.DeepSeek.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Cohere\Zonit.Extensions.Ai.Cohere.csproj" />

@@ -100,4 +100,21 @@ public interface IModelProvider
         Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Synthesizes speech from text (text-to-speech). Returns an <see cref="Asset"/>
+    /// containing the generated audio.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation throws — only providers that offer TTS (e.g.
+    /// <c>Zonit.Extensions.Ai.ElevenLabs</c>) override it, so existing providers need
+    /// no change.
+    /// </remarks>
+    Task<Result<Asset>> GenerateSpeechAsync(
+        ISpeechLlm llm,
+        string text,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            $"Provider '{Name}' does not support speech synthesis. " +
+            $"Install a TTS provider package (e.g. Zonit.Extensions.Ai.ElevenLabs) and use one of its ISpeechLlm models.");
 }

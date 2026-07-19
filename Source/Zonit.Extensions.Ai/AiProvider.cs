@@ -368,6 +368,27 @@ internal sealed class AiProvider : IAiProvider
 
     #endregion
 
+    #region Speech
+
+    /// <inheritdoc />
+    public async Task<Result<Asset>> GenerateAsync(
+        ISpeechLlm llm,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(text));
+
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Synthesizing speech with {Provider}/{Model}", provider.Name, llm.Name);
+
+        return await TrackedLeafAsync(AiUsageKind.Speech, llm, provider.Name, text,
+            () => provider.GenerateSpeechAsync(llm, text, cancellationToken));
+    }
+
+    #endregion
+
     #region Streaming
 
     /// <inheritdoc />
@@ -476,6 +497,12 @@ internal sealed class AiProvider : IAiProvider
     {
         var minutes = durationSeconds / 60.0m;
         return new Price(llm.PriceInput * minutes);
+    }
+
+    /// <inheritdoc />
+    public Price CalculateCost(ISpeechLlm llm, int characterCount)
+    {
+        return new Price(llm.GetSpeechGenerationPrice(characterCount));
     }
 
     /// <inheritdoc />

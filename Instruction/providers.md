@@ -16,7 +16,8 @@ For example, "generate images with GPT" needs an image-capable provider, so
 | Image generation | `Zonit.Extensions.Ai.OpenAi` (GPT Image), `Zonit.Extensions.Ai.X` (Grok Imagine) |
 | Video generation | `Zonit.Extensions.Ai.X` (Grok Imagine) |
 | Embeddings | `Zonit.Extensions.Ai.OpenAi`, `Zonit.Extensions.Ai.Google`, `Zonit.Extensions.Ai.Mistral`, `Zonit.Extensions.Ai.Cohere` |
-| Audio transcription | `Zonit.Extensions.Ai.OpenAi` (GPT-4o Transcribe / mini / diarize; `whisper-1` is legacy) |
+| Audio transcription (speech → text) | `Zonit.Extensions.Ai.OpenAi` (GPT-4o Transcribe / mini / diarize; `whisper-1` is legacy) |
+| Speech synthesis / TTS (text → speech) | `Zonit.Extensions.Ai.ElevenLabs` |
 
 ## By provider
 
@@ -33,6 +34,7 @@ For example, "generate images with GPT" needs an image-capable provider, so
 | Fireworks | `Zonit.Extensions.Ai.Fireworks` | `AddAiFireworks()` |
 | Cohere | `Zonit.Extensions.Ai.Cohere` | `AddAiCohere()` |
 | Perplexity | `Zonit.Extensions.Ai.Perplexity` | `AddAiPerplexity()` |
+| ElevenLabs (text-to-speech) | `Zonit.Extensions.Ai.ElevenLabs` | `AddAiElevenLabs()` |
 | Alibaba (Qwen) | `Zonit.Extensions.Ai.Alibaba` | `AddAiAlibaba()` |
 | Baidu (ERNIE) | `Zonit.Extensions.Ai.Baidu` | `AddAiBaidu()` |
 | Zhipu (GLM) | `Zonit.Extensions.Ai.Zhipu` | `AddAiZhipu()` |

@@ -23,7 +23,8 @@ Keep keys in User Secrets, environment variables or a vault. Do not hardcode the
 {
   "Ai": {
     "OpenAi":    { "ApiKey": "sk-...", "OrganizationId": "org-...", "Timeout": "00:15:00" },
-    "Anthropic": { "ApiKey": "sk-ant-..." }
+    "Anthropic": { "ApiKey": "sk-ant-..." },
+    "ElevenLabs":{ "ApiKey": "sk_..." }
   }
 }
 ```

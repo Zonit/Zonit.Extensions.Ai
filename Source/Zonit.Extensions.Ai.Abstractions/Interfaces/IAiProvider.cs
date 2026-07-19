@@ -164,6 +164,20 @@ public interface IAiProvider
 
     #endregion
 
+    #region Speech
+
+    /// <summary>
+    /// Synthesizes speech (text-to-speech). The <paramref name="llm"/> carries the voice and
+    /// output format; <paramref name="text"/> is the content to speak. Returns an
+    /// <see cref="Asset"/> containing the generated audio.
+    /// </summary>
+    Task<Result<Asset>> GenerateAsync(
+        ISpeechLlm llm,
+        string text,
+        CancellationToken cancellationToken = default);
+
+    #endregion
+
     #region Streaming
 
     /// <summary>
@@ -232,6 +246,11 @@ public interface IAiProvider
     /// Calculates cost for audio transcription.
     /// </summary>
     Price CalculateCost(IAudioLlm llm, int durationSeconds);
+
+    /// <summary>
+    /// Calculates cost for speech synthesis (text-to-speech), billed per input character.
+    /// </summary>
+    Price CalculateCost(ISpeechLlm llm, int characterCount);
 
     /// <summary>
     /// Calculates cost for video generation.

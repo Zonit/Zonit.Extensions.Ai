@@ -22,6 +22,7 @@
     <Project Path="Source/Zonit.Extensions.Ai.Baidu/Zonit.Extensions.Ai.Baidu.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Cohere/Zonit.Extensions.Ai.Cohere.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.DeepSeek/Zonit.Extensions.Ai.DeepSeek.csproj" />
+    <Project Path="Source/Zonit.Extensions.Ai.ElevenLabs/Zonit.Extensions.Ai.ElevenLabs.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Fireworks/Zonit.Extensions.Ai.Fireworks.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Google/Zonit.Extensions.Ai.Google.csproj" />
     <Project Path="Source/Zonit.Extensions.Ai.Groq/Zonit.Extensions.Ai.Groq.csproj" />

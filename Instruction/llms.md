@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 123 models across 16 providers.
+Total: 132 models across 17 providers.
 
 ## Alibaba
 
@@ -136,6 +136,30 @@ Total: 123 models across 16 providers.
 | `DeepSeekCoderV3` | $0.27 | $0.07 | — | $1.1 |
 | `DeepSeekR1` | $0.28 | $0.028 | — | $0.42 |
 | `DeepSeekV3` | $0.28 | $0.028 | — | $0.42 |
+
+## ElevenLabs
+
+### Capabilities & limits
+
+| Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
+| :--- | :--- | ---: | ---: | :--- | :--- | :--- |
+| `ElevenFlashV2` | `eleven_flash_v2` | — | — | Text → Audio | speech | — |
+| `ElevenFlashV2_5` | `eleven_flash_v2_5` | — | — | Text → Audio | speech | — |
+| `ElevenMultilingualV2` | `eleven_multilingual_v2` | — | — | Text → Audio | speech | — |
+| `ElevenTurboV2` | `eleven_turbo_v2` | — | — | Text → Audio | speech | — |
+| `ElevenTurboV2_5` | `eleven_turbo_v2_5` | — | — | Text → Audio | speech | — |
+| `ElevenV3` | `eleven_v3` | — | — | Text → Audio | speech | — |
+
+### Pricing — USD / 1M tokens
+
+| Class | Input | Cached read | Cached write | Output |
+| :--- | ---: | ---: | ---: | ---: |
+| `ElevenFlashV2` | $0 | — | — | $0 |
+| `ElevenFlashV2_5` | $0 | — | — | $0 |
+| `ElevenMultilingualV2` | $0 | — | — | $0 |
+| `ElevenTurboV2` | $0 | — | — | $0 |
+| `ElevenTurboV2_5` | $0 | — | — | $0 |
+| `ElevenV3` | $0 | — | — | $0 |
 
 ## Fireworks
 

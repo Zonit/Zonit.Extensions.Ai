@@ -37,6 +37,9 @@ public enum AiUsageKind
     /// <summary>An audio transcription request.</summary>
     Audio,
 
+    /// <summary>A speech-synthesis (text-to-speech) request.</summary>
+    Speech,
+
     /// <summary>A video generation request.</summary>
     Video,
 }
