@@ -107,12 +107,13 @@ public interface IAiProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generates an image from an image prompt.
-    /// Returns an Asset containing the generated image.
+    /// Generates an image from an image prompt (<see cref="ImagePrompt"/> or an
+    /// <see cref="ImagePromptBase"/> subclass). Returns an Asset containing the
+    /// generated image.
     /// </summary>
     Task<Result<Asset>> GenerateAsync(
         IImageLlm llm,
-        IPrompt<Asset> prompt,
+        IImagePrompt prompt,
         CancellationToken cancellationToken = default);
 
     #endregion
@@ -129,12 +130,14 @@ public interface IAiProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Generates a video from a video prompt.
+    /// Generates a video from a video prompt (<see cref="VideoPrompt"/> or a
+    /// <see cref="VideoPromptBase"/> subclass). A <see cref="VideoPrompt"/> may carry
+    /// a source image (image-to-video) or source video (video-to-video / edit).
     /// Returns an Asset containing the generated video.
     /// </summary>
     Task<Result<Asset>> GenerateAsync(
         IVideoLlm llm,
-        IPrompt<Asset> prompt,
+        IVideoPrompt prompt,
         CancellationToken cancellationToken = default);
 
     #endregion

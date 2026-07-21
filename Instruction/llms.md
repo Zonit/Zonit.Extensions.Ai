@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 132 models across 17 providers.
+Total: 133 models across 17 providers.
 
 ## Alibaba
 
@@ -422,6 +422,7 @@ Total: 132 models across 17 providers.
 | `Grok45` | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `GrokImagineImage` | `grok-imagine-image` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineVideo` | `grok-imagine-video` | 32,000 | — | Text, Image, Video → Video | video | — |
+| `GrokImagineVideo15` | `grok-imagine-video-1.5` | 32,000 | — | Text, Image → Video | video | — |
 
 ### Pricing — USD / 1M tokens
 
@@ -436,6 +437,7 @@ Total: 132 models across 17 providers.
 | `Grok45` | $2 | $0.5 | — | $6 |
 | `GrokImagineImage` | $0 | — | — | $0.02 |
 | `GrokImagineVideo` | $0 | — | — | $0.05 |
+| `GrokImagineVideo15` | $0 | — | — | $0.08 |
 
 ## Yi
 

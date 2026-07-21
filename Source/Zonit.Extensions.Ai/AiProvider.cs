@@ -136,6 +136,56 @@ internal sealed class AiProvider : IAiProvider
         return new RenderedPrompt(rendered, prompt.Files, prompt.GetType().Name);
     }
 
+    /// <summary>
+    /// Rejects any attached input file whose modality the model does not declare in
+    /// <see cref="ILlm.Input"/>, before the request reaches a provider. Living in
+    /// core, a single implementation guards every provider and every modality, and
+    /// because the <see cref="Asset"/> value object detects the real media type from
+    /// the file's bytes, a wrong extension or MIME string cannot smuggle an
+    /// unsupported input past the model.
+    /// </summary>
+    private static void ValidateInput(ILlm llm, IPrompt prompt)
+    {
+        var files = prompt.Files;
+        if (files is null || files.Count == 0)
+            return;
+
+        foreach (var file in files)
+        {
+            if (!file.HasValue)
+                continue;
+
+            // Only modalities that map to a declared input channel are enforced;
+            // documents have no dedicated channel, so they are left to the provider.
+            ChannelType required;
+            string label;
+            if (file.IsImage) { required = ChannelType.Image; label = "image"; }
+            else if (file.IsVideo) { required = ChannelType.Video; label = "video"; }
+            else if (file.IsAudio) { required = ChannelType.Audio; label = "audio"; }
+            else continue;
+
+            if (!llm.Input.HasFlag(required))
+                throw new NotSupportedException(
+                    $"Model '{llm.Name}' does not accept {label} input. " +
+                    $"Attached file '{file.OriginalName.Value}' is {label}, but the model's " +
+                    $"declared input channels are: {llm.Input}.");
+        }
+    }
+
+    /// <summary>
+    /// Generation modalities (image / video) need something to act on: a text prompt
+    /// describing the result, or a source file to transform. An empty prompt with no
+    /// attachments leaves the model nothing to generate from.
+    /// </summary>
+    private static void RequireInstruction(ILlm llm, IPrompt prompt)
+    {
+        var hasFiles = prompt.Files is { Count: > 0 } files && files.Any(static f => f.HasValue);
+        if (string.IsNullOrWhiteSpace(prompt.Text) && !hasFiles)
+            throw new ArgumentException(
+                $"Model '{llm.Name}' needs a text prompt or a source file to generate from; " +
+                "both are empty.", nameof(prompt));
+    }
+
     #region Text Generation
 
     /// <inheritdoc />
@@ -146,6 +196,7 @@ internal sealed class AiProvider : IAiProvider
     {
         var provider = GetProviderForModel(llm);
         var materialized = Materialize(prompt);
+        ValidateInput(llm, materialized);
         _logger.LogDebug("Generating with {Provider}/{Model}", provider.Name, llm.Name);
 
         return await TrackedLeafAsync(AiUsageKind.Generate, llm, provider.Name, materialized.Text,
@@ -199,6 +250,7 @@ internal sealed class AiProvider : IAiProvider
     {
         ArgumentNullException.ThrowIfNull(prompt);
         ArgumentNullException.ThrowIfNull(chat);
+        ValidateInput(llm, prompt);
 
         // Tool-driven chat → delegate to the agent runner with seeded history.
         // Without tools/mcps/options it's a single-shot chat call routed to the provider.
@@ -282,23 +334,28 @@ internal sealed class AiProvider : IAiProvider
         CancellationToken cancellationToken = default)
     {
         var provider = GetProviderForModel(llm);
+        var prompt = new ImagePrompt { Text = description };
+        RequireInstruction(llm, prompt);
         _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
 
         return await TrackedLeafAsync(AiUsageKind.Image, llm, provider.Name, description,
-            () => provider.GenerateImageAsync(llm, new SimpleImagePrompt(description), cancellationToken));
+            () => provider.GenerateImageAsync(llm, prompt, cancellationToken));
     }
 
     /// <inheritdoc />
     public async Task<Result<Asset>> GenerateAsync(
         IImageLlm llm,
-        IPrompt<Asset> prompt,
+        IImagePrompt prompt,
         CancellationToken cancellationToken = default)
     {
         var provider = GetProviderForModel(llm);
+        var materialized = Materialize(prompt);
+        ValidateInput(llm, materialized);
+        RequireInstruction(llm, materialized);
         _logger.LogDebug("Generating image with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await TrackedLeafAsync(AiUsageKind.Image, llm, provider.Name, prompt.Text,
-            () => provider.GenerateImageAsync(llm, Materialize(prompt), cancellationToken));
+        return await TrackedLeafAsync(AiUsageKind.Image, llm, provider.Name, materialized.Text,
+            () => provider.GenerateImageAsync(llm, materialized, cancellationToken));
     }
 
     #endregion
@@ -312,23 +369,28 @@ internal sealed class AiProvider : IAiProvider
         CancellationToken cancellationToken = default)
     {
         var provider = GetProviderForModel(llm);
+        var prompt = new VideoPrompt { Text = description };
+        RequireInstruction(llm, prompt);
         _logger.LogDebug("Generating video with {Provider}/{Model}", provider.Name, llm.Name);
 
         return await TrackedLeafAsync(AiUsageKind.Video, llm, provider.Name, description,
-            () => provider.GenerateVideoAsync(llm, new SimpleImagePrompt(description), cancellationToken));
+            () => provider.GenerateVideoAsync(llm, prompt, cancellationToken));
     }
 
     /// <inheritdoc />
     public async Task<Result<Asset>> GenerateAsync(
         IVideoLlm llm,
-        IPrompt<Asset> prompt,
+        IVideoPrompt prompt,
         CancellationToken cancellationToken = default)
     {
         var provider = GetProviderForModel(llm);
+        var materialized = Materialize(prompt);
+        ValidateInput(llm, materialized);
+        RequireInstruction(llm, materialized);
         _logger.LogDebug("Generating video with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await TrackedLeafAsync(AiUsageKind.Video, llm, provider.Name, prompt.Text,
-            () => provider.GenerateVideoAsync(llm, Materialize(prompt), cancellationToken));
+        return await TrackedLeafAsync(AiUsageKind.Video, llm, provider.Name, materialized.Text,
+            () => provider.GenerateVideoAsync(llm, materialized, cancellationToken));
     }
 
     #endregion
@@ -417,6 +479,7 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateInput(llm, prompt);
         _logger.LogDebug("Agent run with {Model}", llm.Name);
         return _agentRunner.RunAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
@@ -444,6 +507,7 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateInput(llm, prompt);
         _logger.LogDebug("Agent stream with {Model}", llm.Name);
         return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, initialChat: null, callerContext: context);
     }
@@ -459,6 +523,7 @@ internal sealed class AiProvider : IAiProvider
         IReadOnlyList<object>? context = null,
         CancellationToken cancellationToken = default)
     {
+        ValidateInput(llm, prompt);
         _logger.LogDebug("Agent stream (chat) with {Model} ({Turns} seeded messages)", llm.Name, chat.Count);
         return _agentRunner.StreamAsync(llm, Materialize(prompt), tools, mcps, options, cancellationToken, chat, context);
     }

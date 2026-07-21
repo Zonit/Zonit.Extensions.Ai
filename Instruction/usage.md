@@ -78,8 +78,8 @@ plain-`string` form alongside the `IPrompt<T>` form.
 | :--- | :--- | :--- |
 | `GenerateAsync(llm, string)` | `ILlm` | `Result<string>` |
 | `GenerateAsync(llm, IPrompt<T>)` | `ILlm` | `Result<T>` |
-| `GenerateAsync(imageLlm, string)` / `(imageLlm, IPrompt<Asset>)` | `IImageLlm` | `Result<Asset>` |
-| `GenerateAsync(videoLlm, string)` / `(videoLlm, IPrompt<Asset>)` | `IVideoLlm` | `Result<Asset>` |
+| `GenerateAsync(imageLlm, string)` / `(imageLlm, IImagePrompt)` | `IImageLlm` | `Result<Asset>` — use `ImagePrompt { Text, Image? }` |
+| `GenerateAsync(videoLlm, string)` / `(videoLlm, IVideoPrompt)` | `IVideoLlm` | `Result<Asset>` — use `VideoPrompt { Text, Image?, Video? }` |
 | `GenerateAsync(embeddingLlm, string)` | `IEmbeddingLlm` | `Result<float[]>` |
 | `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm` | `Result<string>` — transcription |
 | `GenerateAsync(speechLlm, string)` | `ISpeechLlm` | `Result<Asset>` — TTS audio |

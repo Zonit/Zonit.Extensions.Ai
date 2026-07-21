@@ -58,7 +58,7 @@ Result<SentimentResponse> r = await ai.GenerateAsync(
 string sentiment = r.Value.Sentiment;   // typed. Do not parse JSON and do not check IsSuccess.
 ```
 
-## Files, one-offs, images
+## Files, one-offs
 
 ```csharp
 // Attach files (images, PDFs). Asset is from Zonit.Extensions.
@@ -66,8 +66,34 @@ new MyPrompt { Files = [new Asset(bytes, "doc.pdf")] }
 
 // Quick one-off without a class
 await ai.GenerateAsync(new GPT5(), new SimplePrompt<MyDto>("Summarise: " + text), ct);
+```
 
-// Image prompt: inherit ImagePromptBase (returns Asset), or SimpleImagePrompt for a one-off
+## Image and video generation
+
+Image and video generation use **dedicated prompt types** — you never hand-roll an
+`IPrompt<Asset>`. The overloads accept only `IImagePrompt` / `IVideoPrompt`, so a text
+prompt can't be passed to image/video generation by mistake. The shape is always the same:
+a `Text` description plus optional source media.
+
+```csharp
+// Image — text-to-image, and image-to-image (edit) by adding a source Image
+await ai.GenerateAsync(imageModel, new ImagePrompt { Text = "a red bicycle" }, ct);
+await ai.GenerateAsync(imageModel, new ImagePrompt { Text = "make it snowy", Image = source }, ct);
+
+// Video — text-to-video, image-to-video (Image), video-to-video / edit (Video)
+await ai.GenerateAsync(videoModel, new VideoPrompt { Text = "a butterfly over flowers" }, ct);
+await ai.GenerateAsync(videoModel, new VideoPrompt { Text = "slow zoom in", Image = photo }, ct);
+```
+
+Whether a model actually accepts an image or video source is enforced centrally against
+the model's declared input channels (`ILlm.Input`): passing a video to a model that only
+does text/image throws before any API call. A generation with neither text nor a source
+file is rejected too.
+
+For a **templated/typed** prompt (Scriban parameters), inherit `ImagePromptBase` /
+`VideoPromptBase`:
+
+```csharp
 public sealed class PosterPrompt : ImagePromptBase
 {
     public required string Topic { get; init; }

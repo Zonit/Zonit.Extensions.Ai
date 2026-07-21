@@ -203,7 +203,8 @@ public sealed class XProvider : IModelProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
-        // Check for source image or video in prompt.Files
+        // Check for source image or video in prompt.Files. Input-modality validation
+        // (rejecting media the model can't consume) is handled centrally in core.
         var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
         var sourceVideo = prompt.Files?.FirstOrDefault(f => f.IsVideo);
 
