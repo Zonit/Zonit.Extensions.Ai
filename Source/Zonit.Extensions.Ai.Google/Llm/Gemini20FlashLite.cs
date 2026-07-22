@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Gemini 2.0 Flash Lite - Cost-effective version of Flash.
 /// </summary>
+[Obsolete("Superseded by Gemini25FlashLite (gemini-2.5-flash-lite). Still works — upgrade for better quality and cost.")]
 public class Gemini20FlashLite : GoogleBase
 {
     /// <inheritdoc />

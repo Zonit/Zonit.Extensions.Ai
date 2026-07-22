@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4.1 Mini - Faster and more cost-effective GPT-4.1 variant.
 /// </summary>
+[Obsolete("Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost.")]
 public class GPT41Mini : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />

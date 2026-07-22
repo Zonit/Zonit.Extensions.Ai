@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-4o - Fast, intelligent, flexible GPT model.
 /// Great balance of speed and intelligence.
 /// </summary>
+[Obsolete("Superseded by Terra56 (gpt-5.6-terra) for text and vision. Still works — upgrade for better quality.")]
 public class GPT4o : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />

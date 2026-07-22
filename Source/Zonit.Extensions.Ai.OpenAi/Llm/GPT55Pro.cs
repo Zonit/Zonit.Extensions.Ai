@@ -10,6 +10,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// $30 / $180 per 1M tokens (standard). Batch pricing available at half the
 /// standard rate. No cached input discount. Responses API and Batch API only.
 /// </remarks>
+[Obsolete("Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality.")]
 public class GPT55Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

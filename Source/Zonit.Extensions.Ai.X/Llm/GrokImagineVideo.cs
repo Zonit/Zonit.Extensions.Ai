@@ -17,6 +17,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Pricing: 480p = $0.05/second, 720p = $0.07/second
 /// </para>
 /// </remarks>
+[Obsolete("Superseded by GrokImagineVideo15 (grok-imagine-video-1.5) for text-to-video and image-to-video. Still works — and remains the only option for video-to-video (edit), which 1.5 does not support.")]
 public class GrokImagineVideo : XBase, IVideoLlm
 {
     /// <summary>

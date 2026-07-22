@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4.1 - Latest GPT-4 model with excellent instruction following.
 /// </summary>
+[Obsolete("Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality.")]
 public class GPT41 : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />

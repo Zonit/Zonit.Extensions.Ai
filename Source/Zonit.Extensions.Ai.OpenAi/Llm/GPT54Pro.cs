@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.4 Pro - Most powerful GPT-5.4 variant for the most demanding tasks.
 /// Produces smarter and more precise responses at premium pricing.
 /// </summary>
+[Obsolete("Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality.")]
 public class GPT54Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

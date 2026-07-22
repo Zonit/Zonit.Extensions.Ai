@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5-nano - Fastest, most cost-efficient version of GPT-5.
 /// Best for simple, high-volume tasks.
 /// </summary>
+[Obsolete("Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost.")]
 public class GPT5Nano : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

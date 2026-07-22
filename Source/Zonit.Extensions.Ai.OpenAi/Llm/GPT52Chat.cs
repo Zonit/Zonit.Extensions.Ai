@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.2 Chat - GPT-5.2 model used in ChatGPT.
 /// The best model for coding and agentic tasks.
 /// </summary>
+[Obsolete("Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality.")]
 public class GPT52Chat : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

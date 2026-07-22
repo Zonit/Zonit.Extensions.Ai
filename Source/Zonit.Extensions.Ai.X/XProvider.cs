@@ -570,12 +570,14 @@ public sealed class XProvider : IModelProvider
         //  - grok-4.5: thinking depth (low/medium/high, default high).
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
+#pragma warning disable CS0618 // Grok43 / Grok420MultiAgent are deprecated but still fully supported by this provider.
         if (llm is Grok43 { Reason: { } grok43Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok43Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok45 { Reason: { } grok45Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok45Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
             request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
+#pragma warning restore CS0618
 
         if (responseType != typeof(string))
         {
@@ -684,12 +686,14 @@ public sealed class XProvider : IModelProvider
         //  - grok-4.5: thinking depth (low/medium/high, default high).
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
+#pragma warning disable CS0618 // Grok43 / Grok420MultiAgent are deprecated but still fully supported by this provider.
         if (llm is Grok43 { Reason: { } grok43Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok43Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok45 { Reason: { } grok45Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok45Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
             request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
+#pragma warning restore CS0618
 
         if (responseType != typeof(string))
         {
@@ -707,7 +711,9 @@ public sealed class XProvider : IModelProvider
 
         if (llm is XBase xb && xb.Tools is { Length: > 0 } native)
         {
+#pragma warning disable CS0618 // Grok420MultiAgent is deprecated but still fully supported by this provider.
             var isMultiAgent = llm is Grok420MultiAgent;
+#pragma warning restore CS0618
             var tools = request.Tools ?? new List<XTool>();
             foreach (var t in native)
             {

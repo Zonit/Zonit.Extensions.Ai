@@ -6,6 +6,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// 1.05M token context window; standard pricing applies up to 272K tokens,
 /// input doubles and output is 1.5× beyond 272K (per OpenAI pricing notes).
 /// </summary>
+[Obsolete("Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality.")]
 public class GPT55 : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

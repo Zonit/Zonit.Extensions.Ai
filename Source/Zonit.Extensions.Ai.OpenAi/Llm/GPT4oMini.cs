@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4o Mini - Fast, affordable small model for focused tasks.
 /// </summary>
+[Obsolete("Superseded by Luna56 (gpt-5.6-luna) for text and vision. Still works — upgrade for better quality and cost.")]
 public class GPT4oMini : OpenAiChatBase, IAgentLlm
 {
     /// <inheritdoc />

@@ -10,6 +10,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Pricing: $1.25/$2.50 per 1M tokens, $0.3125 cached input.
 /// Higher context pricing applies above 200K tokens.
 /// </remarks>
+[Obsolete("Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality.")]
 public class Grok420Reasoning : XChatBase
 {
     /// <inheritdoc />

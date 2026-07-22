@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Gemini 1.5 Pro - Previous generation capable model.
 /// </summary>
+[Obsolete("Superseded by Gemini25Pro (gemini-2.5-pro). Still works — upgrade for better quality.")]
 public class Gemini15Pro : GoogleBase
 {
     /// <inheritdoc />

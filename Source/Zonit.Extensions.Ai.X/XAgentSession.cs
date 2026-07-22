@@ -244,12 +244,14 @@ internal sealed class XAgentSession : IAgentSession
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
         // Every other Grok reasoning model returns HTTP 400 if we send it.
+#pragma warning disable CS0618 // Grok43 / Grok420MultiAgent are deprecated but still fully supported by this provider.
         if (llm is Grok43 { Reason: { } grok43Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok43Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok45 { Reason: { } grok45Effort })
             request.Reasoning = new XReasoningSpec { Effort = grok45Effort.ToString().ToLowerInvariant() };
         else if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
             request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
+#pragma warning restore CS0618
 
         if (_context.ResponseType is { } responseType)
         {
@@ -272,7 +274,9 @@ internal sealed class XAgentSession : IAgentSession
         // ("Client-side tools for multi-agent models require beta access"),
         // so for that model we skip every client-side function tool and pass
         // through only built-in server-side tools (web_search, etc.).
+#pragma warning disable CS0618 // Grok420MultiAgent is deprecated but still fully supported by this provider.
         var isMultiAgent = llm is Grok420MultiAgent;
+#pragma warning restore CS0618
 
         var tools = new List<XTool>();
         if (llm is XBase xb && xb.Tools is { Length: > 0 } native)

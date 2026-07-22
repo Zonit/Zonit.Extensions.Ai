@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.4 Mini - Faster, more efficient GPT-5.4 variant for high-volume workloads.
 /// Brings GPT-5.4-class capabilities at lower cost and latency.
 /// </summary>
+[Obsolete("Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost.")]
 public class GPT54Mini : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />
