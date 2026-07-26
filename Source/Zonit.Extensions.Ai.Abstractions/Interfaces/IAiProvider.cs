@@ -179,6 +179,74 @@ public interface IAiProvider
         string text,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Synthesizes speech from a <see cref="SpeechPrompt"/>. Use this overload when
+    /// rendering a script line-by-line: set <see cref="SpeechPrompt.PreviousText"/> /
+    /// <see cref="SpeechPrompt.NextText"/> to the surrounding lines so the narrator's
+    /// intonation flows across separate calls instead of resetting each time. Returns an
+    /// <see cref="Asset"/> containing the generated audio.
+    /// </summary>
+    Task<Result<Asset>> GenerateAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Synthesizes a whole script and returns one audio <see cref="Asset"/> per input line, in
+    /// order. Each line is automatically given the <b>last sentence of the previous line</b> and
+    /// the <b>first sentence of the next line</b> as prosody context (<c>previous_text</c> /
+    /// <c>next_text</c>), so the separately-synthesized takes flow together as one continuous
+    /// narration — you just hand it the array of lines. The model's seed is shared across every
+    /// line, so the voice character stays consistent too. Providers without stitching support
+    /// simply synthesize each line independently.
+    /// </summary>
+    /// <param name="llm">The speech model (voice, format and seed live on it).</param>
+    /// <param name="lines">The script, one entry per line/sentence/paragraph. None may be empty.</param>
+    /// <param name="cancellationToken">Cancels the (sequential) synthesis.</param>
+    /// <returns>One <see cref="Result{Asset}"/> per input line, in the same order.</returns>
+    Task<IReadOnlyList<Result<Asset>>> GenerateAsync(
+        ISpeechLlm llm,
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Synthesizes speech <b>with timing alignment</b> — the audio plus per-character (and, via
+    /// <see cref="SpeechTimestamps.ToWords"/>, per-word) start/end times. Use this to sync
+    /// subtitles/captions or karaoke highlighting to a voice-over. Requires a provider that returns
+    /// alignment (e.g. ElevenLabs); others throw <see cref="NotSupportedException"/>.
+    /// </summary>
+    Task<Result<SpeechTimestamps>> GenerateWithTimestampsAsync(
+        ISpeechLlm llm,
+        string text,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Timing-aligned speech from a <see cref="SpeechPrompt"/> (so you can also carry
+    /// previous/next context on models that support stitching). See
+    /// <see cref="GenerateWithTimestampsAsync(ISpeechLlm, string, CancellationToken)"/>.
+    /// </summary>
+    Task<Result<SpeechTimestamps>> GenerateWithTimestampsAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Synthesizes a list of <see cref="SpeechPrompt"/> and returns one audio <see cref="Asset"/>
+    /// per prompt, in order. Unlike the <c>IReadOnlyList&lt;string&gt;</c> overload this does
+    /// <b>not</b> auto-stitch neighbours — each prompt is rendered exactly as given, so use it when
+    /// each line carries its own delivery (e.g. ElevenLabs v3 inline audio tags such as
+    /// <c>[whispers]</c> / <c>[excited]</c> in <see cref="SpeechPrompt.Text"/>) or when you set the
+    /// surrounding context yourself. The model's seed is still shared across every prompt.
+    /// </summary>
+    /// <param name="llm">The speech model (voice, format and seed live on it).</param>
+    /// <param name="prompts">The prompts to synthesize. None may have empty <see cref="SpeechPrompt.Text"/>.</param>
+    /// <param name="cancellationToken">Cancels the (sequential) synthesis.</param>
+    /// <returns>One <see cref="Result{Asset}"/> per prompt, in the same order.</returns>
+    Task<IReadOnlyList<Result<Asset>>> GenerateAsync(
+        ISpeechLlm llm,
+        IReadOnlyList<SpeechPrompt> prompts,
+        CancellationToken cancellationToken = default);
+
     #endregion
 
     #region Streaming

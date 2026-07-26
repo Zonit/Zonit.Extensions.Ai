@@ -82,7 +82,9 @@ plain-`string` form alongside the `IPrompt<T>` form.
 | `GenerateAsync(videoLlm, string)` / `(videoLlm, IVideoPrompt)` | `IVideoLlm` | `Result<Asset>` — use `VideoPrompt { Text, Image?, Video? }` |
 | `GenerateAsync(embeddingLlm, string)` | `IEmbeddingLlm` | `Result<float[]>` |
 | `GenerateAsync(audioLlm, Asset, language?)` | `IAudioLlm` | `Result<string>` — transcription |
-| `GenerateAsync(speechLlm, string)` | `ISpeechLlm` | `Result<Asset>` — TTS audio |
+| `GenerateAsync(speechLlm, string)` / `(speechLlm, SpeechPrompt)` | `ISpeechLlm` | `Result<Asset>` — TTS audio; `SpeechPrompt { Text, PreviousText?, NextText? }` keeps prosody continuous across lines |
+| `GenerateAsync(speechLlm, IReadOnlyList<string>)` | `ISpeechLlm` | `IReadOnlyList<Result<Asset>>` — whole script → one take per line, neighbour sentences auto-stitched |
+| `GenerateWithTimestampsAsync(speechLlm, string / SpeechPrompt)` | `ISpeechLlm` | `Result<SpeechTimestamps>` — audio + per-character timing (`.ToWords()` for subtitle cues) |
 | `ChatAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `Result<T>` — multi-turn, **no tools** |
 | `StreamAsync(llm, string)` | `ILlm` | `IAsyncEnumerable<string>` — text tokens |
 | `ChatStreamAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `IAsyncEnumerable<string>` — chat tokens, no tools |

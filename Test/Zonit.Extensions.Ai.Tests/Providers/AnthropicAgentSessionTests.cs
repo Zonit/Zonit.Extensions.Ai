@@ -111,7 +111,7 @@ public class AnthropicAgentSessionTests
 
         return adapter.BeginSession(new AgentSessionContext
         {
-            Llm = new Opus48(),
+            Llm = new Opus5(),
             Prompt = new StringPrompt { Text = "Produce the brief." },
             ResponseType = null,                  // free-form text
             Tools = Array.Empty<ITool>(),

@@ -174,6 +174,33 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithOpus5DefaultReason_ShouldSendExplicitThinkingDisabled()
+    {
+        // Opus 5 shares Sonnet 5's wire default: thinking is ON when the field is
+        // omitted. The explicit disable is only legal at effort high or below —
+        // which holds here precisely because an unset Reason sends no
+        // output_config.effort at all (server default = high).
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var model = new Opus5();
+        var prompt = new TestPrompt { Text = "Say hello" };
+
+        // Act
+        await provider.GenerateAsync(model, prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("\"claude-opus-5\"");
+        capturedRequest.Should().Contain("\"thinking\"");
+        capturedRequest.Should().Contain("\"disabled\"");
+        capturedRequest.Should().NotContain("adaptive");
+        capturedRequest.Should().NotContain("effort");
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithSonnet5ReasonExtra_ShouldSendAdaptiveThinkingWithXHighEffort()
     {
         // Reason.Extra is the Opus-tier "xhigh" level — Sonnet 4.6 doesn't
@@ -253,7 +280,7 @@ public class AnthropicProviderTests
         SetupMockResponse("""{"id":"msg_c","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1000,"output_tokens":500,"cache_read_input_tokens":5000,"cache_creation_input_tokens":2000}}""");
 
         var provider = CreateProvider();
-        var model = new Opus48();
+        var model = new Opus5();
         var prompt = new TestPrompt { Text = "hi" };
 
         // Act

@@ -15,8 +15,8 @@ namespace Zonit.Extensions.Ai.Tests.Cost;
 /// </summary>
 public class AiCostCalculatorTests
 {
-    // Opus 4.8: input $5, output $25, cached-read $0.50, cached-write $6.25 (per 1M).
-    private static Opus48 Model => new();
+    // Opus 5: input $5, output $25, cached-read $0.50, cached-write $6.25 (per 1M).
+    private static Opus5 Model => new();
 
     [Fact]
     public void CalculateCost_NoCache_ChargesAllInputAtRegularRate()
@@ -55,7 +55,7 @@ public class AiCostCalculatorTests
     {
         // Anthropic bills 1-hour cache writes at 2× base input (vs 1.25× for 5-min).
         // Cache.OneHour must therefore price cache-write tokens higher than the default.
-        var model = new Opus48 { Cache = Cache.OneHour };
+        var model = new Opus5 { Cache = Cache.OneHour };
         var usage = new TokenUsage
         {
             InputTokens = 8000,

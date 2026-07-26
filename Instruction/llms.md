@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 133 models across 17 providers.
+Total: 134 models across 17 providers.
 
 ## Alibaba
 
@@ -43,7 +43,8 @@ Total: 133 models across 17 providers.
 | `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
-| `Opus48` | `claude-opus-4-8` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
+| `Opus48` ⚠️ | `claude-opus-4-8` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
+| `Opus5` | `claude-opus-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
 | `Sonnet45` ⚠️ | `claude-sonnet-4-5-20250929` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Sonnet46` ⚠️ | `claude-sonnet-4-6` | 1,000,000 | 64,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Sonnet5` | `claude-sonnet-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
@@ -59,6 +60,7 @@ Total: 133 models across 17 providers.
 | `Opus46` | $5 | $0.5 | $6.25 | $25 |
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
 | `Opus48` | $5 | $0.5 | $6.25 | $25 |
+| `Opus5` | $5 | $0.5 | $6.25 | $25 |
 | `Sonnet45` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet46` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet5` | $3 | $0.3 | $3.75 | $15 |
@@ -488,6 +490,7 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus48` | `claude-opus-4-8` | Claude Opus 4.8 is being phased out — migrate to Opus5 (claude-opus-5), which has the same pricing and feature set. Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet46 (adaptive thinking). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet46` | `claude-sonnet-4-6` | Claude Sonnet 4.6 is being phased out — migrate to Sonnet5 (claude-sonnet-5). Still functional, but Anthropic will retire older models. |
 | Google | `Gemini15Pro` | `gemini-1.5-pro` | Superseded by Gemini25Pro (gemini-2.5-pro). Still works — upgrade for better quality. |

@@ -12,6 +12,8 @@ namespace Zonit.Extensions.Ai.ElevenLabs;
     GenerationMode = JsonSourceGenerationMode.Default)]
 [JsonSerializable(typeof(ElevenTtsRequest))]
 [JsonSerializable(typeof(ElevenVoiceSettings))]
+[JsonSerializable(typeof(ElevenTtsTimestampsResponse))]
+[JsonSerializable(typeof(ElevenAlignment))]
 internal sealed partial class ElevenLabsJsonContext : JsonSerializerContext
 {
 }

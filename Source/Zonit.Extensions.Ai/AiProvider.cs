@@ -433,7 +433,7 @@ internal sealed class AiProvider : IAiProvider
     #region Speech
 
     /// <inheritdoc />
-    public async Task<Result<Asset>> GenerateAsync(
+    public Task<Result<Asset>> GenerateAsync(
         ISpeechLlm llm,
         string text,
         CancellationToken cancellationToken = default)
@@ -442,11 +442,229 @@ internal sealed class AiProvider : IAiProvider
         if (string.IsNullOrWhiteSpace(text))
             throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(text));
 
+        return SpeechAsync(llm, new SpeechPrompt { Text = text }, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result<Asset>> GenerateAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(prompt);
+        if (string.IsNullOrWhiteSpace(prompt.Text))
+            throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(prompt));
+
+        return SpeechAsync(llm, prompt, cancellationToken);
+    }
+
+    private async Task<Result<Asset>> SpeechAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken)
+    {
         var provider = GetProviderForModel(llm);
         _logger.LogDebug("Synthesizing speech with {Provider}/{Model}", provider.Name, llm.Name);
 
-        return await TrackedLeafAsync(AiUsageKind.Speech, llm, provider.Name, text,
-            () => provider.GenerateSpeechAsync(llm, text, cancellationToken));
+        return await TrackedLeafAsync(AiUsageKind.Speech, llm, provider.Name, prompt.Text,
+            () => provider.GenerateSpeechAsync(llm, prompt, cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public Task<Result<SpeechTimestamps>> GenerateWithTimestampsAsync(
+        ISpeechLlm llm,
+        string text,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(text));
+
+        return SpeechWithTimestampsAsync(llm, new SpeechPrompt { Text = text }, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<Result<SpeechTimestamps>> GenerateWithTimestampsAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(prompt);
+        if (string.IsNullOrWhiteSpace(prompt.Text))
+            throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(prompt));
+
+        return SpeechWithTimestampsAsync(llm, prompt, cancellationToken);
+    }
+
+    private async Task<Result<SpeechTimestamps>> SpeechWithTimestampsAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken)
+    {
+        var provider = GetProviderForModel(llm);
+        _logger.LogDebug("Synthesizing timed speech with {Provider}/{Model}", provider.Name, llm.Name);
+
+        return await TrackedLeafAsync(AiUsageKind.Speech, llm, provider.Name, prompt.Text,
+            () => provider.GenerateSpeechWithTimestampsAsync(llm, prompt, cancellationToken));
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Result<Asset>>> GenerateAsync(
+        ISpeechLlm llm,
+        IReadOnlyList<string> lines,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(lines);
+        if (lines.Count == 0)
+            throw new ArgumentException("The script has no lines to synthesize.", nameof(lines));
+        for (var i = 0; i < lines.Count; i++)
+            if (string.IsNullOrWhiteSpace(lines[i]))
+                throw new ArgumentException($"Line {i} is empty — every line must have text.", nameof(lines));
+
+        // Auto-stitch: feed each line the tail of the previous line and the head of the next
+        // as prosody context, so the separate takes flow together.
+        var prompts = new SpeechPrompt[lines.Count];
+        for (var i = 0; i < lines.Count; i++)
+            prompts[i] = new SpeechPrompt
+            {
+                Text = lines[i],
+                PreviousText = i > 0 ? PreviousContextFrom(lines[i - 1]) : null,
+                NextText = i < lines.Count - 1 ? NextContextFrom(lines[i + 1]) : null,
+            };
+
+        return SpeechBatchAsync(llm, prompts, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Result<Asset>>> GenerateAsync(
+        ISpeechLlm llm,
+        IReadOnlyList<SpeechPrompt> prompts,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(prompts);
+        if (prompts.Count == 0)
+            throw new ArgumentException("The batch has no prompts to synthesize.", nameof(prompts));
+        for (var i = 0; i < prompts.Count; i++)
+        {
+            ArgumentNullException.ThrowIfNull(prompts[i]);
+            if (string.IsNullOrWhiteSpace(prompts[i].Text))
+                throw new ArgumentException($"Prompt {i} has empty text — every prompt must have text.", nameof(prompts));
+        }
+
+        // As-is: each prompt is synthesized exactly as given (no auto-stitching). Any
+        // PreviousText/NextText the caller set is honoured; leaving them null means no context.
+        return SpeechBatchAsync(llm, prompts, cancellationToken);
+    }
+
+    /// <summary>
+    /// Synthesizes a list of speech prompts in order (sequentially, to preserve order and stay
+    /// within provider rate limits). The model's seed is shared across all of them.
+    /// </summary>
+    private async Task<IReadOnlyList<Result<Asset>>> SpeechBatchAsync(
+        ISpeechLlm llm,
+        IReadOnlyList<SpeechPrompt> prompts,
+        CancellationToken cancellationToken)
+    {
+        var results = new Result<Asset>[prompts.Count];
+        for (var i = 0; i < prompts.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results[i] = await SpeechAsync(llm, prompts[i], cancellationToken).ConfigureAwait(false);
+        }
+        return results;
+    }
+
+    /// <summary>
+    /// Upper bound on how much surrounding text is fed as prosody context. Sentence detection
+    /// keeps context short on its own, but text may have no punctuation at all (one giant
+    /// "sentence"), so we also cap by character count.
+    /// </summary>
+    private const int MaxContextChars = 300;
+
+    /// <summary>
+    /// Context taken from the <b>end</b> of the previous line (the part nearest the boundary):
+    /// its last sentence, and if that is still longer than <see cref="MaxContextChars"/> — e.g.
+    /// unpunctuated text — the trailing <see cref="MaxContextChars"/> characters (trimmed to a
+    /// whole-word start).
+    /// </summary>
+    private static string PreviousContextFrom(string text)
+    {
+        var s = LastSentence(text);
+        if (s.Length <= MaxContextChars)
+            return s;
+
+        s = s[^MaxContextChars..];              // keep the tail nearest the boundary
+        var space = s.IndexOf(' ');             // drop a leading partial word
+        return space >= 0 && space + 1 < s.Length ? s[(space + 1)..] : s;
+    }
+
+    /// <summary>
+    /// Context taken from the <b>start</b> of the next line (the part nearest the boundary):
+    /// its first sentence, and if that is still longer than <see cref="MaxContextChars"/>, the
+    /// leading <see cref="MaxContextChars"/> characters (trimmed to a whole-word end).
+    /// </summary>
+    private static string NextContextFrom(string text)
+    {
+        var s = FirstSentence(text);
+        if (s.Length <= MaxContextChars)
+            return s;
+
+        s = s[..MaxContextChars];               // keep the head nearest the boundary
+        var space = s.LastIndexOf(' ');         // drop a trailing partial word
+        return space > 0 ? s[..space] : s;
+    }
+
+    /// <summary>First sentence of <paramref name="text"/> (whole text if it has no sentence break).</summary>
+    private static string FirstSentence(string text)
+    {
+        var sentences = SplitSentences(text);
+        return sentences.Count > 0 ? sentences[0] : text.Trim();
+    }
+
+    /// <summary>Last sentence of <paramref name="text"/> (whole text if it has no sentence break).</summary>
+    private static string LastSentence(string text)
+    {
+        var sentences = SplitSentences(text);
+        return sentences.Count > 0 ? sentences[^1] : text.Trim();
+    }
+
+    /// <summary>
+    /// Splits text into sentences on <c>. ! ? …</c> (runs of terminators count as one) followed
+    /// by whitespace or end of string. Heuristic — good enough to pick the boundary sentence for
+    /// TTS prosody context, not a full NLP tokenizer. AOT-safe (no regex).
+    /// </summary>
+    private static List<string> SplitSentences(string text)
+    {
+        var sentences = new List<string>();
+        var start = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] is not ('.' or '!' or '?' or '…'))
+                continue;
+
+            var end = i + 1;
+            while (end < text.Length && text[end] is '.' or '!' or '?' or '…')
+                end++;
+
+            if (end >= text.Length || char.IsWhiteSpace(text[end]))
+            {
+                var sentence = text[start..end].Trim();
+                if (sentence.Length > 0)
+                    sentences.Add(sentence);
+                start = end;
+                i = end - 1;
+            }
+        }
+
+        var tail = text[start..].Trim();
+        if (tail.Length > 0)
+            sentences.Add(tail);
+
+        return sentences;
     }
 
     #endregion

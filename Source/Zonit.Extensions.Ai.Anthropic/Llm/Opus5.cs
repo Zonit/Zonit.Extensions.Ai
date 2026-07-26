@@ -1,20 +1,50 @@
 namespace Zonit.Extensions.Ai.Anthropic;
 
 /// <summary>
-/// Claude Opus 4.8 - Most capable generally available Claude model.
-/// Step-change improvement in agentic coding over Claude Opus 4.7.
-/// Supports adaptive thinking with five effort levels (see <see cref="ReasonType"/>),
-/// including <see cref="ReasonType.Extra"/>.
+/// Claude Opus 5 - Successor to <see cref="Opus48"/> and the current Opus-tier
+/// model. Step-change over Claude Opus 4.8 on deep reasoning, agentic coding and
+/// long-horizon work, at unchanged Opus pricing. Supports adaptive thinking with
+/// five effort levels (see <see cref="ReasonType"/>), including
+/// <see cref="ReasonType.Extra"/>.
 /// </summary>
 /// <remarks>
-/// 1M token context window at standard pricing (no surcharge for long context).
-/// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
+/// <para>
+/// 1M token context window at standard pricing (no surcharge for long context),
+/// 128K max output. Adaptive thinking only — does not accept the legacy
+/// <c>budget_tokens</c> mode, and rejects non-default <c>temperature</c> /
+/// <c>top_p</c> / <c>top_k</c> with a 400.
+/// </para>
+/// <para>
+/// <b>Thinking is ON by default on the wire.</b> Like <see cref="Sonnet5"/> — and
+/// unlike <see cref="Opus48"/> / <see cref="Opus47"/> — Claude Opus 5 enables
+/// adaptive thinking even when the <c>thinking</c> field is omitted from the
+/// request entirely. This class opts out via <see cref="ThinkingEnabledByDefault"/>
+/// so the provider sends an explicit <c>thinking: { "type": "disabled" }</c>
+/// whenever <see cref="AnthropicReasoningBase{TReason}.Reason"/> is left
+/// <c>null</c> — keeping "Reason not set" meaning "no thinking", consistent with
+/// every other model here. That opt-out is safe because Anthropic only accepts a
+/// disabled <c>thinking</c> at effort <c>high</c> or below, and a request with no
+/// <see cref="AnthropicReasoningBase{TReason}.Reason"/> sends no
+/// <c>output_config.effort</c> at all (server default <c>high</c>).
+/// </para>
+/// <para>
+/// Raw thinking tokens are never returned by this model; only summaries are
+/// available, so <c>thinking</c> blocks carry no chain of thought.
+/// </para>
+/// <para>
+/// Note that with thinking disabled the model occasionally writes a tool call
+/// into its visible text instead of emitting a structured tool-use block, and
+/// may leak internal XML tags into the answer. Prefer
+/// <see cref="ReasonType.Low"/> or <see cref="ReasonType.Medium"/> over leaving
+/// <see cref="AnthropicReasoningBase{TReason}.Reason"/> unset on tool-calling
+/// workloads — it is cheaper than full-effort thinking and avoids both failure
+/// modes.
+/// </para>
 /// </remarks>
-[Obsolete("Claude Opus 4.8 is being phased out — migrate to Opus5 (claude-opus-5), which has the same pricing and feature set. Still functional, but Anthropic will retire older models.")]
-public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFast
+public class Opus5 : AnthropicReasoningBase<Opus5.ReasonType>, IAgentLlm, IFast
 {
     /// <summary>
-    /// Adaptive-thinking effort levels accepted by Claude Opus 4.8. Numeric
+    /// Adaptive-thinking effort levels accepted by Claude Opus 5. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot exposed by the Opus tier.
     /// </summary>
@@ -35,7 +65,7 @@ public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFas
     }
 
     /// <inheritdoc />
-    public override string Name => "claude-opus-4-8";
+    public override string Name => "claude-opus-5";
 
     /// <inheritdoc />
     public override decimal PriceInput => 5.00m;
@@ -95,4 +125,7 @@ public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFas
         FeaturesType.Streaming |
         FeaturesType.FunctionCalling |
         FeaturesType.Reasoning;
+
+    /// <inheritdoc />
+    protected internal override bool ThinkingEnabledByDefault => true;
 }

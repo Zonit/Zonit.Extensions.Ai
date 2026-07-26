@@ -371,7 +371,7 @@ Console.WriteLine(text.Value);
 ### Speech synthesis / TTS (text → speech)
 
 Needs a TTS provider — `dotnet add package Zonit.Extensions.Ai.ElevenLabs`, then
-`AddAiElevenLabs()`. Voice and output format live on the model instance:
+`AddAiElevenLabs()`. Voice, format, speed, seed and voice-settings live on the model instance:
 
 ```csharp
 using Zonit.Extensions.Ai.ElevenLabs;
@@ -381,10 +381,25 @@ var speech = await ai.GenerateAsync(
     {
         Voice  = ElevenVoices.Rachel,               // any voice id (premade or cloned)
         Format = ElevenAudioFormat.Mp3_44100_128,
+        Speed  = 1.0,                               // 0.7–1.2; Stability / Style / LanguageCode too
     },
     "Cześć, jak się masz?");
 
 await File.WriteAllBytesAsync("out.mp3", speech.Value.Data);   // audio bytes in .Value.Data
+```
+
+More in [`.zonit/extensions/ai/models.md`](Instruction/models.md):
+
+- **Continuous narration** — hand a whole script as `string[]` and each line is auto-stitched with
+  its neighbours' boundary sentences (`previous_text` / `next_text`); a per-instance **seed** keeps the
+  voice character consistent. Or drive each line yourself with `SpeechPrompt { Text, PreviousText?, NextText? }`.
+- **Emotion & delivery** — on `ElevenV3`, direct the performance with inline **audio tags** in the text
+  (`[excited]`, `[whispers]`, `[sighs]`, `[resigned tone]`, …) — free-form and stackable.
+
+```csharp
+var v3 = new ElevenV3 { Voice = ElevenVoices.Rachel };
+IReadOnlyList<Result<Asset>> takes = await ai.GenerateAsync(v3,
+    ["[excited] We did it!", "[whispers] ...but don't tell anyone."]);
 ```
 
 ---
@@ -408,7 +423,7 @@ premium pricing. Cost calculation switches to the fast rate automatically when y
 
 ```csharp
 var fast = await ai.GenerateAsync(
-    new Opus48 { Speed = SpeedType.Fast },
+    new Opus5 { Speed = SpeedType.Fast },
     "Draft a release note for v10.");
 ```
 
@@ -426,7 +441,7 @@ using Zonit.Extensions.Ai.Anthropic;   // the Cache enum
 
 // Agents, chat loops and any repeated-prefix calls benefit most.
 var result = await ai.Agent(
-        new Opus48 { Cache = Cache.FiveMinutes },     // None (default) | FiveMinutes | OneHour
+        new Opus5 { Cache = Cache.FiveMinutes },     // None (default) | FiveMinutes | OneHour
         new ResearchPrompt { Topic = "EU AI Act" })
     .AddTool<SearchTool>()
     .AddTool<SaveNoteTool>()

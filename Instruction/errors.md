@@ -49,7 +49,7 @@ retried by whatever scheduled it. Catch only when you want to branch on the caus
 ```csharp
 try
 {
-    var result = await ai.Agent(new Opus48(), new ReportPrompt())
+    var result = await ai.Agent(new Opus5(), new ReportPrompt())
         .AddTool(dataTool).MaxIterations(18).RunAsync(ct);
 
     Save(result.Value);   // Value is guaranteed present here

@@ -102,19 +102,37 @@ public interface IModelProvider
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Synthesizes speech from text (text-to-speech). Returns an <see cref="Asset"/>
+    /// Synthesizes speech from a <see cref="SpeechPrompt"/> (the text to speak plus the
+    /// optional surrounding lines for prosody continuity). Returns an <see cref="Asset"/>
     /// containing the generated audio.
     /// </summary>
     /// <remarks>
     /// Default implementation throws — only providers that offer TTS (e.g.
     /// <c>Zonit.Extensions.Ai.ElevenLabs</c>) override it, so existing providers need
-    /// no change.
+    /// no change. Providers without <c>previous_text</c>/<c>next_text</c> support simply
+    /// ignore <see cref="SpeechPrompt.PreviousText"/> / <see cref="SpeechPrompt.NextText"/>.
     /// </remarks>
     Task<Result<Asset>> GenerateSpeechAsync(
         ISpeechLlm llm,
-        string text,
+        SpeechPrompt prompt,
         CancellationToken cancellationToken = default)
         => throw new NotSupportedException(
             $"Provider '{Name}' does not support speech synthesis. " +
             $"Install a TTS provider package (e.g. Zonit.Extensions.Ai.ElevenLabs) and use one of its ISpeechLlm models.");
+
+    /// <summary>
+    /// Synthesizes speech <b>with per-character timing alignment</b> (for subtitles / captions).
+    /// Returns the audio plus a <see cref="SpeechTimestamps"/> alignment.
+    /// </summary>
+    /// <remarks>
+    /// Default implementation throws — only providers that return alignment (e.g. ElevenLabs'
+    /// <c>with-timestamps</c> endpoint) override it.
+    /// </remarks>
+    Task<Result<SpeechTimestamps>> GenerateSpeechWithTimestampsAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            $"Provider '{Name}' does not support timed speech synthesis. " +
+            $"Use a provider that returns alignment (e.g. Zonit.Extensions.Ai.ElevenLabs).");
 }
