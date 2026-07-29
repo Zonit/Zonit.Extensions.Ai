@@ -3,7 +3,189 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
-## 10.2.2 — 2026-06-20
+## Unreleased
+
+### Anthropic single-shot calls stream on the wire and reassemble
+
+**Not breaking — no API change.** `GenerateAsync` / `ChatAsync` still take the same arguments and
+still return one finished `Result<T>`. What changed is underneath: the Anthropic HTTP transport now
+sends `stream: true` and rebuilds the complete response from the SSE frames.
+
+- **Fixed** a hang on large responses. The previous buffered `POST` held one HTTP response open for
+  the entire generation. Because `MaxTokens` defaults to the model's full output capacity (128k on
+  Opus / Sonnet 5), a large structured answer could legitimately outlive the per-attempt timeout —
+  at which point the request was cancelled and **retried from zero**, multiplying cost with no
+  chance of succeeding. Anthropic documents this and their own SDKs refuse to send such a request.
+  Lowering `MaxTokens` (the historical workaround) is no longer needed.
+- **Changed** the Anthropic API transport to streaming resilience. A per-attempt wall-clock cap must
+  not apply to a stream; liveness is enforced by `Ai:Resilience.InterEventTimeout` and HTTP/2
+  keep-alive pings instead. `AttemptTimeout` no longer affects Anthropic text calls.
+- **Added** strict truncation handling. A stream that ends before the terminal `message_stop`, or
+  whose tool-input fragments do not form valid JSON, now throws. A buffered response was
+  all-or-nothing for free; a stream is not, and a half-parsed structured answer must never reach the
+  caller as a success.
+- **Unchanged** `StreamAsync` / `ChatStreamAsync` — still live text deltas, still text-only. Output
+  size is not a reason to choose them over `GenerateAsync`; see [`usage.md`](./usage.md) → *Three
+  ways to run a call*.
+
+## 10.6.2 — 2026-07-26
+
+### Claude Opus 5; batch TTS with stitching, seeds and subtitle alignment
+
+- **Added** `Opus5` (`claude-opus-5`) — successor to `Opus48`, same pricing ($5 / $25 per MTok,
+  cache write $6.25, read $0.50), 1M context / 128K output, fast mode ($10 / $50) via `IFast`, full
+  `Low`…`Max` effort ladder including `Extra` (wire `xhigh`). Thinking is **on by default on the
+  wire**, so the class sets `ThinkingEnabledByDefault` like `Sonnet5`: leaving `Reason` unset still
+  means "no thinking" because the provider then sends an explicit `thinking: {"type":"disabled"}`.
+- **Deprecated** `Opus48` → migrate to `Opus5`.
+- **Added** TTS overloads on `IAiProvider` / `IModelProvider`: `SpeechPrompt { Text, PreviousText?,
+  NextText? }` (keeps prosody continuous between lines), batch synthesis from
+  `IReadOnlyList<string>` with automatic stitching of neighbouring sentences, and
+  `GenerateWithTimestampsAsync` → `Result<SpeechTimestamps>` with per-character timing
+  (`.ToWords()` for subtitle cues).
+- **Added** ElevenLabs request options: seed, speed, language, text normalization and audio tags;
+  implemented the `/with-timestamps` endpoints and alignment mapping, plus request validation.
+
+## 10.6.1 — 2026-07-22
+
+### Superseded models marked `[Obsolete]`
+
+- **Deprecated** model classes that newer releases replaced, across Google (Gemini), OpenAI (GPT,
+  image) and xAI (Grok), each carrying its recommended replacement in the attribute message.
+  Behaviour is unchanged — the models still work; the attribute only signals what not to pick for
+  new code.
+- **Changed** `llms.md` to flag deprecated classes with ⚠️ and list the replacement in the
+  *Deprecated models* section.
+
+## 10.6.0 — 2026-07-22
+
+### Typed image/video prompts and central input validation
+
+**Breaking.** The image and video `GenerateAsync` overloads no longer accept a plain `IPrompt<Asset>` —
+they take `IImagePrompt` / `IVideoPrompt`, so a text prompt can no longer be passed to an image model
+by accident.
+
+- **Added** `IImagePrompt` / `IVideoPrompt` and the ready-made `ImagePrompt` / `VideoPrompt` classes
+  (`Text` plus an optional source `Image` / `Video`). For templated prompts, inherit
+  `ImagePromptBase` / `VideoPromptBase`.
+- **Added** central input validation: files are checked against the model's declared channels, and a
+  call must carry text or a file. Mismatches now fail fast with a clear message instead of reaching
+  the provider.
+- **Added** `GrokImagineVideo15` (`grok-imagine-video-1.5`).
+
+#### Migration
+
+```csharp
+// Before
+await ai.GenerateAsync(imageModel, new MyPrompt { … }, ct);
+
+// After
+await ai.GenerateAsync(imageModel, new ImagePrompt { Text = "a red bicycle" }, ct);
+await ai.GenerateAsync(imageModel, new ImagePrompt { Text = "make it snowy", Image = source }, ct);
+await ai.GenerateAsync(videoModel, new VideoPrompt { Text = "slow zoom in", Image = photo }, ct);
+```
+
+## 10.5.0 — 2026-07-19
+
+### ElevenLabs provider: text-to-speech (`ISpeechLlm`)
+
+- **Added** the `Zonit.Extensions.Ai.ElevenLabs` package with DI registration
+  (`AddAiElevenLabs()`, binds `Ai:ElevenLabs`) and the `ISpeechLlm` capability interface, so
+  `GenerateAsync(speechLlm, string)` returns `Result<Asset>` with the audio.
+- **Added** TTS models (`ElevenV3`, `ElevenMultilingualV2`, `ElevenTurboV2` / `V2_5`,
+  `ElevenFlashV2` / `V2_5`), the `ElevenVoices` catalogue, `ElevenAudioFormat`, and per-character
+  billing so cost lands in `MetaData` like every other modality.
+
+## 10.4.0 — 2026-07-12
+
+### Global HTTP/SOCKS proxy for every provider
+
+- **Added** the `Ai:Proxy` section (`AiProxyOptions`: `Enabled`, `Address`, `Username`, `Password`)
+  — set once, applied to every provider's HTTP client. Supports HTTP and SOCKS addresses.
+- **Added** a per-provider opt-out: `AiProviderOptions.UseProxy = false` excludes one provider while
+  the rest keep the proxy. Useful for reaching a region-locked model (e.g. Grok 4.5 is EU-blocked)
+  through an allowed-region exit node without routing unrelated traffic.
+
+## 10.3.7 — 2026-07-12
+
+### Fixed: OpenAI agent stopped after one tool call
+
+- **Fixed** `OpenAiAgentSession` dropping per-request configuration on continuation. Tools,
+  instructions, output format and reasoning are now resent with **every** request that carries a
+  `previous_response_id` — previously they were sent only on the first turn, so the model lost its
+  tools mid-run and the agent behaved as if it had none.
+
+## 10.3.6 — 2026-07-12
+
+### Strongly-typed reasoning effort for OpenAI models
+
+**Breaking.** The per-model nested `ReasonType` enum is gone. Effort levels are now enforced by the
+model's own enum, so passing a level a model does not support is a compile-time error.
+
+- **Removed** `ReasonType` from OpenAI model classes.
+- **Added** `OpenAiReasoningBase<TReason>` plus `OpenAiReasonEffort` (`None`, `Low`, `Medium`,
+  `High` — GPT-5.0–5.5 and the o-series) and `OpenAiReasonEffortExtended`, which adds `Xhigh` for
+  GPT-5.6 (Sol / Terra / Luna).
+
+#### Migration
+
+```csharp
+// Before
+new GPT55 { Reason = GPT55.ReasonType.High }
+
+// After
+new GPT55 { Reason = OpenAiReasonEffort.High }
+new Sol56 { Reason = OpenAiReasonEffortExtended.Xhigh }
+```
+
+## 10.3.5 — 2026-07-11
+
+### OpenAI GPT-5.6 tier: Sol / Terra / Luna
+
+- **Added** `Sol56` (`gpt-5.6-sol`), `Terra56` (`gpt-5.6-terra`) and `Luna56` (`gpt-5.6-luna`) —
+  1,050,000 context / 128,000 output, text + image in. GPT-5.6 replaces the pro/mini/nano naming
+  with these three tiers.
+
+## 10.3.4 — 2026-07-09
+
+### xAI Grok 4.5
+
+- **Added** `Grok45` (`grok-4.5`) and extended `reasoning.effort` support through `XProvider` and
+  `XAgentSession`.
+- **Note** the model is region-locked: xAI answers `403 … not available in your region` based on the
+  **source IP**, not the account. Route that provider through an allowed-region proxy — see the
+  `Ai:Proxy` support added in 10.4.0.
+
+## 10.3.3 — 2026-06-30
+
+### Claude Sonnet 5
+
+- **Added** `Sonnet5` (`claude-sonnet-5`) — adaptive thinking, 1M context, 128K output (Sonnet 4.6
+  capped at 64K), and `Reason = Sonnet5.ReasonType.Extra` (wire `xhigh`), which Sonnet 4.6 does not
+  expose.
+- **Added** `AnthropicAdaptiveBase.ThinkingEnabledByDefault`. Sonnet 5 turns thinking **on** when the
+  `thinking` field is omitted — unlike every other model here. With the flag set, the provider sends
+  an explicit `thinking: {"type":"disabled"}` when `Reason` is unset, so "Reason not set" keeps
+  meaning "no thinking" across the whole SDK.
+- **Deprecated** `Sonnet46` → migrate to `Sonnet5`.
+
+## 10.3.2 — 2026-06-30
+
+### Recovery from double-encoded JSON
+
+- **Fixed** `JsonResponseParser` failing when a model returned JSON as a *string* inside the JSON
+  (arrays and objects alike, including a whole collection stuffed into one property). Recovery runs
+  **only** after a deserialization error, so valid responses take the same path as before.
+
+## 10.3.1 — 2026-06-21
+
+### `ConversationInfo` in the run context
+
+- **Added** `ConversationInfo` to `IRunContext` (`MessageCount`, `IsEmpty`), initialized by
+  `AgentRunner` before tools are resolved. Lets a tool or a sub-agent's `IsAvailable` branch on how
+  far the conversation has got — e.g. expose an onboarding tool only on an empty conversation.
+
+## 10.3.0 — 2026-06-20
 
 ### Tool context is now a typed bag (`IRunContext`); sub-agents can hide themselves (`IsAvailable`)
 
@@ -72,6 +254,28 @@ bag lets each tool pull only the models it cares about, register as many as need
 server-resolved values back so sensitive ids never round-trip through the model. `IsAvailable` builds
 permissions, plans and scenarios straight into agent assembly instead of leaving the model to police
 itself.
+
+## 10.2.2 — 2026-06-19
+
+### Provider fixes: MCP config on Windows, Gemini tool results, OpenAI/xAI structured output
+
+- **Fixed** the Anthropic CLI transport passing MCP configuration inline, which `cmd.exe` mangled on
+  Windows. It is now written to a temporary `.json` file and deleted after the run.
+- **Fixed** Google / Gemini rejecting a tool result that was not a JSON object. A scalar or array
+  return value is now wrapped as `{ "result": … }` before being sent as `functionResponse.response`.
+- **Fixed** OpenAI and xAI structured output being sent as `response_format`. Both now use
+  `text.format`, which is what those APIs require — and it is resent on every turn, verified by a
+  regression test.
+- **Added** LIVE smoke tests for OpenAI, Google, Anthropic (API and SDK) and xAI agents covering
+  tool use, structured output and loose schemas.
+
+## 10.2.1 — 2026-06-17
+
+### Trusted tool context over the CLI / MCP bridge
+
+- **Added** `AgentSessionContext.Context` and `AgentToolContextBinder`, so a tool exposed through the
+  Claude Code CLI / MCP bridge receives the same trusted context as one running on the HTTP path.
+  Before this, `.WithContext(...)` values reached tools only on the direct provider path.
 
 ## 10.2.0 — 2026-06-17
 

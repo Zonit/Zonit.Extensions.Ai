@@ -120,11 +120,18 @@ public static class AnthropicServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // API transport — typed HttpClient with AI resilience (40min timeout, retry,
-        // circuit breaker). Also serves as the CLI transport's fallback for requests
-        // the CLI cannot represent (image/PDF attachments, tools / agent loop).
+        // API transport — typed HttpClient with AI resilience (retry, circuit breaker).
+        // Also serves as the CLI transport's fallback for requests the CLI cannot
+        // represent (image/PDF attachments, tools / agent loop).
+        //
+        // Streaming resilience even though SendAsync returns one assembled response:
+        // every request now goes out as SSE, so the per-attempt wall-clock cap must not
+        // apply. A long-but-healthy generation is legitimate; liveness is enforced by
+        // the assembler's inter-event watchdog and the handler's HTTP/2 keep-alive
+        // pings. The old non-streaming cap cancelled healthy work at exactly
+        // AttemptTimeout and then retried it from scratch.
         services.AddHttpClient<AnthropicApiTransport>()
-            .AddAiResilienceHandler<AnthropicOptions>();
+            .AddAiStreamingResilienceHandler<AnthropicOptions>();
 
         // CLI (claude -p) transport + its process runner (stateless singleton).
         services.TryAddSingleton<IClaudeCliRunner, ClaudeCliProcess>();

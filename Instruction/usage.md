@@ -8,7 +8,7 @@ Read the doc that fits the task:
 
 | Doc | Use when |
 | :--- | :--- |
-| this `usage.md` | Getting started, the two surfaces, the full API reference, each modality |
+| this `usage.md` | Getting started, the three ways to run a call, the full API reference, each modality |
 | [`configuration.md`](./configuration.md) | DI registration, `appsettings.json`, resilience |
 | [`models.md`](./models.md) | Capability interfaces, picking a model, reasoning, fast mode |
 | [`prompts.md`](./prompts.md) | Writing a prompt class (`*Prompt.cs`) |
@@ -36,23 +36,32 @@ Every call returns `Result<T>` with `.Value` (the typed result) and `.MetaData` 
 token usage, computed cost, duration) — there is no `IsSuccess`; failures throw. Agent/chat builder
 runs return `ResultAgent<T>` (`Result<T>` plus the tool-call trace). See [`results.md`](./results.md).
 
-## Two surfaces: simple calls and the fluent builder
+## Three ways to run a call
 
-The API is split so the common case stays tiny and only advanced calls grow.
+Pick by **how you want the result delivered**, not by how big the job is.
 
-- **Simple calls** — positional `GenerateAsync` / `ChatAsync` / `…StreamAsync`. Just `llm` + input.
-  Generation settings (`MaxTokens`, `Temperature`, `Cache`, reasoning) live on the model object, so
-  there is **no settings parameter**. Use them for plain in→out: text, image, embedding, audio, a
-  chat without tools, and token streaming.
-- **Fluent builder** — `ai.Agent(...)` / `ai.Chat(...)`. Use whenever the call needs **tools, MCP,
-  scoped context, or per-call limits**. **Safe by default:** nothing reaches the model unless you
-  add it. There is no positional overload that takes `tools` / `mcps` / `context` — that lives only
-  on the builder.
+| | Call | You get | Use when |
+| :--- | :--- | :--- | :--- |
+| **1. Await the whole thing** | `GenerateAsync` / `ChatAsync` | `Result<T>` — finished, with usage and cost | The default. Any size of output. |
+| **2. Live, token by token** | `StreamAsync` / `ChatStreamAsync` | `IAsyncEnumerable<string>` | You are rendering text to a user as it arrives. **Text only** — no structured output, no usage. |
+| **3. Step by step** | `ai.Agent(...)` / `ai.Chat(...)` | `ResultAgent<T>`, or `AgentEvent`s from `.RunStreamAsync()` | The model must **fetch** or **act** partway through: tools, MCP, sub-agents. |
+
+Generation settings (`MaxTokens`, `Temperature`, `Cache`, reasoning) live on the **model object**,
+so there is no settings parameter on any of them. The builder in (3) is **safe by default**:
+nothing reaches the model unless you add it, and there is no positional overload taking
+`tools` / `mcps` / `context` — that lives only on the builder.
 
 ```csharp
-var quick  = await ai.GenerateAsync(new GPT5(), "summarise this", ct);              // simple
-var answer = await ai.Agent(new GPT5(), prompt).AddTool<SearchTool>().RunAsync(ct); // advanced
+var quick  = await ai.GenerateAsync(new Opus5(), "summarise this", ct);              // 1
+await foreach (var t in ai.StreamAsync(new Opus5(), "tell me a story", ct))          // 2
+    Console.Write(t);
+var answer = await ai.Agent(new Opus5(), prompt).AddTool<SearchTool>().RunAsync(ct); // 3
 ```
+
+> **Do not reach for (2) because the output is large.** Streaming is about *display*, not capacity.
+> `GenerateAsync` already streams on the wire and reassembles the reply for you, so a long answer is
+> handled the same way regardless — and it is the only one of the three that returns structured
+> output. Choosing (2) for a big structured response gets you no result at all.
 
 ### Single prompt or agent?
 
@@ -86,7 +95,7 @@ plain-`string` form alongside the `IPrompt<T>` form.
 | `GenerateAsync(speechLlm, IReadOnlyList<string>)` | `ISpeechLlm` | `IReadOnlyList<Result<Asset>>` — whole script → one take per line, neighbour sentences auto-stitched |
 | `GenerateWithTimestampsAsync(speechLlm, string / SpeechPrompt)` | `ISpeechLlm` | `Result<SpeechTimestamps>` — audio + per-character timing (`.ToWords()` for subtitle cues) |
 | `ChatAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `Result<T>` — multi-turn, **no tools** |
-| `StreamAsync(llm, string)` | `ILlm` | `IAsyncEnumerable<string>` — text tokens |
+| `StreamAsync(llm, string)` | `ILlm` | `IAsyncEnumerable<string>` — text tokens. Text only: takes a `string` prompt, yields text deltas, and reports no usage or cost |
 | `ChatStreamAsync(llm, prompt, history)` / `(llm, string, history)` | `ILlm` | `IAsyncEnumerable<string>` — chat tokens, no tools |
 | `CalculateCost(...)` / `EstimateCost(...)` | various | `Price` (see results.md) |
 
@@ -135,7 +144,7 @@ await foreach (var chunk in ai.StreamAsync(new GPT5(), "Tell me a story", ct))
     Console.Write(chunk);
 
 // Multi-turn chat without tools (chat.md)
-Result<string> reply = await ai.ChatAsync(new Sonnet46(), systemPrompt, history, ct);
+Result<string> reply = await ai.ChatAsync(new Sonnet5(), systemPrompt, history, ct);
 
 // Image. Returns Result<Asset>; bytes in .Value.Data. Needs an image provider (providers.md).
 var img = await ai.GenerateAsync(

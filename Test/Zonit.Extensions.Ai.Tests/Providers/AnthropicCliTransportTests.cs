@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -190,6 +190,7 @@ public class AnthropicCliTransportTests
         var apiTransport = new AnthropicApiTransport(
             httpClient,
             Options.Create(options),
+            Options.Create(new AiOptions()),
             NullLogger<AnthropicApiTransport>.Instance);
 
         return new AnthropicCliTransport(
@@ -222,7 +223,8 @@ public class AnthropicCliTransportTests
             .ReturnsAsync(new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(responseJson, Encoding.UTF8, "application/json"),
+                // The API transport streams and reassembles, so it must be fed frames.
+                Content = new StringContent(AnthropicSse.FromResponseJson(responseJson), Encoding.UTF8, "text/event-stream"),
             });
         return handler.Object;
     }

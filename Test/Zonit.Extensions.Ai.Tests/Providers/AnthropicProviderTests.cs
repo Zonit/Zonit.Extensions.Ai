@@ -1,4 +1,4 @@
-using FluentAssertions;
+﻿using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -146,6 +146,70 @@ public class AnthropicProviderTests
         capturedRequest.Should().Contain("thinking");
         capturedRequest.Should().Contain("budget_tokens");
         capturedRequest.Should().Contain("10000");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_ShouldRequestStreamingOnTheWire()
+    {
+        // GenerateAsync keeps its "one call, one finished result" contract, but must
+        // stream underneath. The buffered form held a single HTTP response open for the
+        // whole generation, so a large answer (max_tokens defaults to the model's full
+        // 128k output) outlived any per-attempt timeout and was then retried from zero.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        // Act
+        var result = await provider.GenerateAsync(new Sonnet45(), new TestPrompt { Text = "Say hello" }, CancellationToken.None);
+
+        // Assert — streamed on the wire, assembled for the caller.
+        capturedRequest.Should().NotBeNull();
+        JsonDocument.Parse(capturedRequest!).RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
+        result.Value.Should().Be("Hello");
+        result.MetaData.Usage!.InputTokens.Should().Be(10);
+        result.MetaData.Usage!.OutputTokens.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_StreamEndingBeforeMessageStop_ShouldThrowRatherThanReturnPartialText()
+    {
+        // A buffered POST was all-or-nothing for free; a stream is not. A connection
+        // that dies mid-generation must surface as a failure, never as a successful
+        // half-answer — otherwise truncation becomes silent data loss.
+        SetupMockSse(
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_cut\",\"usage\":{\"input_tokens\":10,\"output_tokens\":0}}}\n\n" +
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n" +
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Half an ans\"}}\n\n");
+
+        var provider = CreateProvider();
+
+        var act = async () => await provider.GenerateAsync(new Sonnet45(), new TestPrompt { Text = "hi" }, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .WithMessage("*incomplete*");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_StructuredOutputCutMidJson_ShouldThrowRatherThanParsePartialPayload()
+    {
+        // Structured output streams as input_json_delta fragments. Fragments that do not
+        // concatenate into valid JSON mean the stream was cut mid-payload — exactly the
+        // case where returning "what we got" would hand the caller a corrupt object.
+        SetupMockSse(
+            "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_cut\",\"usage\":{\"input_tokens\":10,\"output_tokens\":0}}}\n\n" +
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_1\",\"name\":\"respond_json\",\"input\":{}}}\n\n" +
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"name\\\":\\\"unf\"}}\n\n" +
+            "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":5}}\n\n" +
+            "data: {\"type\":\"message_stop\"}\n\n");
+
+        var provider = CreateProvider();
+
+        var act = async () => await provider.GenerateAsync(new Sonnet46(), new FlatPrompt(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .WithMessage("*incomplete tool_use payload*");
     }
 
     [Fact]
@@ -376,6 +440,7 @@ public class AnthropicProviderTests
         var apiTransport = new AnthropicApiTransport(
             httpClient,
             Options.Create(_options),
+            Options.Create(new AiOptions()),
             Microsoft.Extensions.Logging.Abstractions.NullLogger<AnthropicApiTransport>.Instance);
 
         return new AnthropicProvider(new SingleTransportProvider(apiTransport), _loggerMock.Object);
@@ -387,8 +452,18 @@ public class AnthropicProviderTests
             => serviceType == typeof(IAnthropicTransport) ? transport : null;
     }
 
+    /// <summary>
+    /// Sets up the mock transport with a response described in the <i>non-streaming</i>
+    /// JSON shape, which is then re-emitted as the SSE frame sequence Anthropic would
+    /// actually send. The single-shot paths stream on the wire and reassemble
+    /// (see <c>AnthropicStreamAssembler</c>), so the tests must feed frames — expressing
+    /// the expectation as one JSON object keeps them readable and, as a side effect,
+    /// asserts that assembling a stream reproduces the buffered shape exactly.
+    /// </summary>
     private void SetupMockResponse(string responseJson, Action<string>? captureRequest = null)
     {
+        var sse = AnthropicSse.FromResponseJson(responseJson);
+
         _httpHandlerMock.Protected()
             .Setup<Task<HttpResponseMessage>>(
                 "SendAsync",
@@ -402,11 +477,28 @@ public class AnthropicProviderTests
                     captureRequest(content);
                 }
             })
-            .ReturnsAsync(new HttpResponseMessage
+            // A fresh message per call: the body is a stream, so a shared instance
+            // would be already-consumed on any second attempt.
+            .Returns(() => Task.FromResult(new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
-            });
+                Content = new StringContent(sse, Encoding.UTF8, "text/event-stream"),
+            }));
+    }
+
+    /// <summary>Feeds a raw SSE body, for the malformed / truncated stream cases.</summary>
+    private void SetupMockSse(string sse)
+    {
+        _httpHandlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns(() => Task.FromResult(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(sse, Encoding.UTF8, "text/event-stream"),
+            }));
     }
 
     private class TestPrompt : IPrompt<string>

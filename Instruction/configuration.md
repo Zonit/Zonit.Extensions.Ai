@@ -86,7 +86,7 @@ with `AddAi(o => o.Resilience...)`.
 | Setting | Default | Meaning |
 | :--- | :--- | :--- |
 | `TotalRequestTimeout` | 90 min | Whole pipeline including retries |
-| `AttemptTimeout` | 30 min | One non-streaming attempt |
+| `AttemptTimeout` | 30 min | One **non-streaming** attempt. Does not apply to streaming calls — see the note below |
 | `MaxRetryAttempts` | 6 | Retry budget for both HTTP-layer and stream-layer retries |
 | `RetryBaseDelay` / `RetryMaxDelay` | 5 s / 60 s | Exponential backoff: first delay → steady cap |
 | `InterEventTimeout` | 30 min | Max gap between two stream frames before the stream is declared dead (streaming providers) |
@@ -97,9 +97,21 @@ with `AddAi(o => o.Resilience...)`.
 builder.Services.AddAi(o =>
 {
     o.Resilience.MaxRetryAttempts = 30;   // ride out a longer outage (~28 min at the 60 s cap)
-    o.Resilience.AttemptTimeout   = TimeSpan.FromMinutes(15);
+    o.Resilience.InterEventTimeout = TimeSpan.FromMinutes(10);   // declare a silent stream dead sooner
 });
 ```
+
+> **Do not lower `AttemptTimeout` to bound how long a generation may run.** It is a wall-clock
+> guillotine, not a liveness check: it cancels a request that is still legitimately producing
+> tokens, and the retry then restarts that generation from zero — more cost, same outcome. A long
+> answer is not a stuck one. To cut off a *stalled* provider, lower `InterEventTimeout`; to bound
+> the total including retries, set `TotalRequestTimeout`; to bound what the model may spend, set
+> `MaxTokens` on the model.
+>
+> `AttemptTimeout` applies only to calls that are **not** streamed. Anthropic's text calls all
+> stream on the wire — including `GenerateAsync` / `ChatAsync`, which reassemble the reply before
+> returning — so on that provider the effective per-attempt cap is `TotalRequestTimeout`, and
+> stream liveness is enforced by `InterEventTimeout` plus HTTP/2 keep-alive pings.
 
 ### Two layers, one schedule
 

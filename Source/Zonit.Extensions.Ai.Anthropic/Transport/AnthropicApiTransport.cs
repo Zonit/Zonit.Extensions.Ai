@@ -16,14 +16,22 @@ internal sealed class AnthropicApiTransport : IAnthropicTransport
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<AnthropicApiTransport> _logger;
+    private readonly TimeSpan _interEventTimeout;
 
     public AnthropicApiTransport(
         HttpClient httpClient,
         IOptions<AnthropicOptions> options,
+        IOptions<AiOptions> aiOptions,
         ILogger<AnthropicApiTransport> logger)
     {
         _httpClient = httpClient;
         _logger = logger;
+
+        // Dead-stream watchdog for the assembled (non-live) path — same knob the
+        // agent loop uses, so both streaming paths stall-detect identically.
+        var configured = aiOptions.Value.Resilience.InterEventTimeout;
+        _interEventTimeout = configured > TimeSpan.Zero ? configured : TimeSpan.FromMinutes(30);
+
         ConfigureHttpClient(options.Value);
     }
 
@@ -51,27 +59,50 @@ internal sealed class AnthropicApiTransport : IAnthropicTransport
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Requests <c>stream: true</c> on the wire and reassembles the SSE frames into the
+    /// complete <see cref="AnthropicResponse"/> the caller expects — the contract of
+    /// <c>GenerateAsync</c> / <c>ChatAsync</c> ("one call, one finished result") is
+    /// unchanged; only the transport differs.
+    /// <para>
+    /// The buffered form this replaces held one HTTP response open for the entire
+    /// generation. With <c>max_tokens</c> defaulting to the model's full output capacity
+    /// (128k on Opus / Sonnet 5), a large structured answer could legitimately run past
+    /// any per-attempt timeout, whereupon Polly cancelled it and retried — restarting
+    /// generation from zero and multiplying cost with no chance of success. Anthropic
+    /// documents this failure mode and their own SDKs refuse to send such a request.
+    /// Streaming removes the ceiling: frames arrive continuously, so liveness is what is
+    /// measured instead of total duration.
+    /// </para>
+    /// </remarks>
     public async Task<AnthropicResponse> SendAsync(
         ILlm llm,
         AnthropicMessagesRequest request,
         string operation,
         CancellationToken cancellationToken)
     {
+        // Wire-level only: the caller still receives one assembled response.
+        request.Stream = true;
+
         var jsonPayload = JsonSerializer.Serialize(request, AnthropicJsonContext.Default.AnthropicMessagesRequest);
         _logger.LogDebug("Anthropic {Operation} request: {Payload}", operation, jsonPayload);
 
         using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/messages", content, cancellationToken);
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "/v1/messages") { Content = content };
+        using var response = await _httpClient.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Anthropic {Operation} error: {Status} - {Response}", operation, response.StatusCode, responseJson);
-            throw new HttpRequestException(AnthropicProvider.BuildApiErrorMessage(llm, response.StatusCode, responseJson));
+            // Errors still arrive as a normal buffered body before any frame.
+            var errorJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("Anthropic {Operation} error: {Status} - {Response}", operation, response.StatusCode, errorJson);
+            throw new HttpRequestException(AnthropicProvider.BuildApiErrorMessage(llm, response.StatusCode, errorJson));
         }
 
-        return JsonSerializer.Deserialize(responseJson, AnthropicJsonContext.Default.AnthropicResponse)!;
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        return await AnthropicStreamAssembler.ReadAsync(reader, _interEventTimeout, operation, cancellationToken);
     }
 
     /// <inheritdoc />

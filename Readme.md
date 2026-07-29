@@ -28,7 +28,7 @@ IAiProvider ai = /* injected */;
 var answer = await ai.GenerateAsync(new GPT5(), "Summarise the CAP theorem in one sentence.");
 
 // Typed, structured output (JSON Schema generated for you)
-var review = await ai.GenerateAsync(new Sonnet46(), new CodeReviewPrompt { Diff = diff });
+var review = await ai.GenerateAsync(new Sonnet5(), new CodeReviewPrompt { Diff = diff });
 Console.WriteLine(review.Value.Severity);     // strongly typed
 Console.WriteLine(review.MetaData.TotalCost); // cost, already computed
 ```
@@ -208,7 +208,7 @@ stops you from, for example, asking an embedding model to generate an image.
 | `IVideoLlm`     | Video generation |
 | `IFast`         | Opt-in fast inference tier (premium pricing) |
 
-Concrete model classes (`GPT5`, `Sonnet46`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
+Concrete model classes (`GPT5`, `Sonnet5`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
 provider package and evolve with the providers. Discover them through IntelliSense or the
 package's `Llm/` folder; each class carries its own context window, pricing and supported
 endpoints. This README lists no model tables, because they go stale every release.
@@ -270,8 +270,14 @@ public class Result<T>
 
 All generation goes through `IAiProvider`, on **two surfaces**: simple positional calls for plain
 in→out, and the fluent `Agent` / `Chat` builder for anything with tools, MCP, context or limits
-(safe by default — no tool reaches the model unless you add it). Simple calls, selected by the
-model's capability interface:
+(safe by default — no tool reaches the model unless you add it).
+
+Across those surfaces there are **three ways to receive a result** — await the finished answer
+(`GenerateAsync` / `ChatAsync`), read it live token by token (`StreamAsync` / `ChatStreamAsync`,
+text only), or drive it step by step (`ai.Agent(...)` / `ai.Chat(...)`). Choose by whether you want
+to display partial output, never by how large the answer is.
+
+Simple calls, selected by the model's capability interface:
 
 | Call | Model type | Returns |
 | :--- | :--- | :--- |
@@ -303,7 +309,7 @@ Console.WriteLine(reply.Value); // "4"
 
 // Structured. SentimentResponse is filled from the model's JSON.
 Result<SentimentResponse> r = await ai.GenerateAsync(
-    new Sonnet46(),
+    new Sonnet5(),
     new SentimentPrompt { Text = "I love this!" });
 
 Console.WriteLine(r.Value.Sentiment);  // "positive"
@@ -312,10 +318,17 @@ Console.WriteLine(r.MetaData.PromptName);   // "Translate"
 
 ### Streaming text
 
+Use this when you are rendering text to a user as it arrives — not because the answer is long.
+
 ```csharp
 await foreach (var chunk in ai.StreamAsync(new GPT5(), "Tell me a short story."))
     Console.Write(chunk);
 ```
+
+`StreamAsync` is text in, text out: it takes a plain `string` prompt, yields text deltas, and
+reports no usage or cost. For a **structured** response, or when you simply want the finished
+answer, use `GenerateAsync` — it streams on the wire and reassembles the reply for you, so output
+size is not a reason to choose between the two.
 
 ### Files and vision
 
@@ -481,7 +494,7 @@ var history = new ChatMessage[]
 };
 
 var result = await ai.ChatAsync(
-    new Sonnet46(),
+    new Sonnet5(),
     new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
     history);
 
@@ -746,7 +759,7 @@ no plumbing on your side.
 `.RunStreamAsync()` emits a sealed `AgentEvent` hierarchy so you can drive a live UI:
 
 ```csharp
-await foreach (var evt in ai.Agent(new Sonnet46(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
+await foreach (var evt in ai.Agent(new Sonnet5(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
 {
     switch (evt)
     {
@@ -767,12 +780,17 @@ with full tool-calling (needs an `IAgentLlm` model).
 
 | Call | Returns | Tools | Streaming |
 | :--- | :--- | :---: | :---: |
-| `ChatAsync(llm, prompt, history)` | `Result<T>` | no | no |
+| `ChatAsync(llm, prompt, history)` | `Result<T>` | no | no¹ |
 | `ChatStreamAsync(llm, prompt, history)` | `IAsyncEnumerable<string>` | no | tokens |
 | `Agent(agentLlm, prompt).RunAsync()` | `ResultAgent<T>` | yes | no |
 | `Agent(agentLlm, prompt).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
 | `Chat(llm, prompt, history).RunAsync()` | `Result<T>` | yes | no |
 | `Chat(llm, prompt, history).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
+
+¹ The **Streaming** column means "does the caller see partial output". Whether a call streams on the
+wire is a transport detail: Anthropic text calls always do, and the non-streaming entry points
+reassemble the reply before returning. Output size is therefore never a reason to pick a streaming
+entry point — pick by whether you want to display partial output.
 
 Every entry point has a plain-`string` overload for when you do not need a typed response. On either
 builder, `.AddAgent<T>()` delegates to a [sub-agent](#sub-agents-delegate-to-a-specialist) — a
