@@ -90,14 +90,14 @@ public class Grok420MultiAgent : XChatBase
         FeaturesType.Reasoning;
 
     /// <inheritdoc />
-    public override decimal GetInputPrice(long tokenCount)
+    public override decimal GetInputPrice(long inputTokens)
     {
-        return tokenCount > 200_000 ? PriceInput * 2 : PriceInput;
+        return inputTokens > 200_000 ? PriceInput * 2 : PriceInput;
     }
 
     /// <inheritdoc />
-    public override decimal GetOutputPrice(long tokenCount)
+    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
     {
-        return tokenCount > 200_000 ? PriceOutput * 2 : PriceOutput;
+        return inputTokens > 200_000 ? PriceOutput * 2 : PriceOutput;
     }
 }

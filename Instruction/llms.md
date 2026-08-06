@@ -346,11 +346,11 @@ Total: 134 models across 17 providers.
 | `GPTImage15` | $5 | — | — | $0 |
 | `GPTImage1Mini` | $2 | — | — | $0 |
 | `GPTImage2` | $5 | — | — | $0 |
-| `Luna56` | $1 | $0.1 | — | $6 |
+| `Luna56` | $0.2 | $0.02 | — | $1.2 |
 | `O3` | $2 | $0.5 | — | $8 |
 | `O3Pro` | $20 | $5 | — | $80 |
 | `Sol56` | $5 | $0.5 | — | $30 |
-| `Terra56` | $2.5 | $0.25 | — | $15 |
+| `Terra56` | $2 | $0.2 | — | $12 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
 | `TextEmbedding3Small` | $0.02 | — | — | $0 |
 | `Whisper1` | $0 | — | — | $0 |

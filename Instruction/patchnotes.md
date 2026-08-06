@@ -5,6 +5,36 @@ records *what changed and why*.
 
 ## Unreleased
 
+### GPT-5.6 price cut, and long-context pricing keyed on the context size
+
+**Breaking — `ILlm` gained methods and `GetOutputPrice` gained a parameter.** Only code that
+*implements* `ILlm` by hand is affected; callers of `IAiProvider.CalculateCost` are not.
+
+- **Changed** GPT-5.6 pricing to OpenAI's 2026-07-30 cut: `Terra56` $2.50/$15 → **$2/$12** (cached
+  $0.25 → $0.20, batch $1.25/$7.50 → $1/$6) and `Luna56` $1/$6 → **$0.20/$1.20** (cached $0.10 →
+  $0.02, batch $0.50/$3 → $0.10/$0.60). `Sol56` is unchanged at $5/$30.
+- **Changed** `ILlm.GetOutputPrice(long tokenCount)` to `GetOutputPrice(long inputTokens, long
+  outputTokens)`. Long-context surcharges are keyed on the size of the **context**, even the ones
+  that raise the *output* rate — GPT-5.6 bills output at 1.5× ($45 / $18 / $1.80) once input passes
+  272K. The old signature only saw the output count, so that tier could never be reached.
+- **Fixed** the same dead threshold in five xAI models (`Grok420Reasoning`, `Grok420NonReasoning`,
+  `Grok420MultiAgent`, `Grok41FastReasoning`, `Grok41FastNonReasoning`): they compared the *output*
+  count against 200K / 128K / 512K, above `MaxOutputTokens`, so the doubled and quadrupled output
+  rates were unreachable.
+- **Fixed** cache pricing being ignored for every reasoning model. `AiCostCalculator` gated its
+  cache-aware path on `ITextLlm`, but `IReasoningLlm` declares its own `PriceCachedInput` without
+  deriving from `ITextLlm` — so cache reads on the whole GPT-5.x / o3 / Sol / Terra / Luna family
+  were billed at the **full input rate**. Cache rates now resolve through `ILlm.GetCachedInputPrice`
+  / `GetCachedInputWritePrice`, with no marker-interface gate.
+- **Added** `ILlm.GetBatchInputPrice` / `GetBatchOutputPrice`, so `CalculateBatchCost` picks up
+  long-context batch tiers (Sol: $5 / $22.50 past 272K) instead of the flat `BatchPrice*`
+  properties.
+- **Changed** `AiCostCalculator.CalculateOutputCost(llm, outputTokens)` to
+  `CalculateOutputCost(llm, inputTokens, outputTokens)`.
+- **Unchanged** for model authors who do not tier by context: `LlmBase` supplies every new method
+  with the classic flat-rate behaviour, so only models that genuinely price differently above a
+  threshold override anything.
+
 ### Anthropic single-shot calls stream on the wire and reassemble
 
 **Not breaking — no API change.** `GenerateAsync` / `ChatAsync` still take the same arguments and

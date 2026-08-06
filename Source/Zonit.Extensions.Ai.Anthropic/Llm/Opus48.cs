@@ -65,11 +65,11 @@ public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFas
     public decimal FastPriceOutput => 50.00m;
 
     /// <summary>Fast price when <see cref="Speed"/> is <see cref="SpeedType.Fast"/>, otherwise the standard price.</summary>
-    public override decimal GetInputPrice(long tokenCount)
+    public override decimal GetInputPrice(long inputTokens)
         => Speed == SpeedType.Fast ? FastPriceInput : PriceInput;
 
     /// <summary>Fast price when <see cref="Speed"/> is <see cref="SpeedType.Fast"/>, otherwise the standard price.</summary>
-    public override decimal GetOutputPrice(long tokenCount)
+    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
         => Speed == SpeedType.Fast ? FastPriceOutput : PriceOutput;
 
     /// <inheritdoc />

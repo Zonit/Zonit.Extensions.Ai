@@ -17,7 +17,7 @@ public interface ITextLlm : ILlm
     /// Null means cache writes are not supported or are billed at the base input rate.
     /// </summary>
     decimal? PriceCachedInputWrite => null;
-    
+
     /// <summary>
     /// Temperature for response randomness (0.0 - 2.0).
     /// </summary>

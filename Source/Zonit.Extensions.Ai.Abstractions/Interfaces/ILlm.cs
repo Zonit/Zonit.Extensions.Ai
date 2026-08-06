@@ -72,15 +72,64 @@ public interface ILlm
     EndpointsType SupportedEndpoints { get; }
     
     /// <summary>
-    /// Calculates input price based on token count (may vary with context size).
+    /// Price per 1M input tokens for a request of this context size.
     /// </summary>
-    decimal GetInputPrice(long tokenCount);
-    
+    /// <param name="inputTokens">
+    /// Total input (context) tokens of the request — the size that triggers a
+    /// provider's long-context tier (e.g. OpenAI &gt; 272K, xAI &gt; 128K).
+    /// </param>
+    decimal GetInputPrice(long inputTokens);
+
     /// <summary>
-    /// Calculates output price based on token count.
+    /// Price per 1M output tokens for a request of this context size.
     /// </summary>
-    decimal GetOutputPrice(long tokenCount);
-    
+    /// <param name="inputTokens">
+    /// Total input (context) tokens of the request. Long-context surcharges are
+    /// keyed on the INPUT size even when they raise the output rate — e.g. OpenAI
+    /// GPT-5.6 bills output at 1.5× once input exceeds 272K tokens.
+    /// </param>
+    /// <param name="outputTokens">Generated output tokens (reasoning included).</param>
+    decimal GetOutputPrice(long inputTokens, long outputTokens);
+
+    /// <summary>
+    /// Price per 1M cache-read tokens for a request of this context size.
+    /// Long-context tiers surcharge cache reads too (OpenAI GPT-5.6: 2× beyond
+    /// 272K input tokens), so the rate cannot be a flat property.
+    /// </summary>
+    /// <remarks>
+    /// Lives on <see cref="ILlm"/> rather than on <see cref="ITextLlm"/> because
+    /// <see cref="IReasoningLlm"/> declares its own <c>PriceCachedInput</c> without
+    /// deriving from <see cref="ITextLlm"/> — gating cache pricing on the marker
+    /// interface silently billed every reasoning model's cache reads at the full
+    /// input rate.
+    /// </remarks>
+    /// <param name="inputTokens">Total input (context) tokens of the request.</param>
+    decimal GetCachedInputPrice(long inputTokens);
+
+    /// <summary>
+    /// Price per 1M cache-write tokens for a request of this context size.
+    /// Returns the base input rate for providers that do not bill cache writes.
+    /// </summary>
+    /// <param name="inputTokens">Total input (context) tokens of the request.</param>
+    decimal GetCachedInputWritePrice(long inputTokens);
+
+    /// <summary>
+    /// Price per 1M input tokens on the batch endpoint (typically 0.5× standard).
+    /// Falls back to <see cref="BatchPriceInput"/>, then to half of
+    /// <see cref="GetInputPrice"/>.
+    /// </summary>
+    /// <param name="inputTokens">Total input (context) tokens of the request.</param>
+    decimal GetBatchInputPrice(long inputTokens);
+
+    /// <summary>
+    /// Price per 1M output tokens on the batch endpoint (typically 0.5× standard).
+    /// Falls back to <see cref="BatchPriceOutput"/>, then to half of
+    /// <see cref="GetOutputPrice"/>.
+    /// </summary>
+    /// <param name="inputTokens">Total input (context) tokens of the request.</param>
+    /// <param name="outputTokens">Generated output tokens.</param>
+    decimal GetBatchOutputPrice(long inputTokens, long outputTokens);
+
     /// <summary>
     /// Tools configured for this model instance (function calling, web search, etc.).
     /// Tools belong to the model, not the prompt!

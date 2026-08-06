@@ -62,10 +62,34 @@ public abstract class LlmBase : ILlm
     public virtual EndpointsType SupportedEndpoints { get; } = EndpointsType.None;
 
     /// <inheritdoc />
-    public virtual decimal GetInputPrice(long tokenCount) => PriceInput;
+    public virtual decimal GetInputPrice(long inputTokens) => PriceInput;
 
     /// <inheritdoc />
-    public virtual decimal GetOutputPrice(long tokenCount) => PriceOutput;
+    public virtual decimal GetOutputPrice(long inputTokens, long outputTokens) => PriceOutput;
+
+    /// <summary>
+    /// Cache-read rate for this context size. Resolves the flat rate from whichever
+    /// interface the model carries it on — <see cref="ITextLlm"/> and
+    /// <see cref="IReasoningLlm"/> each declare their own <c>PriceCachedInput</c> —
+    /// and falls back to the base input rate when the model has no cache pricing.
+    /// Models with a context-tiered cache rate override this.
+    /// </summary>
+    public virtual decimal GetCachedInputPrice(long inputTokens)
+        => (this as ITextLlm)?.PriceCachedInput
+           ?? (this as IReasoningLlm)?.PriceCachedInput
+           ?? GetInputPrice(inputTokens);
+
+    /// <inheritdoc />
+    public virtual decimal GetCachedInputWritePrice(long inputTokens)
+        => (this as ITextLlm)?.PriceCachedInputWrite ?? GetInputPrice(inputTokens);
+
+    /// <inheritdoc />
+    public virtual decimal GetBatchInputPrice(long inputTokens)
+        => BatchPriceInput ?? GetInputPrice(inputTokens) * 0.5m;
+
+    /// <inheritdoc />
+    public virtual decimal GetBatchOutputPrice(long inputTokens, long outputTokens)
+        => BatchPriceOutput ?? GetOutputPrice(inputTokens, outputTokens) * 0.5m;
 
     /// <inheritdoc />
     public virtual IToolBase[]? Tools { get; init; } = null;

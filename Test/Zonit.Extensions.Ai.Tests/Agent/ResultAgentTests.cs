@@ -117,8 +117,12 @@ public class ResultAgentTests
         public ToolsType SupportedTools => ToolsType.None;
         public FeaturesType SupportedFeatures => FeaturesType.None;
         public EndpointsType SupportedEndpoints => EndpointsType.None;
-        public decimal GetInputPrice(long tokenCount) => 0;
-        public decimal GetOutputPrice(long tokenCount) => 0;
+        public decimal GetInputPrice(long inputTokens) => 0;
+        public decimal GetOutputPrice(long inputTokens, long outputTokens) => 0;
+        public decimal GetCachedInputPrice(long inputTokens) => 0;
+        public decimal GetCachedInputWritePrice(long inputTokens) => 0;
+        public decimal GetBatchInputPrice(long inputTokens) => 0;
+        public decimal GetBatchOutputPrice(long inputTokens, long outputTokens) => 0;
         public IToolBase[]? Tools => null;
     }
 }

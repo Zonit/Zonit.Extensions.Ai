@@ -754,7 +754,7 @@ internal sealed class AiProvider : IAiProvider
     public Price CalculateCost(ILlm llm, int inputTokens, int outputTokens)
     {
         var inputPrice = llm.GetInputPrice(inputTokens);
-        var outputPrice = llm.GetOutputPrice(outputTokens);
+        var outputPrice = llm.GetOutputPrice(inputTokens, outputTokens);
 
         var inputCost = (inputTokens / 1_000_000m) * inputPrice;
         var outputCost = (outputTokens / 1_000_000m) * outputPrice;

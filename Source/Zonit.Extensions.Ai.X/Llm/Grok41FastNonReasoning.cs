@@ -46,9 +46,9 @@ public class Grok41FastNonReasoning : XChatBase
     /// <summary>
     /// Extended context pricing for input.
     /// </summary>
-    public override decimal GetInputPrice(long tokenCount)
+    public override decimal GetInputPrice(long inputTokens)
     {
-        if (tokenCount <= 128_000)
+        if (inputTokens <= 128_000)
             return PriceInput;
         return PriceInput * 2;
     }
@@ -56,9 +56,9 @@ public class Grok41FastNonReasoning : XChatBase
     /// <summary>
     /// Extended context pricing for output.
     /// </summary>
-    public override decimal GetOutputPrice(long tokenCount)
+    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
     {
-        if (tokenCount <= 128_000)
+        if (inputTokens <= 128_000)
             return PriceOutput;
         return PriceOutput * 2;
     }

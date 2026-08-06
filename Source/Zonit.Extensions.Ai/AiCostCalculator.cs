@@ -20,24 +20,25 @@ public static class AiCostCalculator
     {
         var inputPrice = llm.GetInputPrice(inputTokens);
 
-        if (llm is not ITextLlm textLlm)
-            return new Price((inputTokens / 1_000_000m) * inputPrice);
-
-        // Split input into: regular | cache reads | cache writes — each may have a different price.
+        // Split input into: regular | cache reads | cache writes — each may have a
+        // different price. No ITextLlm gate here: IReasoningLlm carries its own
+        // PriceCachedInput without deriving from ITextLlm, so gating on the marker
+        // interface billed every reasoning model's cache reads at the full input rate.
         var regularTokens = Math.Max(0, inputTokens - cachedTokens - cacheWriteTokens);
         var inputCost = (regularTokens / 1_000_000m) * inputPrice;
 
-        // Cache reads: cheaper (e.g. 0.1× base price)
+        // Cache reads: cheaper (e.g. 0.1× base price). Priced through the getter so
+        // long-context tiers surcharge cache reads too (OpenAI GPT-5.6: 2× past 272K).
         if (cachedTokens > 0)
         {
-            var readPrice = textLlm.PriceCachedInput ?? inputPrice;
+            var readPrice = llm.GetCachedInputPrice(inputTokens);
             inputCost += (cachedTokens / 1_000_000m) * readPrice;
         }
 
         // Cache writes: more expensive (e.g. 1.25× base price for Anthropic 5-min TTL)
         if (cacheWriteTokens > 0)
         {
-            var writePrice = textLlm.PriceCachedInputWrite ?? inputPrice;
+            var writePrice = llm.GetCachedInputWritePrice(inputTokens);
             inputCost += (cacheWriteTokens / 1_000_000m) * writePrice;
         }
 
@@ -48,11 +49,16 @@ public static class AiCostCalculator
     /// Calculates the output cost for a text generation operation.
     /// </summary>
     /// <param name="llm">The language model used.</param>
+    /// <param name="inputTokens">
+    /// Number of input (context) tokens. Required because long-context surcharges
+    /// on the OUTPUT rate are keyed on the input size (OpenAI GPT-5.6 bills output
+    /// at 1.5× once input exceeds 272K).
+    /// </param>
     /// <param name="outputTokens">Number of output tokens.</param>
     /// <returns>Output cost as Price.</returns>
-    public static Price CalculateOutputCost(ILlm llm, int outputTokens)
+    public static Price CalculateOutputCost(ILlm llm, int inputTokens, int outputTokens)
     {
-        var outputPrice = llm.GetOutputPrice(outputTokens);
+        var outputPrice = llm.GetOutputPrice(inputTokens, outputTokens);
         var outputCost = (outputTokens / 1_000_000m) * outputPrice;
         return new Price(outputCost);
     }
@@ -66,7 +72,7 @@ public static class AiCostCalculator
     public static Price CalculateCost(ILlm llm, TokenUsage usage)
     {
         var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
-        var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
+        var outputCost = CalculateOutputCost(llm, usage.InputTokens, usage.OutputTokens);
         return inputCost + outputCost;
     }
 
@@ -79,7 +85,7 @@ public static class AiCostCalculator
     public static (Price InputCost, Price OutputCost) CalculateCosts(ILlm llm, TokenUsage usage)
     {
         var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
-        var outputCost = CalculateOutputCost(llm, usage.OutputTokens);
+        var outputCost = CalculateOutputCost(llm, usage.InputTokens, usage.OutputTokens);
         return (inputCost, outputCost);
     }
 
@@ -92,8 +98,8 @@ public static class AiCostCalculator
     /// <returns>Total cost as Price.</returns>
     public static Price CalculateBatchCost(ILlm llm, TokenUsage usage)
     {
-        var inputPrice = llm.BatchPriceInput ?? llm.PriceInput * 0.5m;
-        var outputPrice = llm.BatchPriceOutput ?? llm.PriceOutput * 0.5m;
+        var inputPrice = llm.GetBatchInputPrice(usage.InputTokens);
+        var outputPrice = llm.GetBatchOutputPrice(usage.InputTokens, usage.OutputTokens);
 
         var inputCost = (usage.InputTokens / 1_000_000m) * inputPrice;
         var outputCost = (usage.OutputTokens / 1_000_000m) * outputPrice;
@@ -150,8 +156,8 @@ public static class AiCostCalculator
     {
         var estimatedInputTokens = (promptText.Length / 4) + 10; // Add buffer
 
-        var inputCost = (estimatedInputTokens / 1_000_000m) * llm.PriceInput;
-        var outputCost = (estimatedOutputTokens / 1_000_000m) * llm.PriceOutput;
+        var inputCost = (estimatedInputTokens / 1_000_000m) * llm.GetInputPrice(estimatedInputTokens);
+        var outputCost = (estimatedOutputTokens / 1_000_000m) * llm.GetOutputPrice(estimatedInputTokens, estimatedOutputTokens);
 
         return new Price(inputCost + outputCost);
     }

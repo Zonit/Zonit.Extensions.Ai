@@ -56,17 +56,17 @@ public class Grok420NonReasoning : XChatBase
     /// Higher context pricing: requests exceeding the 200K context window
     /// are charged at 2x the base rate.
     /// </summary>
-    public override decimal GetInputPrice(long tokenCount)
+    public override decimal GetInputPrice(long inputTokens)
     {
-        return tokenCount > 200_000 ? PriceInput * 2 : PriceInput;
+        return inputTokens > 200_000 ? PriceInput * 2 : PriceInput;
     }
 
     /// <summary>
     /// Higher context pricing for output: requests exceeding the 200K context window
     /// are charged at 2x the base rate.
     /// </summary>
-    public override decimal GetOutputPrice(long tokenCount)
+    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
     {
-        return tokenCount > 200_000 ? PriceOutput * 2 : PriceOutput;
+        return inputTokens > 200_000 ? PriceOutput * 2 : PriceOutput;
     }
 }

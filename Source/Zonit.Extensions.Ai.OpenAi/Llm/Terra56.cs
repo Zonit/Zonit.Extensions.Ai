@@ -8,8 +8,9 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <see cref="Luna56"/> (fast/low-cost).
 /// </summary>
 /// <remarks>
-/// 1.05M token context window; standard pricing applies up to 272K tokens,
-/// input doubles beyond 272K. Model id <c>gpt-5.6-terra</c>. Supports the full
+/// 1.05M token context window; standard pricing applies up to 272K input
+/// tokens, beyond which the long-context rates apply ($4 input / $0.40 cached /
+/// $18 output per 1M). Model id <c>gpt-5.6-terra</c>. Supports the full
 /// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
 /// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
@@ -19,19 +20,19 @@ public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLl
     public override string Name => "gpt-5.6-terra";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 2.50m;
+    public override decimal PriceInput => 2.00m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 15.00m;
+    public override decimal PriceOutput => 12.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.25m;
+    public override decimal? PriceCachedInput => 0.20m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 1.25m;
+    public override decimal? BatchPriceInput => 1.00m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceOutput => 7.50m;
+    public override decimal? BatchPriceOutput => 6.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_050_000;
@@ -65,11 +66,40 @@ public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLl
         EndpointsType.Batch;
 
     /// <summary>
-    /// Extended-context pricing: inputs beyond 272K tokens are billed at 2×
-    /// the base rate for the remainder of the session.
+    /// Context size past which OpenAI switches GPT-5.6 to long-context pricing
+    /// for the remainder of the session (standard, batch and flex alike).
     /// </summary>
-    public override decimal GetInputPrice(long tokenCount)
-    {
-        return tokenCount > 272_000 ? PriceInput * 2 : PriceInput;
-    }
+    private const long LongContextThreshold = 272_000;
+
+    /// <summary>Input-side rates (input, cache read, cache write) double past the threshold.</summary>
+    private const decimal LongContextInputMultiplier = 2m;
+
+    /// <summary>Output-side rates rise by half past the threshold ($12 → $18).</summary>
+    private const decimal LongContextOutputMultiplier = 1.5m;
+
+    /// <inheritdoc />
+    public override decimal GetInputPrice(long inputTokens)
+        => inputTokens > LongContextThreshold ? PriceInput * LongContextInputMultiplier : PriceInput;
+
+    /// <inheritdoc />
+    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
+        => inputTokens > LongContextThreshold ? PriceOutput * LongContextOutputMultiplier : PriceOutput;
+
+    /// <inheritdoc />
+    public override decimal GetCachedInputPrice(long inputTokens)
+        => inputTokens > LongContextThreshold
+            ? PriceCachedInput!.Value * LongContextInputMultiplier
+            : PriceCachedInput!.Value;
+
+    /// <inheritdoc />
+    public override decimal GetBatchInputPrice(long inputTokens)
+        => inputTokens > LongContextThreshold
+            ? BatchPriceInput!.Value * LongContextInputMultiplier
+            : BatchPriceInput!.Value;
+
+    /// <inheritdoc />
+    public override decimal GetBatchOutputPrice(long inputTokens, long outputTokens)
+        => inputTokens > LongContextThreshold
+            ? BatchPriceOutput!.Value * LongContextOutputMultiplier
+            : BatchPriceOutput!.Value;
 }
