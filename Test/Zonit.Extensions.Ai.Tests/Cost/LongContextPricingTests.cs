@@ -116,4 +116,42 @@ public class LongContextPricingTests
         model.GetOutputPrice(inputTokens: Long, outputTokens: 1_000).Should().Be(5.00m);
         model.GetOutputPrice(inputTokens: Short, outputTokens: 131_072).Should().Be(2.50m);
     }
+
+    [Theory]
+    // model,            short in, long in, short out, long out, short cached, long cached
+    [InlineData(typeof(Grok46), 2.00, 4.00, 6.00, 12.00, 0.50, 1.00)]
+    [InlineData(typeof(Grok45), 2.00, 4.00, 6.00, 12.00, 0.30, 0.60)]
+    public void Grok4x_TiersEveryRateOnTheInputSize(
+        Type modelType,
+        double shortIn, double longIn,
+        double shortOut, double longOut,
+        double shortCached, double longCached)
+    {
+        var model = (ILlm)Activator.CreateInstance(modelType)!;
+
+        model.GetInputPrice(Short).Should().Be((decimal)shortIn);
+        model.GetInputPrice(Long).Should().Be((decimal)longIn);
+
+        model.GetOutputPrice(Short, outputTokens: 1_000).Should().Be((decimal)shortOut);
+        model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be((decimal)longOut);
+
+        // Cache reads tier too — the rate xAI publishes for ≥200K prompts is
+        // double the short-context one, and long agent loops are exactly where
+        // cache reads dominate the bill.
+        model.GetCachedInputPrice(Short).Should().Be((decimal)shortCached);
+        model.GetCachedInputPrice(Long).Should().Be((decimal)longCached);
+    }
+
+    [Fact]
+    public void Grok46_LongContextThreshold_IsInclusive()
+    {
+        var model = new Grok46();
+
+        // xAI words it as "≥ 200k", so exactly 200,000 prompt tokens already
+        // bills at the higher card — not one token later.
+        model.GetInputPrice(199_999).Should().Be(2.00m);
+        model.GetInputPrice(200_000).Should().Be(4.00m);
+        model.GetCachedInputPrice(200_000).Should().Be(1.00m);
+        model.GetOutputPrice(200_000, outputTokens: 1_000).Should().Be(12.00m);
+    }
 }

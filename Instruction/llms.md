@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 134 models across 17 providers.
+Total: 135 models across 17 providers.
 
 ## Alibaba
 
@@ -421,7 +421,8 @@ Total: 134 models across 17 providers.
 | `Grok420NonReasoning` ⚠️ | `grok-4.20-0309-non-reasoning` | 2,000,000 | 131,072 | Text, Image → Text | chat, agent | WebSearch, CodeExecution, XSearch |
 | `Grok420Reasoning` ⚠️ | `grok-4.20-0309-reasoning` | 2,000,000 | 131,072 | Text, Image → Text | chat, agent | WebSearch, CodeExecution, XSearch |
 | `Grok43` ⚠️ | `grok-4.3` | 1,000,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
-| `Grok45` | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
+| `Grok45` ⚠️ | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
+| `Grok46` | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `GrokImagineImage` | `grok-imagine-image` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineVideo` ⚠️ | `grok-imagine-video` | 32,000 | — | Text, Image, Video → Video | video | — |
 | `GrokImagineVideo15` | `grok-imagine-video-1.5` | 32,000 | — | Text, Image → Video | video | — |
@@ -436,7 +437,8 @@ Total: 134 models across 17 providers.
 | `Grok420NonReasoning` | $1.25 | $0.3125 | — | $2.5 |
 | `Grok420Reasoning` | $1.25 | $0.3125 | — | $2.5 |
 | `Grok43` | $1.25 | $0.3125 | — | $2.5 |
-| `Grok45` | $2 | $0.5 | — | $6 |
+| `Grok45` | $2 | $0.3 | — | $6 |
+| `Grok46` | $2 | $0.5 | — | $6 |
 | `GrokImagineImage` | $0 | — | — | $0.02 |
 | `GrokImagineVideo` | $0 | — | — | $0.05 |
 | `GrokImagineVideo15` | $0 | — | — | $0.08 |
@@ -518,11 +520,12 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | OpenAi | `O3` | `o3-2025-04-16` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship reasoning model. Still works — upgrade for better quality. |
 | OpenAi | `O3Pro` | `o3-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship reasoning model. Still works — upgrade for better quality. |
 | OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost. |
-| X | `Grok41FastNonReasoning` | `grok-4-1-fast-non-reasoning` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
-| X | `Grok41FastReasoning` | `grok-4-1-fast-reasoning` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
-| X | `Grok420MultiAgent` | `grok-4.20-multi-agent-0309` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
-| X | `Grok420NonReasoning` | `grok-4.20-0309-non-reasoning` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
-| X | `Grok420Reasoning` | `grok-4.20-0309-reasoning` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
-| X | `Grok43` | `grok-4.3` | Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality. |
+| X | `Grok41FastNonReasoning` | `grok-4-1-fast-non-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok41FastReasoning` | `grok-4-1-fast-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok420MultiAgent` | `grok-4.20-multi-agent-0309` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok420NonReasoning` | `grok-4.20-0309-non-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok420Reasoning` | `grok-4.20-0309-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok43` | `grok-4.3` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok45` | `grok-4.5` | Superseded by Grok46 (grok-4.6), xAI's current frontier model — same price, plus the xhigh reasoning level. Still works — upgrade for better quality. |
 | X | `GrokImagineVideo` | `grok-imagine-video` | Superseded by GrokImagineVideo15 (grok-imagine-video-1.5) for text-to-video and image-to-video. Still works — and remains the only option for video-to-video (edit), which 1.5 does not support. |
 

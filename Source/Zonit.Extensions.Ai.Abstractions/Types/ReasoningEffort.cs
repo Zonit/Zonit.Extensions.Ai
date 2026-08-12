@@ -28,10 +28,11 @@ public enum ReasoningEffort
     /// <summary>
     /// Extra effort — additional level above <see cref="High"/> that allocates
     /// substantially more thinking tokens. Anthropic Claude Opus 4.7 / 4.8,
-    /// Fable 5, Mythos 5 and Sonnet 5 only (not Sonnet 4.6 or earlier). Maps to
-    /// the current API wire value <c>"xhigh"</c> (Anthropic's display name for this
-    /// level is "Extra"; the wire string will likely follow). Not supported by
-    /// OpenAI o-series, GPT-5 series, or xAI Grok models.
+    /// Fable 5, Mythos 5 and Sonnet 5 (not Sonnet 4.6 or earlier), and xAI
+    /// grok-4.6 (not grok-4.5 or earlier). Maps to the API wire value
+    /// <c>"xhigh"</c> on both providers (Anthropic's display name for this level
+    /// is "Extra"; the wire string will likely follow). Not supported by OpenAI
+    /// o-series or GPT-5 series.
     /// </summary>
     Extra,
 

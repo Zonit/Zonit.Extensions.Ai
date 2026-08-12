@@ -5,6 +5,35 @@ records *what changed and why*.
 
 ## Unreleased
 
+### Grok 4.6, and xAI's 200K price tier applied where it was missing
+
+**Not breaking for callers — one new model plus pricing fixes.** Code that pins `Grok45` keeps
+working; it now raises `CS0618` like the rest of the superseded Grok line.
+
+- **Added** `Grok46` (`grok-4.6`) — xAI's frontier model for coding, agentic work and knowledge
+  work. 500K context, text + image in, $2 / $6 per MTok, knowledge cutoff February 1, 2026.
+- **Added** the `xhigh` reasoning level to the xAI provider. grok-4.6 is the first Grok model to
+  accept a fourth effort level, and xAI spells it `"xhigh"` — `ReasoningEffort.Extra.ToString()`
+  would have sent `"extra"` and taken an HTTP 400, so the enum→wire step now goes through
+  `XEffortWire.Map`. `ReasoningEffort.None` and `.Max` remain rejected by grok-4.6.
+- **Fixed** `Grok45`'s cached-input rate: **$0.50 → $0.30** per MTok. $0.50 is grok-4.**6**'s rate;
+  grok-4.5 has always been cheaper on cache reads, so every cached token was over-reported by 67%.
+- **Added** the 200K context tier to `Grok45`, which had none — above the threshold xAI bills
+  **double on all three rates** ($4 / $0.60 / $12). Long-context calls were under-reported by half.
+- **Added** cached-read tiering (`GetCachedInputPrice`) on both `Grok45` and `Grok46`. The existing
+  Grok classes tier input and output only, so cache reads on a ≥200K prompt still bill at the
+  short-context rate — exactly the workload where cache reads dominate the bill.
+- **Changed** the threshold comparison to `>=`. xAI documents the tier as "≥ 200k"; the older Grok
+  classes use `> 200_000`, which mis-prices a request of exactly 200,000 prompt tokens.
+- **Deprecated** `Grok45` → migrate to `Grok46`, and repointed the `[Obsolete]` text on `Grok43`,
+  the `Grok420*` family and `Grok41Fast*` at `Grok46` (they still named grok-4.5 "xAI's current
+  flagship").
+
+> **Still outstanding:** `Grok43`, `Grok420*` and `Grok41Fast*` keep the exclusive `>` threshold,
+> carry cached rates derived as 25% of input rather than xAI's published values (e.g. `Grok43`
+> $0.3125 vs a published $0.20), and never tier the cached rate. They are all `[Obsolete]`, so this
+> was left alone rather than rewritten blind.
+
 ### Claude Sonnet 5 price cut is now permanent
 
 **Not breaking — pricing metadata only.** No API change; existing calls just cost less to report.

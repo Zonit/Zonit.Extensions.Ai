@@ -259,6 +259,70 @@ public class XProviderTests
         capturedRequest.Should().NotContain("tools");
     }
 
+    [Fact]
+    public async Task GenerateAsync_WithGrok46ReasonExtra_ShouldSendXHighEffort()
+    {
+        // Arrange
+        // grok-4.6 is the first Grok model to accept a fourth effort level, and
+        // xAI spells it "xhigh". A plain ToString().ToLowerInvariant() on
+        // ReasoningEffort.Extra would send "extra" and take an HTTP 400.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var model = new Grok46 { Reason = ReasoningEffort.Extra };
+        var prompt = new TestPrompt { Text = "Test" };
+
+        // Act
+        await provider.GenerateAsync(model, prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("\"effort\":\"xhigh\"");
+        capturedRequest.Should().NotContain("\"effort\":\"extra\"");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithGrok46ReasonHigh_ShouldSendHighEffort()
+    {
+        // Arrange
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var model = new Grok46 { Reason = ReasoningEffort.High };
+        var prompt = new TestPrompt { Text = "Test" };
+
+        // Act
+        await provider.GenerateAsync(model, prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().Contain("\"effort\":\"high\"");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithGrok46NoReason_ShouldOmitReasoning()
+    {
+        // Arrange
+        // Leaving Reason null must send no `reasoning` block at all so xAI
+        // applies its own default ("high") — not an invented one.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+        var prompt = new TestPrompt { Text = "Test" };
+
+        // Act
+        await provider.GenerateAsync(new Grok46(), prompt, CancellationToken.None);
+
+        // Assert
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().NotContain("\"effort\"");
+    }
+
     private XProvider CreateProvider()
     {
         var httpClient = new HttpClient(_httpHandlerMock.Object)

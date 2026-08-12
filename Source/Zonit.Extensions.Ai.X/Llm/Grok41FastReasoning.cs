@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Grok 4.1 Fast Reasoning - Fast model with full reasoning capabilities.
 /// Reasoning is always enabled (cannot be disabled).
 /// </summary>
-[Obsolete("Superseded by Grok45 (grok-4.5), xAI's current flagship. Still works — upgrade for better quality.")]
+[Obsolete("Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality.")]
 public class Grok41FastReasoning : XChatBase
 {
     /// <inheritdoc />
