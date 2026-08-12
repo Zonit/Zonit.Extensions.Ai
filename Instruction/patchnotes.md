@@ -5,6 +5,18 @@ records *what changed and why*.
 
 ## Unreleased
 
+### Claude Sonnet 5 price cut is now permanent
+
+**Not breaking — pricing metadata only.** No API change; existing calls just cost less to report.
+
+- **Changed** `Sonnet5` pricing to Anthropic's standing rate: **$2 / $10** per MTok (input / output),
+  down from $3 / $15. Cache rates follow the same 1.25× / 0.1× multipliers: write $3.75 → **$2.50**,
+  read $0.30 → **$0.20**.
+- **Why:** the $2 / $10 rate shipped at launch as introductory pricing through August 31, 2026, and
+  Anthropic has since made it the standard price — the increase to $3 / $15 scheduled for
+  September 1, 2026 will not happen. The class documented the *scheduled* rate, so every cost
+  figure it produced was ~50% high.
+
 ### GPT-5.6 price cut, and long-context pricing keyed on the context size
 
 **Breaking — `ILlm` gained methods and `GetOutputPrice` gained a parameter.** Only code that

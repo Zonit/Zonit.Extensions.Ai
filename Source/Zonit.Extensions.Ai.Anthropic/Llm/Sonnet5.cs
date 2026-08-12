@@ -30,9 +30,10 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Sonnet 4.6 figures.
 /// </para>
 /// <para>
-/// Pricing below is the <b>standard</b> rate, effective September 1, 2026.
-/// Anthropic offers introductory pricing of $2 / $10 per MTok (input / output)
-/// — with proportionally discounted cache rates — through August 31, 2026.
+/// Pricing below is the <b>standard</b> rate: $2 / $10 per MTok (input /
+/// output). Announced at launch as introductory pricing through August 31,
+/// 2026, it is now permanent — the increase to $3 / $15 previously scheduled
+/// for September 1, 2026 was cancelled.
 /// </para>
 /// </remarks>
 public class Sonnet5 : AnthropicReasoningBase<Sonnet5.ReasonType>, IAgentLlm
@@ -62,16 +63,16 @@ public class Sonnet5 : AnthropicReasoningBase<Sonnet5.ReasonType>, IAgentLlm
     public override string Name => "claude-sonnet-5";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 3.00m;
+    public override decimal PriceInput => 2.00m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 15.00m;
+    public override decimal PriceOutput => 10.00m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedWrite => 3.75m;
+    public override decimal PriceCachedWrite => 2.50m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedRead => 0.30m;
+    public override decimal PriceCachedRead => 0.20m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_000_000;
