@@ -256,8 +256,8 @@ catalog lists what ships in the box, your models are yours.
 Reasoning models expose effort, summary and verbosity through typed properties. The effort enum is
 per tier, so a model only accepts the levels its API actually supports (passing an unsupported level
 is a compile-time error). OpenAI GPT-5.0–5.5 / o-series use `OpenAiReasonEffort`
-(none/low/medium/high); GPT-5.6 (Sol / Terra / Luna) use `OpenAiReasonEffortExtended`, which adds
-`Xhigh` and `Max`.
+(none/low/medium/high); GPT-5.6 (Sol / Terra / Luna), GPT-5.6 Cyber and GPT-6 Astra use
+`OpenAiReasonEffortExtended`, which adds `Xhigh` and `Max`.
 
 ```csharp
 var r = await ai.GenerateAsync(
@@ -271,8 +271,9 @@ var r = await ai.GenerateAsync(
 // O-series models always reason.
 await ai.GenerateAsync(new O3 { Reason = OpenAiReasonEffort.High }, "Prove...", ct);
 
-// GPT-5.6 (Sol / Terra / Luna) adds two deeper effort levels: Xhigh and Max.
+// GPT-5.6 (Sol / Terra / Luna) and GPT-6 Astra add two deeper effort levels: Xhigh and Max.
 await ai.GenerateAsync(new Sol56 { Reason = OpenAiReasonEffortExtended.Xhigh }, prompt, ct);
+await ai.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortExtended.Max }, prompt, ct);
 ```
 
 Reasoning tokens are reported on `MetaData.Usage.ReasoningTokens`. See [`results.md`](./results.md).

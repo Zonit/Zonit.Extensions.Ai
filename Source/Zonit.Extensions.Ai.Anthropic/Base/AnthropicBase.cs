@@ -32,6 +32,15 @@ public abstract class AnthropicBase : LlmBase, ITextLlm
     /// </summary>
     public abstract decimal PriceCachedRead { get; }
 
+    /// <summary>
+    /// <c>false</c> for models that reject a forced <c>tool_choice</c>
+    /// (<c>{"type":"tool"}</c> / <c>{"type":"any"}</c>) with a 400 — the
+    /// always-thinking Fable / Mythos tier. The provider falls back to
+    /// <c>auto</c> plus the instruction for structured output on those models.
+    /// Defaults to <c>true</c>.
+    /// </summary>
+    protected internal virtual bool SupportsForcedToolChoice => true;
+
     /// <inheritdoc />
     public virtual decimal? PriceCachedInput => PriceCachedRead;
 

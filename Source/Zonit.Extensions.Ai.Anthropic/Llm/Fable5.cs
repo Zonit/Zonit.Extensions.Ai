@@ -61,6 +61,9 @@ public class Fable5 : AnthropicReasoningBase<Fable5.ReasonType>, IAgentLlm
     public override ChannelType Output { get; } = ChannelType.Text;
 
     /// <inheritdoc />
+    protected internal override bool SupportsForcedToolChoice => false;
+
+    /// <inheritdoc />
     public override ToolsType SupportedTools => ToolsType.WebSearch | ToolsType.MCP;
 
     /// <inheritdoc />

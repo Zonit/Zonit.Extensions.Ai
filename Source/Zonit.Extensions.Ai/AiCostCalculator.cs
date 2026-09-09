@@ -120,6 +120,34 @@ public static class AiCostCalculator
     }
 
     /// <summary>
+    /// Calculates the input and output cost for an image generation billed per
+    /// token (OpenAI <c>gpt-image-2</c> / <c>gpt-image-2.5</c>) rather than at a
+    /// flat per-image rate.
+    /// </summary>
+    /// <param name="llm">The token-priced image model used.</param>
+    /// <param name="usage">Token breakdown reported by the endpoint.</param>
+    /// <returns>Tuple of (InputCost, OutputCost).</returns>
+    public static (Price InputCost, Price OutputCost) CalculateImageTokenCosts(
+        ITokenPricedImageLlm llm,
+        ImageTokenUsage usage)
+    {
+        // Cached counts are a subset of their input counts (OpenAI convention),
+        // so the uncached remainder is what gets billed at the full rate.
+        var regularText = Math.Max(0, usage.TextInputTokens - usage.CachedTextInputTokens);
+        var regularImage = Math.Max(0, usage.ImageInputTokens - usage.CachedImageInputTokens);
+
+        var inputCost =
+            (regularText / 1_000_000m) * llm.PriceTextInput +
+            (usage.CachedTextInputTokens / 1_000_000m) * llm.PriceCachedTextInput +
+            (regularImage / 1_000_000m) * llm.PriceImageInput +
+            (usage.CachedImageInputTokens / 1_000_000m) * llm.PriceCachedImageInput;
+
+        var outputCost = (usage.ImageOutputTokens / 1_000_000m) * llm.PriceImageOutput;
+
+        return (new Price(inputCost), new Price(outputCost));
+    }
+
+    /// <summary>
     /// Calculates the cost for embedding operations.
     /// </summary>
     /// <param name="llm">The embedding model used.</param>

@@ -1,20 +1,32 @@
 namespace Zonit.Extensions.Ai.Anthropic;
 
 /// <summary>
-/// Claude Mythos 5 - Highest-capability Claude model available by invitation only
-/// through Project Glasswing. New narrative-themed tier, released June 2026.
-/// Supports adaptive thinking with five effort levels (see <see cref="ReasonType"/>),
-/// including <see cref="ReasonType.Extra"/>.
+/// Claude Mythos 5.1 — the Project Glasswing counterpart of
+/// <see cref="Fable51"/>: same capabilities, pricing and API surface, available
+/// by invitation only. Successor to <see cref="Mythos5"/>.
+/// Supports adaptive thinking with five effort levels (see <see cref="ReasonType"/>).
 /// </summary>
 /// <remarks>
-/// 1M token context window at standard pricing (no surcharge for long context).
-/// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
-/// Requires Project Glasswing access on the Anthropic account.
+/// <para>
+/// 1M token context window at standard pricing, 128K max output. Requires
+/// Project Glasswing access on the Anthropic account, and 30-day data
+/// retention.
+/// </para>
+/// <para>
+/// Thinking is always on server-side; the legacy <c>budget_tokens</c> mode and
+/// forced <c>tool_choice</c> are both rejected — see
+/// <see cref="AnthropicBase.SupportsForcedToolChoice"/>.
+/// </para>
+/// <para>
+/// Cache reads are billed at the Mythos 5 rate of $1.00/1M here. Fable 5.1
+/// dropped to $0.25/1M; Anthropic has not confirmed whether Mythos 5.1 shares
+/// that rate, so the higher figure is used rather than under-reporting cost.
+/// </para>
 /// </remarks>
-public class Mythos5 : AnthropicReasoningBase<Mythos5.ReasonType>, IAgentLlm
+public class Mythos51 : AnthropicReasoningBase<Mythos51.ReasonType>, IAgentLlm
 {
     /// <summary>
-    /// Adaptive-thinking effort levels accepted by Claude Mythos 5. Numeric
+    /// Adaptive-thinking effort levels accepted by Claude Mythos 5.1. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot.
     /// </summary>
@@ -35,7 +47,7 @@ public class Mythos5 : AnthropicReasoningBase<Mythos5.ReasonType>, IAgentLlm
     }
 
     /// <inheritdoc />
-    public override string Name => "claude-mythos-5";
+    public override string Name => "claude-mythos-5-1";
 
     /// <inheritdoc />
     public override decimal PriceInput => 10.00m;

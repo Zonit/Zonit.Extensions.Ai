@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 135 models across 17 providers.
+Total: 143 models across 17 providers.
 
 ## Alibaba
 
@@ -38,8 +38,10 @@ Total: 135 models across 17 providers.
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
 | `Fable5` | `claude-fable-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Fable51` | `claude-fable-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Haiku45` | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Mythos5` | `claude-mythos-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Mythos51` | `claude-mythos-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
@@ -54,8 +56,10 @@ Total: 135 models across 17 providers.
 | Class | Input | Cached read | Cached write | Output |
 | :--- | ---: | ---: | ---: | ---: |
 | `Fable5` | $10 | $1 | $12.5 | $50 |
+| `Fable51` | $10 | $0.25 | $12.5 | $50 |
 | `Haiku45` | $1 | $0.1 | $1.25 | $5 |
 | `Mythos5` | $10 | $1 | $12.5 | $50 |
+| `Mythos51` | $10 | $1 | $12.5 | $50 |
 | `Opus45` | $5 | $0.5 | $6.25 | $25 |
 | `Opus46` | $5 | $0.5 | $6.25 | $25 |
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
@@ -285,6 +289,8 @@ Total: 135 models across 17 providers.
 
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
+| `Astra6` | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Cyber56` | `gpt-5.6-cyber` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, MCP |
 | `GPT41` ⚠️ | `gpt-4.1-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT41Mini` ⚠️ | `gpt-4.1-mini-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `GPT4o` ⚠️ | `gpt-4o` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | WebSearch, FileSearch, CodeInterpreter |
@@ -309,6 +315,8 @@ Total: 135 models across 17 providers.
 | `GPTImage15` ⚠️ | `gpt-image-1.5` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage1Mini` | `gpt-image-1-mini` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage2` | `gpt-image-2` | 128,000 | — | Text, Image → Image | image | — |
+| `GPTImage25Flare` | `gpt-image-2.5-flare` | 128,000 | — | Text, Image → Image | image | — |
+| `GPTImage25Sunburst` | `gpt-image-2.5-sunburst` | 128,000 | — | Text, Image → Image | image | — |
 | `Luna56` | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch |
 | `O3` ⚠️ | `o3-2025-04-16` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `O3Pro` ⚠️ | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
@@ -322,6 +330,8 @@ Total: 135 models across 17 providers.
 
 | Class | Input | Cached read | Cached write | Output |
 | :--- | ---: | ---: | ---: | ---: |
+| `Astra6` | $10 | $1 | — | $50 |
+| `Cyber56` | $12.5 | $1.25 | — | $75 |
 | `GPT41` | $2 | $0.5 | — | $8 |
 | `GPT41Mini` | $0.4 | $0.1 | — | $1.6 |
 | `GPT4o` | $2.5 | $1.25 | — | $10 |
@@ -345,11 +355,13 @@ Total: 135 models across 17 providers.
 | `GPT5Pro` | $15 | — | — | $120 |
 | `GPTImage15` | $5 | — | — | $0 |
 | `GPTImage1Mini` | $2 | — | — | $0 |
-| `GPTImage2` | $5 | — | — | $0 |
+| `GPTImage2` | $5 | — | — | $30 |
+| `GPTImage25Flare` | $5 | — | — | $30 |
+| `GPTImage25Sunburst` | $5 | — | — | $30 |
 | `Luna56` | $0.2 | $0.02 | — | $1.2 |
 | `O3` | $2 | $0.5 | — | $8 |
 | `O3Pro` | $20 | $5 | — | $80 |
-| `Sol56` | $5 | $0.5 | — | $30 |
+| `Sol56` | $4 | $0.4 | — | $20 |
 | `Terra56` | $2 | $0.2 | — | $12 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
 | `TextEmbedding3Small` | $0.02 | — | — | $0 |
@@ -424,6 +436,8 @@ Total: 135 models across 17 providers.
 | `Grok45` ⚠️ | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `Grok46` | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `GrokImagineImage` | `grok-imagine-image` | 32,000 | — | Text, Image → Image | image | — |
+| `GrokImagineImage20` | `grok-imagine-image-2.0` | 32,000 | — | Text, Image → Image | image | — |
+| `GrokImagineImageQuality` | `grok-imagine-image-quality` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineVideo` ⚠️ | `grok-imagine-video` | 32,000 | — | Text, Image, Video → Video | video | — |
 | `GrokImagineVideo15` | `grok-imagine-video-1.5` | 32,000 | — | Text, Image → Video | video | — |
 
@@ -440,6 +454,8 @@ Total: 135 models across 17 providers.
 | `Grok45` | $2 | $0.3 | — | $6 |
 | `Grok46` | $2 | $0.5 | — | $6 |
 | `GrokImagineImage` | $0 | — | — | $0.02 |
+| `GrokImagineImage20` | $0 | — | — | $0.04 |
+| `GrokImagineImageQuality` | $0 | — | — | $0.05 |
 | `GrokImagineVideo` | $0 | — | — | $0.05 |
 | `GrokImagineVideo15` | $0 | — | — | $0.08 |
 

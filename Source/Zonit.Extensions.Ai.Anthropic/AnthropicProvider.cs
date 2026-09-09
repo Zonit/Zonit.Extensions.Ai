@@ -544,8 +544,16 @@ public sealed class AnthropicProvider : IModelProvider
     /// parser as a last-resort fallback). With thinking off we force the tool,
     /// which makes valid structured JSON guaranteed.
     /// </para>
+    /// <para>
+    /// The always-thinking Fable / Mythos tier rejects a forced
+    /// <c>tool_choice</c> outright (400) even when the request omits
+    /// <c>thinking</c>, because thinking is on server-side regardless — those
+    /// models report <see cref="AnthropicBase.SupportsForcedToolChoice"/> as
+    /// <c>false</c> and take the <c>auto</c> path unconditionally.
+    /// </para>
     /// </summary>
     internal static void ApplyStructuredOutputTool(
+        ILlm llm,
         AnthropicMessagesRequest request,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type responseType)
     {
@@ -558,7 +566,9 @@ public sealed class AnthropicProvider : IModelProvider
             InputSchema = AiSchemaRegistry.GetSchema(responseType),
         });
 
-        request.ToolChoice = request.Thinking is null
+        var canForce = llm is not AnthropicBase { SupportsForcedToolChoice: false };
+
+        request.ToolChoice = request.Thinking is null && canForce
             ? new AnthropicToolChoice { Type = "tool", Name = StructuredToolName }
             : new AnthropicToolChoice { Type = "auto" };
     }
@@ -671,7 +681,7 @@ public sealed class AnthropicProvider : IModelProvider
             request.Tools = BuildToolsForRequest(llm, typedTools);
         }
 
-        ApplyStructuredOutputTool(request, responseType);
+        ApplyStructuredOutputTool(llm, request, responseType);
 
         ApplyCaching(llm, request);
         return request;
@@ -875,7 +885,7 @@ public sealed class AnthropicProvider : IModelProvider
             request.Tools = BuildToolsForRequest(llm, typedTools);
         }
 
-        ApplyStructuredOutputTool(request, responseType);
+        ApplyStructuredOutputTool(llm, request, responseType);
 
         ApplyCaching(llm, request);
         return request;

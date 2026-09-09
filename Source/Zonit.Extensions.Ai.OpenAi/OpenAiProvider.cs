@@ -237,8 +237,6 @@ public sealed class OpenAiProvider : IModelProvider
         // Create Asset from generated image bytes
         Asset generatedImage = new(imageBytes, "generated.png");
 
-        var imageCost = llm.GetImageGenerationPrice();
-
         return new Result<Asset>
         {
             Value = generatedImage,
@@ -248,11 +246,49 @@ public sealed class OpenAiProvider : IModelProvider
                 Provider = Name,
                 PromptName = PromptNameResolver.Resolve(prompt),
                 Duration = stopwatch.Elapsed,
-                Usage = new TokenUsage
-                {
-                    OutputCost = imageCost
-                }
+                Usage = BuildImageUsage(llm, imageResponse.Usage)
             }
+        };
+    }
+
+    /// <summary>
+    /// Builds the usage/cost block for an image generation. Models billed per
+    /// token (gpt-image-2 and newer) are priced from the endpoint's own token
+    /// counts; the older flat-rate models keep their per-image price.
+    /// </summary>
+    private static TokenUsage BuildImageUsage(IImageLlm llm, OpenAiUsage? usage)
+    {
+        if (llm is not ITokenPricedImageLlm tokenPriced || usage is null)
+            return new TokenUsage { OutputCost = llm.GetImageGenerationPrice() };
+
+        // input_tokens_details omits the split on some responses — fall back to
+        // treating the whole prompt as text so nothing is billed at zero.
+        var textInput = usage.InputTokensDetails?.TextTokens ?? usage.InputTokens;
+        var imageInput = usage.InputTokensDetails?.ImageTokens ?? 0;
+        if (textInput + imageInput == 0)
+            textInput = usage.InputTokens;
+
+        var imageUsage = new ImageTokenUsage
+        {
+            TextInputTokens = textInput,
+            ImageInputTokens = imageInput,
+            // The endpoint reports a single cached count; it applies to the text
+            // prefix, which is the only cacheable part of an image request.
+            CachedTextInputTokens = usage.InputTokensDetails?.CachedTokens ?? 0,
+            ImageOutputTokens = usage.OutputTokensDetails?.ImageTokens is > 0
+                ? usage.OutputTokensDetails.ImageTokens
+                : usage.OutputTokens
+        };
+
+        var (inputCost, outputCost) = AiCostCalculator.CalculateImageTokenCosts(tokenPriced, imageUsage);
+
+        return new TokenUsage
+        {
+            InputTokens = imageUsage.InputTokens,
+            OutputTokens = imageUsage.ImageOutputTokens,
+            CachedTokens = imageUsage.CachedTokens,
+            InputCost = inputCost,
+            OutputCost = outputCost
         };
     }
 
@@ -800,6 +836,11 @@ internal sealed class OpenAiTokenDetails
 {
     public int CachedTokens { get; set; }
     public int ReasoningTokens { get; set; }
+
+    // Only populated by the images endpoints, which split both sides of the
+    // request into text and image tokens (each billed at its own rate).
+    public int TextTokens { get; set; }
+    public int ImageTokens { get; set; }
 }
 
 internal sealed class ImageResponse

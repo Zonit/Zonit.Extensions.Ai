@@ -765,7 +765,9 @@ internal sealed class AiProvider : IAiProvider
     /// <inheritdoc />
     public Price CalculateCost(IImageLlm llm, int imageCount = 1)
     {
-        return new Price(llm.PriceOutput * imageCount);
+        // Per-image price, not the raw PriceOutput — on token-priced models
+        // (gpt-image-2 and newer) PriceOutput is a per-1M-token rate.
+        return AiCostCalculator.CalculateImageCost(llm, imageCount);
     }
 
     /// <inheritdoc />

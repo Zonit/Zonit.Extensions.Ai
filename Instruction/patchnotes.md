@@ -5,6 +5,65 @@ records *what changed and why*.
 
 ## Unreleased
 
+### GPT-6 Astra, Claude Fable 5.1, GPT Image 2.5, Grok Imagine 2.0 — and token-billed images
+
+**Breaking only for hand-rolled image models.** `IImageLlm` is unchanged; the new
+`ITokenPricedImageLlm` sits beside it. Everything else is additive plus pricing corrections.
+
+New models:
+
+- **Added** `Astra6` (`gpt-6-astra`) — OpenAI's most capable model, released September 3, 2026.
+  1.05M context (922K max input), 128K output, $10 / $1 cached / $50 per MTok, batch and flex at
+  half, knowledge cutoff April 30, 2026. Long context (>272K input) doubles the input side and
+  raises output by half ($20 / $2 / $75), same shape as GPT-5.6.
+- **Added** `Cyber56` (`gpt-5.6-cyber`) — the security-research member of the GPT-5.6 family.
+  400K context / 272K max input, $12.50 / $1.25 / $75, Responses endpoint only. Gated: requires
+  approval through OpenAI's Daybreak program, so an ordinary key gets model-not-found.
+- **Added** `GPTImage25Flare` (`gpt-image-2.5-flare`, fast everyday generation) and
+  `GPTImage25Sunburst` (`gpt-image-2.5-sunburst`, editing precision). Both add the `xhigh` and
+  `max` quality tiers above the 1.x line.
+- **Added** `Fable51` (`claude-fable-5-1`) and `Mythos51` (`claude-mythos-5-1`) — the successors to
+  Fable 5 / Mythos 5 at the same $10 / $50 per MTok. Fable 5.1 cuts cache reads to **$0.25**
+  (a quarter of Fable 5). Mythos 5.1 keeps $1.00: Anthropic has not confirmed it shares the lower
+  rate, and over-reporting beats under-reporting a budget.
+- **Added** `GrokImagineImage20` (`grok-imagine-image-2.0`, $0.04/image) and
+  `GrokImagineImageQuality` (`grok-imagine-image-quality`, $0.05/image), with the wider aspect-ratio
+  set (16 values incl. ultrawide 21:9 and 5:2) plus optional `resolution` (1k / 2k) and `quality`
+  (low / medium / auto). Both parameters are omitted from the request unless set, so the API
+  defaults still apply.
+
+Pricing corrections:
+
+- **Changed** `Sol56` to OpenAI's cut: **$5/$30 → $4/$20** per MTok (cached $0.50 → **$0.40**,
+  batch $2.50/$15 → **$2/$10**; long context $10/$1/$45 → **$8/$0.80/$30**). Every Sol-56 cost
+  figure was ~50% high. OpenAI lists the new rates as promotional through November 21, 2026.
+- **Changed** image billing for `gpt-image-2` and the 2.5 family from per-image to **per token** —
+  the scheme OpenAI actually uses. Text input $5 / $1.25 cached, image input $8 / $2 cached, image
+  output $30 per MTok. `GPTImage2` previously carried a placeholder per-image schedule copied from
+  GPT Image 1.5, which had no relationship to the bill.
+- **Fixed** `AiProvider.CalculateCost(IImageLlm, int)`, which returned `PriceOutput × imageCount`
+  instead of the per-image price — harmless while `PriceOutput` was a per-image figure, but $30 per
+  image once the token rate moved in. It now delegates to `AiCostCalculator.CalculateImageCost`,
+  the same path the rest of the library used.
+
+New API:
+
+- **Added** `ITokenPricedImageLlm` (five per-MTok rates) and `ImageTokenUsage` (the text/image
+  input/output token split), plus `AiCostCalculator.CalculateImageTokenCosts`. The OpenAI provider
+  now reads the images endpoint's `usage` block and reports real input/output token counts and
+  costs on `MetaData.Usage`; it previously discarded that block and reported only a flat output
+  cost. `GetImageGenerationPrice()` stays on these models as a documented pre-flight **estimate**.
+- **Added** `AnthropicBase.SupportsForcedToolChoice`. The always-thinking Fable / Mythos tier
+  rejects a forced `tool_choice` with a 400 even when the request omits `thinking` — thinking runs
+  server-side regardless. Structured output on `Fable5`, `Fable51`, `Mythos5` and `Mythos51` now
+  takes the `auto` + instruction path unconditionally instead of forcing the tool and failing.
+
+> **Estimate caveat:** OpenAI has not published a token table for GPT Image 2.5, so
+> `GetImageGenerationPrice()` extrapolates from the published GPT Image 1 table (1024×1024: low
+> 272, medium 1 056, high 4 160 tokens), which scales exactly with pixel area; `xhigh` and `max`
+> are estimated at 1.5× and 2× `high`. Billing is unaffected — it uses the endpoint's own counts.
+
+
 ### Grok 4.6, and xAI's 200K price tier applied where it was missing
 
 **Not breaking for callers — one new model plus pricing fixes.** Code that pins `Grok45` keeps

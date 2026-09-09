@@ -1,41 +1,43 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-5.6 Sol — the frontier tier of the GPT-5.6 family, for the hardest
-/// reasoning, coding and security-research workloads. Sol, Terra and Luna are
-/// durable capability tiers (see <see cref="Terra56"/>, <see cref="Luna56"/>)
-/// that advance on their own cadence, replacing the earlier unsuffixed / mini /
-/// nano naming. Sol occupies the slot previously held by the unsuffixed model
-/// (e.g. <see cref="GPT55"/>).
+/// GPT-6 Astra — OpenAI's most capable model, built for the hardest end-to-end
+/// work: complex reasoning, coding, computer use, research and document
+/// creation. Sits above the GPT-5.6 Sol / Terra / Luna tiers
+/// (see <see cref="Sol56"/>), which continue on their own cadence.
 /// </summary>
 /// <remarks>
-/// 1.05M token context window; standard pricing applies up to 272K input
-/// tokens, beyond which the long-context rates apply ($8 input / $0.80 cached /
-/// $30 output per 1M). Prices were cut from $5/$0.50/$30 — OpenAI lists the
-/// current rates as promotional through 21 November 2026. Model id
-/// <c>gpt-5.6-sol</c> (also aliased <c>gpt-5.6</c>). Supports the full
-/// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
+/// <para>
+/// Model id <c>gpt-6-astra</c>. 1.05M token context window (922K max input),
+/// 128K max output, knowledge cutoff 30 April 2026. Released 3 September 2026.
+/// </para>
+/// <para>
+/// Standard pricing applies up to 272K input tokens, beyond which the
+/// long-context rates apply ($20 input / $2 cached / $75 output per 1M).
+/// Batch and flex run at half the applicable rate. Supports the full reasoning
+/// range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
 /// / <see cref="OpenAiReasonEffortExtended.Max"/>.
+/// </para>
 /// </remarks>
-public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
+public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
 {
     /// <inheritdoc />
-    public override string Name => "gpt-5.6-sol";
+    public override string Name => "gpt-6-astra";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 4.00m;
+    public override decimal PriceInput => 10.00m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 20.00m;
+    public override decimal PriceOutput => 50.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.40m;
+    public override decimal? PriceCachedInput => 1.00m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 2.00m;
+    public override decimal? BatchPriceInput => 5.00m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceOutput => 10.00m;
+    public override decimal? BatchPriceOutput => 25.00m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_050_000;
@@ -71,7 +73,7 @@ public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
         EndpointsType.Batch;
 
     /// <summary>
-    /// Context size past which OpenAI switches GPT-5.6 to long-context pricing
+    /// Context size past which OpenAI switches GPT-6 to long-context pricing
     /// for the remainder of the session (standard, batch and flex alike).
     /// </summary>
     private const long LongContextThreshold = 272_000;
@@ -79,7 +81,7 @@ public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
     /// <summary>Input-side rates (input, cache read, cache write) double past the threshold.</summary>
     private const decimal LongContextInputMultiplier = 2m;
 
-    /// <summary>Output-side rates rise by half past the threshold ($20 → $30).</summary>
+    /// <summary>Output-side rates rise by half past the threshold ($50 → $75).</summary>
     private const decimal LongContextOutputMultiplier = 1.5m;
 
     /// <inheritdoc />

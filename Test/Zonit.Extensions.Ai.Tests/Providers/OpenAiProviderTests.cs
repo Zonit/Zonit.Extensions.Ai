@@ -259,6 +259,66 @@ public class OpenAiProviderTests
         handler.CapturedRequest.Should().NotContain("filename=\"file_123\"", "the extensionless name must not be sent as-is");
     }
 
+    [Fact]
+    public async Task GenerateImageAsync_TokenPricedModel_BillsFromTheEndpointsUsageBlock()
+    {
+        // A real /v1/images/generations response: the usage block splits both
+        // sides into text and image tokens, each on its own rate.
+        _testHandler.ResponseJson = """
+            {"created":1757000000,
+             "data":[{"b64_json":"aGVsbG8="}],
+             "usage":{"total_tokens":5640,
+                      "input_tokens":1480,
+                      "input_tokens_details":{"text_tokens":80,"image_tokens":1400},
+                      "output_tokens":4160,
+                      "output_tokens_details":{"image_tokens":4160,"text_tokens":0}}}
+            """;
+
+        var provider = CreateProvider();
+        var model = new GPTImage25Flare
+        {
+            Quality = GPTImage25Base.QualityType.High,
+            Size = GPTImage25Base.SizeType.Square,
+        };
+
+        var result = await provider.GenerateImageAsync(model, new ImagePrompt { Text = "a red bicycle" });
+
+        var usage = result.MetaData!.Usage!;
+        usage.InputTokens.Should().Be(1_480);
+        usage.OutputTokens.Should().Be(4_160);
+
+        // text  :     80/1M × $5  = 0.0004
+        // image :  1_400/1M × $8  = 0.0112
+        usage.InputCost.Value.Should().BeApproximately(0.0116m, 1e-9m);
+        // output:  4_160/1M × $30 = 0.1248
+        usage.OutputCost.Value.Should().BeApproximately(0.1248m, 1e-9m);
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_FlatRateModel_KeepsThePerImagePrice()
+    {
+        // GPT Image 1.5 is billed per image, so the usage block (if any) must
+        // not be turned into a token bill.
+        _testHandler.ResponseJson = """
+            {"created":1757000000,
+             "data":[{"b64_json":"aGVsbG8="}],
+             "usage":{"input_tokens":80,"output_tokens":4160}}
+            """;
+
+        var provider = CreateProvider();
+        var model = new GPTImage15
+        {
+            Quality = GPTImage15.QualityType.High,
+            Size = GPTImage15.SizeType.Square,
+        };
+
+        var result = await provider.GenerateImageAsync(model, new ImagePrompt { Text = "a red bicycle" });
+
+        var usage = result.MetaData!.Usage!;
+        usage.InputCost.Value.Should().Be(0m);
+        usage.OutputCost.Value.Should().Be(0.200m);
+    }
+
     private OpenAiProvider CreateProvider(TestHttpHandler? handler = null)
     {
         var httpClient = new HttpClient(handler ?? _testHandler)

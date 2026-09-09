@@ -26,7 +26,8 @@ public class LongContextPricingTests
 
     [Theory]
     // model,             short in, long in, short out, long out, short cached, long cached
-    [InlineData(typeof(Sol56), 5.00, 10.00, 30.00, 45.00, 0.50, 1.00)]
+    [InlineData(typeof(Astra6), 10.00, 20.00, 50.00, 75.00, 1.00, 2.00)]
+    [InlineData(typeof(Sol56), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
     [InlineData(typeof(Terra56), 2.00, 4.00, 12.00, 18.00, 0.20, 0.40)]
     [InlineData(typeof(Luna56), 0.20, 0.40, 1.20, 1.80, 0.02, 0.04)]
     public void Gpt56_TiersEveryRateOnTheInputSize(
@@ -65,10 +66,10 @@ public class LongContextPricingTests
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(new Sol56(), usage);
 
-        // input : 200_000/1M × $10 + 100_000/1M × $1.00 = 2.00 + 0.10
-        inputCost.Value.Should().BeApproximately(2.10m, 1e-9m);
-        // output: 10_000/1M × $45 = 0.45  (was 0.30 when the tier was keyed on output tokens)
-        outputCost.Value.Should().BeApproximately(0.45m, 1e-9m);
+        // input : 200_000/1M × $8 + 100_000/1M × $0.80 = 1.60 + 0.08
+        inputCost.Value.Should().BeApproximately(1.68m, 1e-9m);
+        // output: 10_000/1M × $30 = 0.30  (the tier is keyed on input, not output, tokens)
+        outputCost.Value.Should().BeApproximately(0.30m, 1e-9m);
     }
 
     [Fact]
@@ -83,9 +84,10 @@ public class LongContextPricingTests
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(new Sol56(), usage);
 
-        // input : 50_000/1M × $5 + 50_000/1M × $0.50 = 0.25 + 0.025
-        inputCost.Value.Should().BeApproximately(0.275m, 1e-9m);
-        outputCost.Value.Should().BeApproximately(0.30m, 1e-9m);
+        // input : 50_000/1M × $4 + 50_000/1M × $0.40 = 0.20 + 0.02
+        inputCost.Value.Should().BeApproximately(0.22m, 1e-9m);
+        // output: 10_000/1M × $20 = 0.20
+        outputCost.Value.Should().BeApproximately(0.20m, 1e-9m);
     }
 
     [Fact]
@@ -95,13 +97,13 @@ public class LongContextPricingTests
         var longUsage = new TokenUsage { InputTokens = 300_000, OutputTokens = 10_000 };
         var model = new Sol56();
 
-        // 100_000/1M × $2.50 + 10_000/1M × $15 = 0.25 + 0.15
+        // 100_000/1M × $2.00 + 10_000/1M × $10 = 0.20 + 0.10
         AiCostCalculator.CalculateBatchCost(model, shortUsage)
-            .Value.Should().BeApproximately(0.40m, 1e-9m);
+            .Value.Should().BeApproximately(0.30m, 1e-9m);
 
-        // 300_000/1M × $5.00 + 10_000/1M × $22.50 = 1.50 + 0.225
+        // 300_000/1M × $4.00 + 10_000/1M × $15.00 = 1.20 + 0.15
         AiCostCalculator.CalculateBatchCost(model, longUsage)
-            .Value.Should().BeApproximately(1.725m, 1e-9m);
+            .Value.Should().BeApproximately(1.35m, 1e-9m);
     }
 
     // ---- xAI: the 200K tier used to be dead code on the output side ----

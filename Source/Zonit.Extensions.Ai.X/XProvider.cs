@@ -149,6 +149,17 @@ public sealed class XProvider : IModelProvider
         if (!string.IsNullOrEmpty(llm.AspectRatioValue))
             request.AspectRatio = llm.AspectRatioValue;
 
+        // resolution / quality exist only on the current Imagine image models,
+        // and only when the caller set them — otherwise the API defaults win.
+        if (llm is XImagineImageBase imagine)
+        {
+            if (!string.IsNullOrEmpty(imagine.ResolutionValue))
+                request.Resolution = imagine.ResolutionValue;
+
+            if (!string.IsNullOrEmpty(imagine.QualityValue))
+                request.Quality = imagine.QualityValue;
+        }
+
         var sourceImage = prompt.Files?.FirstOrDefault(f => f.IsImage);
         if (sourceImage is { HasValue: true } img)
             request.ImageUrl = img.DataUrl;
@@ -1124,6 +1135,8 @@ internal sealed class XImageRequest
     public int N { get; set; }
     public string ResponseFormat { get; set; } = "b64_json";
     public string? AspectRatio { get; set; }
+    public string? Resolution { get; set; }
+    public string? Quality { get; set; }
     public string? ImageUrl { get; set; }
 }
 
