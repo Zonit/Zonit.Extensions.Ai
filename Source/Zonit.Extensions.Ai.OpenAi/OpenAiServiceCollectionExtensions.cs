@@ -89,9 +89,16 @@ public static class OpenAiServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
-        // Register HttpClient with resilience optimized for AI (40min timeout, retry, circuit breaker)
+        // Register HttpClient with resilience optimized for AI (retry, circuit breaker).
+        //
+        // Streaming resilience even though GenerateAsync/ChatAsync return one assembled
+        // response: every request now goes out as SSE, so the per-attempt wall-clock cap
+        // must not apply. A long-but-healthy generation is legitimate; liveness is enforced
+        // by the assembler's inter-event watchdog and the handler's HTTP/2 keep-alive pings.
+        // The old non-streaming cap cancelled healthy work at exactly AttemptTimeout and
+        // then retried it from scratch — the same fault already fixed on Anthropic.
         services.AddHttpClient<OpenAiProvider>()
-            .AddAiResilienceHandler<OpenAiOptions>();
+            .AddAiStreamingResilienceHandler<OpenAiOptions>();
 
         // Register as IModelProvider (idempotent, uses typed HttpClient)
         services.TryAddModelProvider<OpenAiProvider>();

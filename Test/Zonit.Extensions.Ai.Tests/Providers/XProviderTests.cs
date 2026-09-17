@@ -323,6 +323,97 @@ public class XProviderTests
         capturedRequest.Should().NotContain("\"effort\"");
     }
 
+    [Fact]
+    public async Task GenerateAsync_WithPriorityScheduling_SendsServiceTierPriority()
+    {
+        // xAI's answer to OpenAI fast mode: same wire field, different value.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","service_tier":"priority","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(
+            new Grok46 { Speed = SpeedType.Fast },
+            new TestPrompt { Text = "Test" },
+            CancellationToken.None);
+
+        var json = JsonDocument.Parse(capturedRequest!);
+        json.RootElement.GetProperty("service_tier").GetString().Should().Be("priority");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AtStandardScheduling_OmitsServiceTier()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Grok46(), new TestPrompt { Text = "Test" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(capturedRequest!);
+        json.RootElement.TryGetProperty("service_tier", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_RequestsStreamingOnTheWire()
+    {
+        // The buffered form held one response open for the whole generation, so a long answer
+        // outlived the per-attempt timeout and was cancelled and retried from zero.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Grok46(), new TestPrompt { Text = "Test" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(capturedRequest!);
+        json.RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPriorityWasDowngraded_BillsAtTheStandardRate()
+    {
+        // xAI serves priority best-effort and only charges the premium when it echoes
+        // "priority" back. Billing the requested tier would double every cost figure for as
+        // long as its priority capacity is exhausted.
+        const string usage = """{"input_tokens":100000,"output_tokens":10000}""";
+        SetupMockResponse(
+            """{"id":"resp-123","service_tier":"default","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":USAGE}""".Replace("USAGE", usage));
+
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(
+            new Grok46 { Speed = SpeedType.Fast },
+            new TestPrompt { Text = "Test" },
+            CancellationToken.None);
+
+        // Standard grok-4.6 rates below 200K: $2 input / $6 output per 1M.
+        result.MetaData.Usage.InputCost.Value.Should().Be(0.1m * 2.00m);
+        result.MetaData.Usage.OutputCost.Value.Should().Be(0.01m * 6.00m);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenPriorityWasGranted_BillsAtThePriorityRate()
+    {
+        const string usage = """{"input_tokens":100000,"output_tokens":10000}""";
+        SetupMockResponse(
+            """{"id":"resp-123","service_tier":"priority","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":USAGE}""".Replace("USAGE", usage));
+
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(
+            new Grok46 { Speed = SpeedType.Fast },
+            new TestPrompt { Text = "Test" },
+            CancellationToken.None);
+
+        result.MetaData.Usage.InputCost.Value.Should().Be(0.1m * 4.00m);
+        result.MetaData.Usage.OutputCost.Value.Should().Be(0.01m * 12.00m);
+    }
+
     private XProvider CreateProvider()
     {
         var httpClient = new HttpClient(_httpHandlerMock.Object)
@@ -351,10 +442,13 @@ public class XProviderTests
                     captureRequest(content);
                 }
             })
-            .ReturnsAsync(new HttpResponseMessage
+            // The text paths ask for stream:true and reassemble the frames, so the canned
+            // buffered body is rendered as the SSE sequence the API would send.
+            .ReturnsAsync(() => new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(responseJson, Encoding.UTF8, "application/json")
+                Content = new StringContent(
+                    ResponsesSse.FromResponseJson(responseJson), Encoding.UTF8, "text/event-stream")
             });
     }
 

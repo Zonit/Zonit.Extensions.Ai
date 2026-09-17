@@ -108,10 +108,11 @@ builder.Services.AddAi(o =>
 > the total including retries, set `TotalRequestTimeout`; to bound what the model may spend, set
 > `MaxTokens` on the model.
 >
-> `AttemptTimeout` applies only to calls that are **not** streamed. Anthropic's text calls all
-> stream on the wire — including `GenerateAsync` / `ChatAsync`, which reassemble the reply before
-> returning — so on that provider the effective per-attempt cap is `TotalRequestTimeout`, and
-> stream liveness is enforced by `InterEventTimeout` plus HTTP/2 keep-alive pings.
+> `AttemptTimeout` applies only to calls that are **not** streamed. Anthropic, OpenAI and xAI text
+> calls all stream on the wire — including `GenerateAsync` / `ChatAsync` and every agent turn,
+> which reassemble the reply before returning — so on those providers the effective per-attempt cap
+> is `TotalRequestTimeout`, and stream liveness is enforced by `InterEventTimeout` plus HTTP/2
+> keep-alive pings.
 
 ### Two layers, one schedule
 

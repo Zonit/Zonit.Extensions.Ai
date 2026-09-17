@@ -285,7 +285,71 @@ calculation switches to the fast rate automatically when it is selected.
 
 ```csharp
 await ai.GenerateAsync(new Opus5 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
+await ai.GenerateAsync(new Sol56 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
+await ai.GenerateAsync(new Grok46 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
 ```
+
+One property, three providers — each provider's own wire spelling is handled for you:
+
+| Models | On the wire | Premium | Notes |
+| :--- | :--- | :--- | :--- |
+| `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). |
+| `Astra6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
+| `Grok46` | `service_tier: "priority"` | 2× on every token type | xAI Priority Processing — higher scheduling priority (lower TTFT and inter-token latency) when xAI is under load. |
+
+The premium composes with long-context tiering rather than replacing it: a fast `Sol56` request
+above 272K input tokens bills at 2× the *long-context* rate ($16 / $60 per MTok), not 2× the short
+one. `Speed` defaults to `SpeedType.Standard` everywhere, so nothing changes until you opt in, and
+setting it on a model that does not implement `IFast` has no effect.
+
+### How the premium is applied
+
+A model publishes **two rate cards** — its standard prices on `ILlm` and its fast ones on `IFast` —
+and never chooses between them itself. The choice happens where the cost is computed:
+
+```csharp
+// standard card
+AiCostCalculator.CalculateCosts(llm, usage);
+// fast card, or standard when the provider says it downgraded the request
+AiCostCalculator.CalculateCosts(llm, usage, fastGranted: AiFastTier.WasGranted(llm, echoedTier, …));
+```
+
+`model.GetInputPrice(...)` therefore always returns the *standard* rate, whatever `Speed` says.
+That is deliberate: a model that folded the premium into its own getters could not express "asked
+for fast, was served standard", and every other reader of `ILlm` — estimates, dashboards, reports —
+would quote the premium rate for a request that was billed as standard.
+
+Writing a fast-capable model is still a one-liner when the tier is a flat multiple (every provider
+today charges 2× on everything):
+
+```csharp
+public class MyModel : LlmBase, IFast
+{
+    public SpeedType Speed { get; init; } = SpeedType.Standard;   // that's it — 2× by default
+    // public decimal FastMultiplier => 1.5m;                     // a different uniform factor
+}
+```
+
+If the fast tier is **not** a flat multiple, override only the rates that differ — the rest keep
+the uniform default:
+
+```csharp
+public class MyModel : LlmBase, IFast
+{
+    public SpeedType Speed { get; init; } = SpeedType.Standard;
+
+    public decimal GetFastOutputPrice(long inputTokens, long outputTokens) => 30.00m;  // triples
+    public decimal GetFastCachedInputPrice(long inputTokens) => PriceCachedInput!.Value; // no surcharge
+    // input keeps the default 2×
+}
+```
+
+Both OpenAI and xAI serve fast mode as best-effort: if the account's fast/priority capacity is
+exhausted, the request runs at standard speed and the response says so (`service_tier: "default"`).
+The provider reads that echo back, logs a warning, and **bills the request at the standard rate** —
+the same rule the providers themselves use, so a busy hour does not silently double every cost
+figure. Watch for those warnings if latency matters: they mean you paid for standard speed and got
+it.
 
 ## Prompt caching (Anthropic)
 

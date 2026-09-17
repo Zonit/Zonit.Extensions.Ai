@@ -14,7 +14,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
 /// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
-public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
+public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
 {
     /// <inheritdoc />
     public override string Name => "gpt-5.6-terra";
@@ -64,6 +64,23 @@ public class Terra56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLl
         EndpointsType.Chat |
         EndpointsType.Response |
         EndpointsType.Batch;
+
+    /// <summary>
+    /// Inference speed. Set to <see cref="SpeedType.Fast"/> to opt this request into OpenAI fast
+    /// mode (<c>service_tier: "fast"</c>) — up to ~2.5× faster output and steadier latency, at
+    /// double the standard rate on input, cached input and output. Defaults to
+    /// <see cref="SpeedType.Standard"/>.
+    /// </summary>
+    /// <remarks>
+    /// The premium itself lives in <see cref="IFast"/>'s defaults (a uniform 2×, applied on top of
+    /// the long-context tiering below), and whether it is actually charged is decided when the
+    /// cost is computed — OpenAI serves fast mode best-effort and only bills the premium when the
+    /// response echoes the tier back. Fast mode was renamed from "priority processing" on
+    /// 30 July 2026; the response echoes <c>priority</c> for GPT-5.6 and earlier either way. It is
+    /// a synchronous-API tier only — Batch is unaffected, so the <c>GetBatch*</c> rates never
+    /// carry it.
+    /// </remarks>
+    public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <summary>
     /// Context size past which OpenAI switches GPT-5.6 to long-context pricing

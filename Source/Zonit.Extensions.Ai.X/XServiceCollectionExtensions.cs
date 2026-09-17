@@ -73,8 +73,12 @@ public static class XServiceCollectionExtensions
         if (options is not null)
             services.PostConfigure(options);
 
+        // Streaming resilience even though GenerateAsync/ChatAsync return one assembled
+        // response: every text request now goes out as SSE, so the per-attempt wall-clock cap
+        // must not apply. A long-but-healthy generation is legitimate; liveness is enforced by
+        // the assembler's inter-event watchdog and the handler's HTTP/2 keep-alive pings.
         services.AddHttpClient<XProvider>()
-            .AddAiResilienceHandler<XOptions>();
+            .AddAiStreamingResilienceHandler<XOptions>();
 
         services.TryAddModelProvider<XProvider>();
 

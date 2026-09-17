@@ -332,9 +332,104 @@ public class OpenAiProviderTests
             _loggerMock.Object);
     }
 
+    [Fact]
+    public async Task GenerateAsync_RequestsStreamingOnTheWire()
+    {
+        // The buffered form held one response open for the whole generation, so a long
+        // answer outlived the per-attempt timeout and was cancelled and retried from
+        // zero. Streaming makes liveness — not total duration — the thing being measured.
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Terra56(), new TestPrompt { Text = "Write a long answer" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("stream").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithFastModel_SendsServiceTierFast()
+    {
+        var provider = CreateProvider();
+        var model = new Luna56 { Speed = SpeedType.Fast };
+
+        await provider.GenerateAsync(model, new TestPrompt { Text = "Quick" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("service_tier").GetString().Should().Be("fast");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_AtStandardSpeed_OmitsServiceTier()
+    {
+        // Standard processing is the default and must not be spelled out — sending a
+        // tier the account has no access to is a 400, and fast mode costs double.
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Luna56(), new TestPrompt { Text = "Normal" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.TryGetProperty("service_tier", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenStreamEndsBeforeTheTerminalEvent_ThrowsRatherThanReturningAPartialAnswer()
+    {
+        // Half an answer must never reach the caller: a buffered POST is all-or-nothing
+        // for free, a stream is not.
+        _testHandler.RawSseBody =
+            """
+            data: {"type":"response.created","response":{"id":"resp_1"}}
+
+            data: {"type":"response.output_text.delta","delta":"half an ans"}
+
+            """;
+
+        var provider = CreateProvider();
+
+        var act = () => provider.GenerateAsync(new Terra56(), new TestPrompt { Text = "Go" }, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<HttpRequestException>())
+            .WithMessage("*before a terminal response event*");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenIncompleteOnMaxOutputTokens_ThrowsTruncatedWithTheReason()
+    {
+        // The old code threw "OpenAI status: incomplete" and left the caller guessing.
+        _testHandler.ResponseJson =
+            """{"id":"resp_1","status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output":[],"usage":{"input_tokens":10,"output_tokens":128000}}""";
+
+        var provider = CreateProvider();
+
+        var act = () => provider.GenerateAsync(new Terra56(), new TestPrompt { Text = "Go" }, CancellationToken.None);
+
+        var thrown = await act.Should().ThrowAsync<AiEmptyResponseException>();
+        thrown.Which.Code.Should().Be(AiResponseError.Truncated);
+        thrown.Which.StopReason.Should().Be("max_output_tokens");
+        thrown.Which.Message.Should().Contain("gpt-5.6-terra");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WhenFailed_SurfacesTheServerError()
+    {
+        _testHandler.ResponseJson =
+            """{"id":"resp_1","status":"failed","error":{"code":"server_error","message":"upstream exploded"},"output":[]}""";
+
+        var provider = CreateProvider();
+
+        var act = () => provider.GenerateAsync(new Terra56(), new TestPrompt { Text = "Go" }, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>())
+            .WithMessage("*upstream exploded*");
+    }
+
     private class TestHttpHandler : HttpMessageHandler
     {
         public string ResponseJson { get; set; } = """{"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"Test"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""";
+
+        /// <summary>Verbatim SSE body, for tests that need frames the renderer would never produce (e.g. a truncated stream).</summary>
+        public string? RawSseBody { get; set; }
+
         public string? CapturedRequest { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -344,10 +439,17 @@ public class OpenAiProviderTests
                 CapturedRequest = await request.Content.ReadAsStringAsync(cancellationToken);
             }
 
+            // The Responses paths ask for stream:true and reassemble the frames, so the
+            // canned buffered body is rendered as the SSE sequence the API would send.
+            // Image / embedding / transcription endpoints stay buffered — they are keyed
+            // off the request path.
+            var isResponses = request.RequestUri?.AbsolutePath == "/v1/responses";
+            var body = isResponses ? RawSseBody ?? ResponsesSse.FromResponseJson(ResponseJson) : ResponseJson;
+
             return new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(ResponseJson, Encoding.UTF8, "application/json")
+                Content = new StringContent(body, Encoding.UTF8, isResponses ? "text/event-stream" : "application/json")
             };
         }
     }

@@ -25,6 +25,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
     private readonly HttpClient _httpClient;
     private readonly AgentSessionContext _context;
     private readonly ILogger _logger;
+    private readonly TimeSpan _interEventTimeout;
 
     private string? _previousResponseId;
     private int _turnIndex;
@@ -37,11 +38,16 @@ internal sealed class OpenAiAgentSession : IAgentSession
     // Cache of call_id → tool name; used to build function_call_output items.
     private readonly Dictionary<string, string> _pendingCalls = new(StringComparer.Ordinal);
 
-    public OpenAiAgentSession(HttpClient httpClient, AgentSessionContext context, ILogger logger)
+    public OpenAiAgentSession(
+        HttpClient httpClient,
+        AgentSessionContext context,
+        ILogger logger,
+        TimeSpan interEventTimeout = default)
     {
         _httpClient = httpClient;
         _context = context;
         _logger = logger;
+        _interEventTimeout = interEventTimeout > TimeSpan.Zero ? interEventTimeout : TimeSpan.FromMinutes(30);
     }
 
     // RUC/RDC are required to match IAgentSession.RunTurnAsync (annotated in the abstraction;
@@ -61,20 +67,27 @@ internal sealed class OpenAiAgentSession : IAgentSession
             ? BuildInitialRequest()
             : BuildContinuationRequest(toolResults ?? Array.Empty<ToolResult>());
 
-        var payload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
-        _logger.LogDebug("OpenAI agent turn {Turn} payload: {Payload}", _turnIndex, payload);
-
-        using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken).ConfigureAwait(false);
-        var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        // Streamed on the wire and reassembled into one finished response body. A turn that
+        // thinks and writes for a long time keeps the connection busy with frames instead of
+        // sitting silent — the same reason the single-shot paths stream. The turn contract is
+        // unchanged. See ResponsesApiTransport.
+        var body = await ResponsesApiTransport
+            .SendAsync(
+                _httpClient,
+                "/v1/responses",
+                streaming =>
+                {
+                    request.Stream = streaming ? true : null;
+                    return JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
+                },
+                _interEventTimeout,
+                "OpenAI",
+                $"agent turn {_turnIndex}",
+                _logger,
+                cancellationToken)
+            .ConfigureAwait(false);
 
         sw.Stop();
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("OpenAI agent error: {Status} - {Body}", response.StatusCode, body);
-            throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {body}");
-        }
 
         return ParseResponse(body, sw.Elapsed);
     }
@@ -213,6 +226,11 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
             request.Store = true;
+
+        // Fast mode is a per-request tier, and the Responses API carries nothing across
+        // previous_response_id — so it is re-sent on every turn like the rest of this config.
+        if (llm is IFast { Speed: SpeedType.Fast })
+            request.ServiceTier = "fast";
 
         var tools = BuildToolsList();
         if (tools.Count > 0)
@@ -436,12 +454,20 @@ internal sealed class OpenAiAgentSession : IAgentSession
             && outDetails.TryGetProperty("reasoning_tokens", out var rt))
             reasoning = rt.GetInt32();
 
+        // Fast mode is per-request and best-effort — bill the tier this turn was served on.
+        var fastGranted = AiFastTier.WasGranted(
+            _context.Llm,
+            root.TryGetProperty("service_tier", out var tierEl) ? tierEl.GetString() : null,
+            _logger,
+            "OpenAI",
+            $"agent turn {_turnIndex}");
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(_context.Llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cached,
-        });
+        }, fastGranted);
 
         return new TokenUsage
         {

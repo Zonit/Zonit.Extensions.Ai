@@ -13,7 +13,6 @@ namespace Zonit.Extensions.Ai.X;
 [JsonSerializable(typeof(XOutputTokensDetails))]
 [JsonSerializable(typeof(XPromptTokensDetails))]
 [JsonSerializable(typeof(XTokenDetails))]
-[JsonSerializable(typeof(StreamChunk))]
 [JsonSerializable(typeof(XImageResponse))]
 [JsonSerializable(typeof(XImageData))]
 [JsonSerializable(typeof(XVideoTaskResponse))]

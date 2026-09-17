@@ -3,6 +3,75 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.8.0 — 2026-09-17
+
+### Fast mode on OpenAI and xAI, and a shared streaming transport for every Responses-API provider
+
+Additive — no API breaks. `Speed` defaults to `SpeedType.Standard`, so nothing changes until you
+opt in, and the transport change is invisible to callers.
+
+Fast mode — one property, three providers:
+
+- **Added** `IFast` to `Astra6`, `Sol56`, `Terra56` and `Luna56`. `Speed = SpeedType.Fast` sends
+  OpenAI's `service_tier: "fast"` — up to ~2.5× output tokens/sec and steadier latency, at 2× the
+  standard rate on input, cached input and output. The premium composes with long-context tiering
+  (fast Sol above 272K input bills $16 / $60 per MTok, not $8 / $40), and Batch rates are untouched
+  because fast mode is a synchronous-API tier. Fast mode was renamed from priority processing on
+  30 July 2026; GPT-5.6 and earlier echo `priority` back either way.
+- **Added** `IFast` to `Grok46`. `Speed = SpeedType.Fast` sends xAI's `service_tier: "priority"`
+  (Priority Processing) — higher scheduling priority when xAI is under load, at 2× on every token
+  type. Same property and enum as Anthropic's and OpenAI's fast modes; only the wire value differs.
+- **Changed** `IFast` into a **rate card rather than a decision**. A model publishes two sets of
+  prices — the standard ones on `ILlm` and the fast ones on `IFast` (`GetFastInputPrice`,
+  `GetFastOutputPrice`, `GetFastCachedInputPrice`, `GetFastCachedInputWritePrice`) — and no longer
+  folds the premium into its own getters. `AiCostCalculator` picks the card when the cost is
+  computed. Without that split "asked for fast, was served standard" is inexpressible, and every
+  consumer of `ILlm` (estimates, dashboards) silently reports the premium rate.
+  - The simple case stays free: a model implements nothing but `Speed` and inherits a uniform 2×
+    from the interface defaults — applied on top of its own long-context tiering, not instead of
+    it. `FastMultiplier` changes the factor.
+  - A tier that is **not** a flat multiple overrides only the rates that differ (e.g. triple
+    output, no surcharge on cache reads); the rest keep the default.
+- **Added** tier-aware billing (`AiFastTier.WasGranted`, `AiCostCalculator.CalculateCosts(…,
+  fastGranted)`). Both providers downgrade to standard scheduling when their fast capacity is
+  exhausted and only charge the premium when the response echoes the tier back — so the library
+  reads that echo, logs a warning, and bills the tier that was actually served. Billing the
+  requested tier would have inflated every cost figure by 2× for as long as a provider was busy.
+  Verified against both APIs: OpenAI answers a `service_tier: "fast"` request with `"priority"`
+  (the pre-rename spelling) and a downgraded one with `"default"`; xAI echoes `"priority"`.
+
+Long-response fix, now for OpenAI **and** xAI (the fault fixed on Anthropic in 10.6.3):
+
+- **Fixed** `GenerateAsync` / `ChatAsync` and every agent turn dropping long answers on both
+  providers. They held one buffered HTTP response open for the whole generation, so with
+  `max_output_tokens` defaulting to the model's full capacity (128K–131K) a large structured answer
+  could outlive `AttemptTimeout` — Polly then cancelled it and retried **from zero**, burning the
+  budget on a request that failed the same way each time. All of them now send `stream: true` and
+  reassemble the SSE frames, so liveness rather than total duration is what is measured. Both HTTP
+  clients moved to `AddAiStreamingResilienceHandler`, and stalls are caught by
+  `Ai:Resilience:InterEventTimeout` plus HTTP/2 keep-alive pings. A stream that ends before its
+  terminal event throws instead of returning half an answer.
+- **Fixed** `StreamAsync` / `ChatStreamAsync` yielding nothing on both providers. OpenAI read the
+  Chat Completions shape (`delta.text`) and xAI read the buffered shape
+  (`output[].content[].text`); the Responses API streams text as a plain string `delta` on
+  `response.output_text.delta`. Neither shape ever appears on a frame.
+- **Changed** OpenAI's non-`completed` status error from `"OpenAI status: incomplete"` to the reason
+  the API actually gave. `incomplete` + `max_output_tokens` now raises `AiEmptyResponseException`
+  with `AiResponseError.Truncated` (not transient — raise `MaxTokens` or lower reasoning effort),
+  `content_filter` raises `Refusal`, and a `failed` status carries the server's own error message.
+- **Added** a buffered fallback for accounts that may not stream: OpenAI gates streaming on
+  organization verification for several model families, so a 400 naming the `stream` parameter now
+  switches that provider to buffered requests (with a warning) instead of failing every call.
+
+New shared infrastructure in `Zonit.Extensions.Ai` (provider packages build on it):
+
+- `AiSseReader` — SSE frame reading plus the dead-stream watchdog, in one place. Anthropic's
+  assembler now reads through it too, so every provider stall-detects identically.
+- `ResponsesStreamAssembler` — Responses-API stream → the same body the buffered endpoint returns.
+  Shared by OpenAI and xAI, which mirrors OpenAI's wire format.
+- `ResponsesApiTransport` — the POST itself: streaming by default, the verified-org fallback, and
+  error handling. Used by both providers' single-shot paths and both agent loops.
+
 ## Unreleased
 
 ### GPT-6 Astra, Claude Fable 5.1, GPT Image 2.5, Grok Imagine 2.0 — and token-billed images

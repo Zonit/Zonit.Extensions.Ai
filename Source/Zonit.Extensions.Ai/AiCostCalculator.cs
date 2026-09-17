@@ -9,16 +9,38 @@ namespace Zonit.Extensions.Ai;
 public static class AiCostCalculator
 {
     /// <summary>
+    /// Picks the rate card a request is billed on: the model's standard prices, or the fast-tier
+    /// prices from <see cref="IFast"/>.
+    /// </summary>
+    /// <remarks>
+    /// The single place that decision is made. The model publishes both cards and never applies
+    /// the premium itself, because only the caller knows whether the fast tier was actually
+    /// served — OpenAI and xAI downgrade to standard scheduling when their fast capacity is short
+    /// and charge accordingly. Returns <c>null</c> when standard prices apply, so every rate
+    /// lookup below reads as "fast price if there is one, otherwise the standard one".
+    /// </remarks>
+    private static IFast? FastRates(ILlm llm, bool fastGranted)
+        => fastGranted && llm is IFast { Speed: SpeedType.Fast } fast ? fast : null;
+
+    /// <summary>
     /// Calculates the input cost for a text generation operation.
     /// </summary>
     /// <param name="llm">The language model used.</param>
     /// <param name="inputTokens">Number of input tokens.</param>
     /// <param name="cachedTokens">Number of cached tokens (cheaper).</param>
     /// <param name="cacheWriteTokens">Number of cache-write tokens (typically more expensive than regular input).</param>
+    /// <param name="fastGranted">See <see cref="CalculateCosts"/>.</param>
     /// <returns>Input cost as Price.</returns>
-    public static Price CalculateInputCost(ILlm llm, int inputTokens, int cachedTokens = 0, int cacheWriteTokens = 0)
+    public static Price CalculateInputCost(
+        ILlm llm,
+        int inputTokens,
+        int cachedTokens = 0,
+        int cacheWriteTokens = 0,
+        bool fastGranted = true)
     {
-        var inputPrice = llm.GetInputPrice(inputTokens);
+        var fast = FastRates(llm, fastGranted);
+
+        var inputPrice = fast?.GetFastInputPrice(inputTokens) ?? llm.GetInputPrice(inputTokens);
 
         // Split input into: regular | cache reads | cache writes — each may have a
         // different price. No ITextLlm gate here: IReasoningLlm carries its own
@@ -31,14 +53,14 @@ public static class AiCostCalculator
         // long-context tiers surcharge cache reads too (OpenAI GPT-5.6: 2× past 272K).
         if (cachedTokens > 0)
         {
-            var readPrice = llm.GetCachedInputPrice(inputTokens);
+            var readPrice = fast?.GetFastCachedInputPrice(inputTokens) ?? llm.GetCachedInputPrice(inputTokens);
             inputCost += (cachedTokens / 1_000_000m) * readPrice;
         }
 
         // Cache writes: more expensive (e.g. 1.25× base price for Anthropic 5-min TTL)
         if (cacheWriteTokens > 0)
         {
-            var writePrice = llm.GetCachedInputWritePrice(inputTokens);
+            var writePrice = fast?.GetFastCachedInputWritePrice(inputTokens) ?? llm.GetCachedInputWritePrice(inputTokens);
             inputCost += (cacheWriteTokens / 1_000_000m) * writePrice;
         }
 
@@ -55,10 +77,19 @@ public static class AiCostCalculator
     /// at 1.5× once input exceeds 272K).
     /// </param>
     /// <param name="outputTokens">Number of output tokens.</param>
+    /// <param name="fastGranted">See <see cref="CalculateCosts"/>.</param>
     /// <returns>Output cost as Price.</returns>
-    public static Price CalculateOutputCost(ILlm llm, int inputTokens, int outputTokens)
+    public static Price CalculateOutputCost(
+        ILlm llm,
+        int inputTokens,
+        int outputTokens,
+        bool fastGranted = true)
     {
-        var outputPrice = llm.GetOutputPrice(inputTokens, outputTokens);
+        var fast = FastRates(llm, fastGranted);
+
+        var outputPrice = fast?.GetFastOutputPrice(inputTokens, outputTokens)
+            ?? llm.GetOutputPrice(inputTokens, outputTokens);
+
         var outputCost = (outputTokens / 1_000_000m) * outputPrice;
         return new Price(outputCost);
     }
@@ -68,11 +99,11 @@ public static class AiCostCalculator
     /// </summary>
     /// <param name="llm">The language model used.</param>
     /// <param name="usage">Token usage from the operation.</param>
+    /// <param name="fastGranted">See <see cref="CalculateCosts"/>.</param>
     /// <returns>Total cost as Price.</returns>
-    public static Price CalculateCost(ILlm llm, TokenUsage usage)
+    public static Price CalculateCost(ILlm llm, TokenUsage usage, bool fastGranted = true)
     {
-        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
-        var outputCost = CalculateOutputCost(llm, usage.InputTokens, usage.OutputTokens);
+        var (inputCost, outputCost) = CalculateCosts(llm, usage, fastGranted);
         return inputCost + outputCost;
     }
 
@@ -81,11 +112,21 @@ public static class AiCostCalculator
     /// </summary>
     /// <param name="llm">The language model used.</param>
     /// <param name="usage">Token usage from the operation.</param>
+    /// <param name="fastGranted">
+    /// Whether a requested fast tier (<see cref="IFast"/> with <see cref="SpeedType.Fast"/>) was
+    /// actually served. Pass what the provider echoed back (<c>AiFastTier.WasGranted</c>): OpenAI
+    /// and xAI both downgrade to standard scheduling when their fast capacity is exhausted, and
+    /// only charge the premium when they confirm it. Ignored for models that did not ask for fast
+    /// mode; defaults to <c>true</c> so callers that cannot observe the tier bill what they asked
+    /// for.
+    /// </param>
     /// <returns>Tuple of (InputCost, OutputCost).</returns>
-    public static (Price InputCost, Price OutputCost) CalculateCosts(ILlm llm, TokenUsage usage)
+    public static (Price InputCost, Price OutputCost) CalculateCosts(ILlm llm, TokenUsage usage, bool fastGranted = true)
     {
-        var inputCost = CalculateInputCost(llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens);
-        var outputCost = CalculateOutputCost(llm, usage.InputTokens, usage.OutputTokens);
+        var inputCost = CalculateInputCost(
+            llm, usage.InputTokens, usage.CachedTokens, usage.CacheWriteTokens, fastGranted);
+        var outputCost = CalculateOutputCost(llm, usage.InputTokens, usage.OutputTokens, fastGranted);
+
         return (inputCost, outputCost);
     }
 
@@ -184,9 +225,12 @@ public static class AiCostCalculator
     {
         var estimatedInputTokens = (promptText.Length / 4) + 10; // Add buffer
 
-        var inputCost = (estimatedInputTokens / 1_000_000m) * llm.GetInputPrice(estimatedInputTokens);
-        var outputCost = (estimatedOutputTokens / 1_000_000m) * llm.GetOutputPrice(estimatedInputTokens, estimatedOutputTokens);
-
-        return new Price(inputCost + outputCost);
+        // No response to read a tier from yet, so a fast model estimates at its fast rates —
+        // the tier the caller asked for is the honest pre-flight assumption.
+        return CalculateCost(llm, new TokenUsage
+        {
+            InputTokens = estimatedInputTokens,
+            OutputTokens = estimatedOutputTokens,
+        });
     }
 }

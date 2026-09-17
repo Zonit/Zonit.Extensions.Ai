@@ -23,15 +23,25 @@ public sealed class OpenAiAgentAdapter : IAgentProviderAdapter
     private readonly HttpClient _httpClient;
     private readonly IOptions<OpenAiOptions> _options;
     private readonly ILogger<OpenAiAgentAdapter> _logger;
+    private readonly TimeSpan _interEventTimeout;
 
+    /// <param name="httpClient">Typed client carrying the streaming resilience pipeline.</param>
+    /// <param name="options">Provider options (key, organization, base URL).</param>
+    /// <param name="logger">Adapter logger.</param>
+    /// <param name="aiOptions">
+    /// Global AI options, for the stream watchdog. Optional so the constructor stays
+    /// source-compatible; DI always supplies it (<c>AddAi()</c> registers it).
+    /// </param>
     public OpenAiAgentAdapter(
         HttpClient httpClient,
         IOptions<OpenAiOptions> options,
-        ILogger<OpenAiAgentAdapter> logger)
+        ILogger<OpenAiAgentAdapter> logger,
+        IOptions<AiOptions>? aiOptions = null)
     {
         _httpClient = httpClient;
         _options = options;
         _logger = logger;
+        _interEventTimeout = aiOptions?.Value.Resilience.InterEventTimeout ?? TimeSpan.Zero;
     }
 
     /// <inheritdoc />
@@ -53,7 +63,7 @@ public sealed class OpenAiAgentAdapter : IAgentProviderAdapter
 
         EnsureHttpClientConfigured();
 
-        return new OpenAiAgentSession(_httpClient, context, _logger);
+        return new OpenAiAgentSession(_httpClient, context, _logger, _interEventTimeout);
     }
 
     private bool _configured;

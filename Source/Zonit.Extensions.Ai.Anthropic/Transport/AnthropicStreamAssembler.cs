@@ -58,32 +58,12 @@ internal static class AnthropicStreamAssembler
         var response = new AnthropicResponse { Usage = new AnthropicUsage() };
         var completed = false;
 
-        using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        watchdog.CancelAfter(interEventTimeout);
-
-        while (true)
+        // Frame reading and the dead-stream watchdog are shared with every other provider
+        // (AiSseReader); only the event vocabulary below is Anthropic's own.
+        await foreach (var data in AiSseReader
+            .ReadFramesAsync(reader, interEventTimeout, "Anthropic", operation, cancellationToken)
+            .ConfigureAwait(false))
         {
-            string? line;
-            try
-            {
-                line = await reader.ReadLineAsync(watchdog.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-            {
-                throw new TimeoutException(
-                    $"Anthropic {operation} stream produced no event for {interEventTimeout.TotalSeconds:N0}s — "
-                    + "server-side stall (no ping frames). Configurable via Ai:Resilience InterEventTimeout.");
-            }
-
-            if (line is null) break;
-
-            // Refresh on every physical line: `event:` headers and blank frame
-            // separators are equally proof that the server is still alive.
-            watchdog.CancelAfter(interEventTimeout);
-
-            if (line.Length == 0 || !line.StartsWith("data: ", StringComparison.Ordinal)) continue;
-            var data = line[6..];
-
             // Anthropic terminates with `message_stop`; `[DONE]` is tolerated because
             // some gateways synthesize it.
             if (data == "[DONE]")

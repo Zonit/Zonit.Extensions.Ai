@@ -34,7 +34,7 @@ namespace Zonit.Extensions.Ai.X;
 /// <see href="https://docs.x.ai/docs/pricing"/>.
 /// </para>
 /// </remarks>
-public class Grok46 : XChatBase, IReasoningLlm
+public class Grok46 : XChatBase, IReasoningLlm, IFast
 {
     /// <summary>
     /// Prompt size at which xAI switches to the higher rate card. The docs read
@@ -45,6 +45,22 @@ public class Grok46 : XChatBase, IReasoningLlm
 
     /// <summary>Both sides of the rate card double past the threshold.</summary>
     private const decimal LongContextMultiplier = 2m;
+
+    /// <summary>
+    /// Scheduling tier. Set to <see cref="SpeedType.Fast"/> to opt this request into xAI Priority
+    /// Processing (<c>service_tier: "priority"</c>): higher scheduling priority — lower
+    /// time-to-first-token and inter-token latency when xAI is under load — at double the standard
+    /// rate on every token type. Defaults to <see cref="SpeedType.Standard"/>.
+    /// </summary>
+    /// <remarks>
+    /// The premium lives in <see cref="IFast"/>'s defaults (a uniform 2×, applied on top of the
+    /// 200K context tiering below). Priority is best-effort: when the capacity is unavailable xAI
+    /// serves the request at the default tier, charges the standard rate, and echoes
+    /// <c>service_tier: "default"</c> — which is why the choice of rate card is made when the cost
+    /// is computed rather than here. See
+    /// <see href="https://docs.x.ai/developers/advanced-api-usage/priority-processing"/>.
+    /// </remarks>
+    public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <summary>
     /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).

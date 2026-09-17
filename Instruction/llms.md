@@ -289,7 +289,7 @@ Total: 143 models across 17 providers.
 
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
-| `Astra6` | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Astra6` | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Cyber56` | `gpt-5.6-cyber` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, MCP |
 | `GPT41` ⚠️ | `gpt-4.1-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT41Mini` ⚠️ | `gpt-4.1-mini-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, CodeInterpreter, MCP |
@@ -317,11 +317,11 @@ Total: 143 models across 17 providers.
 | `GPTImage2` | `gpt-image-2` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Flare` | `gpt-image-2.5-flare` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Sunburst` | `gpt-image-2.5-sunburst` | 128,000 | — | Text, Image → Image | image | — |
-| `Luna56` | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch |
+| `Luna56` | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch |
 | `O3` ⚠️ | `o3-2025-04-16` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `O3Pro` ⚠️ | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
-| `Sol56` | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
-| `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, CodeInterpreter, MCP |
+| `Sol56` | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
 | `TextEmbedding3Small` | `text-embedding-3-small` | 8,191 | 1,536 | Text → Embedding | embedding | — |
 | `Whisper1` ⚠️ | `whisper-1` | — | — | Audio → Text | audio | — |
@@ -434,7 +434,7 @@ Total: 143 models across 17 providers.
 | `Grok420Reasoning` ⚠️ | `grok-4.20-0309-reasoning` | 2,000,000 | 131,072 | Text, Image → Text | chat, agent | WebSearch, CodeExecution, XSearch |
 | `Grok43` ⚠️ | `grok-4.3` | 1,000,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `Grok45` ⚠️ | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
-| `Grok46` | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
+| `Grok46` | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, CodeExecution, XSearch |
 | `GrokImagineImage` | `grok-imagine-image` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineImage20` | `grok-imagine-image-2.0` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineImageQuality` | `grok-imagine-image-quality` | 32,000 | — | Text, Image → Image | image | — |

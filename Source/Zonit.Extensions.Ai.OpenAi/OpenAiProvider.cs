@@ -31,15 +31,29 @@ public sealed class OpenAiProvider : IModelProvider
     private readonly HttpClient _httpClient;
     private readonly ILogger<OpenAiProvider> _logger;
     private readonly OpenAiOptions _options;
+    private readonly TimeSpan _interEventTimeout;
 
+    /// <param name="httpClient">Typed client carrying the streaming resilience pipeline.</param>
+    /// <param name="options">Provider options (key, organization, base URL).</param>
+    /// <param name="logger">Provider logger.</param>
+    /// <param name="aiOptions">
+    /// Global AI options, for the stream watchdog. Optional so the constructor stays
+    /// source-compatible; DI always supplies it (<c>AddAi()</c> registers it).
+    /// </param>
     public OpenAiProvider(
         HttpClient httpClient,
         IOptions<OpenAiOptions> options,
-        ILogger<OpenAiProvider> logger)
+        ILogger<OpenAiProvider> logger,
+        IOptions<AiOptions>? aiOptions = null)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
+
+        // Dead-stream watchdog for the assembled (non-live) path — the same knob the
+        // agent loop uses, so both streaming paths stall-detect identically.
+        var configured = aiOptions?.Value.Resilience.InterEventTimeout ?? TimeSpan.Zero;
+        _interEventTimeout = configured > TimeSpan.Zero ? configured : TimeSpan.FromMinutes(30);
 
         ConfigureHttpClient();
     }
@@ -59,46 +73,27 @@ public sealed class OpenAiProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
 
-        _logger.LogDebug("OpenAI request: {Payload}", jsonPayload);
-
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+        var openAiResponse = await SendResponsesAsync(llm, request, "GenerateAsync", cancellationToken);
 
         stopwatch.Stop();
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("OpenAI error: {Status} - {Response}", response.StatusCode, responseJson);
-            throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {responseJson}");
-        }
-
-        var openAiResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.OpenAiResponse)!;
-
-        if (openAiResponse.Status != "completed")
-            throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
-
-        var textContent = openAiResponse.Output?
-            .FirstOrDefault(o => o.Type == "message")?
-            .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
-
-        if (string.IsNullOrEmpty(textContent))
-            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "OpenAI returned no text — server-side data loss; usually transient, re-run the operation.");
-
+        var textContent = ExtractText(llm, openAiResponse, "GenerateAsync");
         var result = ParseResponse<TResponse>(textContent);
 
         var inputTokens = openAiResponse.Usage?.InputTokens ?? 0;
         var outputTokens = openAiResponse.Usage?.OutputTokens ?? 0;
         var cachedTokens = openAiResponse.Usage?.InputTokensDetails?.CachedTokens ?? 0;
+
+        // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
+        var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "GenerateAsync");
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens
-        });
+        }, fastGranted);
 
         return new Result<TResponse>
         {
@@ -133,46 +128,27 @@ public sealed class OpenAiProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
 
-        _logger.LogDebug("OpenAI chat request: {Payload}", jsonPayload);
-
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+        var openAiResponse = await SendResponsesAsync(llm, request, "ChatAsync", cancellationToken);
 
         stopwatch.Stop();
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("OpenAI chat error: {Status} - {Response}", response.StatusCode, responseJson);
-            throw new HttpRequestException($"OpenAI API failed: {response.StatusCode}: {responseJson}");
-        }
-
-        var openAiResponse = JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.OpenAiResponse)!;
-
-        if (openAiResponse.Status != "completed")
-            throw new InvalidOperationException($"OpenAI status: {openAiResponse.Status}");
-
-        var textContent = openAiResponse.Output?
-            .FirstOrDefault(o => o.Type == "message")?
-            .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
-
-        if (string.IsNullOrEmpty(textContent))
-            throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "OpenAI returned no text — server-side data loss; usually transient, re-run the operation.");
-
+        var textContent = ExtractText(llm, openAiResponse, "ChatAsync");
         var result = ParseResponse<TResponse>(textContent);
 
         var inputTokens = openAiResponse.Usage?.InputTokens ?? 0;
         var outputTokens = openAiResponse.Usage?.OutputTokens ?? 0;
         var cachedTokens = openAiResponse.Usage?.InputTokensDetails?.CachedTokens ?? 0;
+
+        // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
+        var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "ChatAsync");
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens
-        });
+        }, fastGranted);
 
         return new Result<TResponse>
         {
@@ -376,9 +352,8 @@ public sealed class OpenAiProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize(data, OpenAiJsonContext.Default.StreamChunk);
-            if (chunk?.Delta?.Text != null)
-                yield return chunk.Delta.Text;
+            if (ResponsesStreamAssembler.TryReadTextDelta(data) is { } fragment)
+                yield return fragment;
         }
     }
 
@@ -410,9 +385,8 @@ public sealed class OpenAiProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize(data, OpenAiJsonContext.Default.StreamChunk);
-            if (chunk?.Delta?.Text != null)
-                yield return chunk.Delta.Text;
+            if (ResponsesStreamAssembler.TryReadTextDelta(data) is { } fragment)
+                yield return fragment;
         }
     }
 
@@ -464,6 +438,107 @@ public sealed class OpenAiProvider : IModelProvider
                 Usage = new TokenUsage()
             }
         };
+    }
+
+    /// <summary>
+    /// Issues one <c>POST /v1/responses</c> and returns the finished response.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Goes out as <c>stream: true</c> and comes back reassembled into the complete
+    /// <see cref="OpenAiResponse"/> the caller expects (see
+    /// <see cref="ResponsesApiTransport"/>, which also handles the buffered fallback for
+    /// accounts that may not stream) — the contract of <c>GenerateAsync</c> / <c>ChatAsync</c>
+    /// ("one call, one finished result") is unchanged; only the transport differs.
+    /// </para>
+    /// <para>
+    /// The buffered form this replaces held one HTTP response open for the entire
+    /// generation. With <c>max_output_tokens</c> defaulting to the model's full output
+    /// capacity (128k on the GPT-5.6 tiers), a large structured answer can legitimately
+    /// run past the per-attempt timeout, whereupon Polly cancelled it and retried —
+    /// restarting generation from zero at full cost. Streaming removes the ceiling:
+    /// frames arrive continuously, so liveness is what is measured instead of total
+    /// duration (see <see cref="ResponsesStreamAssembler"/>).
+    /// </para>
+    /// </remarks>
+    private async Task<OpenAiResponse> SendResponsesAsync(
+        ILlm llm,
+        OpenAiResponsesRequest request,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        var responseJson = await ResponsesApiTransport.SendAsync(
+            _httpClient,
+            "/v1/responses",
+            streaming =>
+            {
+                // Wire-level only: the caller still receives one assembled response. Rebuilt per
+                // attempt so the buffered fallback can drop the flag if the API rejects streaming.
+                request.Stream = streaming ? true : null;
+                return JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
+            },
+            _interEventTimeout,
+            Name,
+            operation,
+            _logger,
+            cancellationToken);
+
+        return JsonSerializer.Deserialize(responseJson, OpenAiJsonContext.Default.OpenAiResponse)!;
+    }
+
+    /// <summary>
+    /// Returns the answer text, or throws the diagnosis. A non-<c>completed</c> status
+    /// and an empty output are the two ways the endpoint says "no answer"; both name
+    /// the reason the API gave, because "OpenAI status: incomplete" alone sent callers
+    /// hunting for a fault that the response had already explained.
+    /// </summary>
+    private string ExtractText(ILlm llm, OpenAiResponse response, string operation)
+    {
+        var text = response.Output?
+            .FirstOrDefault(o => o.Type == "message")?
+            .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+
+        var reason = response.IncompleteDetails?.Reason;
+
+        if (response.Status is not null && response.Status != "completed")
+        {
+            // `incomplete` with reason `max_output_tokens` is the common one: the model
+            // spent its whole budget (usually on reasoning) before emitting an answer.
+            // Not transient — retrying re-truncates — so it is classified as such.
+            if (response.Status == "incomplete" && reason == "max_output_tokens")
+            {
+                throw new AiEmptyResponseException(
+                    AiResponseError.Truncated,
+                    $"OpenAI {operation} hit max_output_tokens on '{llm.Name}' before producing an answer. "
+                    + $"Raise MaxTokens (currently {llm.MaxTokens:N0}) or lower the reasoning effort.",
+                    stopReason: reason);
+            }
+
+            if (response.Status == "incomplete" && reason == "content_filter")
+            {
+                throw new AiEmptyResponseException(
+                    AiResponseError.Refusal,
+                    $"OpenAI {operation} was stopped by the content filter on '{llm.Name}'. Revise the prompt or inputs.",
+                    stopReason: reason);
+            }
+
+            var detail = response.Error?.Message ?? reason;
+            throw new InvalidOperationException(
+                $"OpenAI {operation} returned status '{response.Status}' on '{llm.Name}'"
+                + (detail is null ? "." : $": {detail}"));
+        }
+
+        if (string.IsNullOrEmpty(text))
+        {
+            throw new AiEmptyResponseException(
+                AiResponseError.EmptyAfterRetries,
+                $"OpenAI {operation} returned no text on '{llm.Name}' (status '{response.Status ?? "unknown"}'"
+                + (reason is null ? "" : $", reason '{reason}'")
+                + ") — server-side data loss; usually transient, re-run the operation.",
+                stopReason: reason);
+        }
+
+        return text;
     }
 
     private void ConfigureHttpClient()
@@ -534,6 +609,8 @@ public sealed class OpenAiProvider : IModelProvider
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
             request.Store = true;
 
+        ApplyServiceTier(llm, request);
+
         if (llm is OpenAiChatBase textLlm)
         {
             if (textLlm.Temperature < 1.0)
@@ -573,6 +650,24 @@ public sealed class OpenAiProvider : IModelProvider
             request.Tools = BuildValidatedTools(llm, typedTools);
 
         return request;
+    }
+
+    /// <summary>
+    /// Opts the request into fast mode when the model asks for it
+    /// (<see cref="IFast"/> with <see cref="SpeedType.Fast"/>): up to ~2.5× faster
+    /// output and steadier latency, billed at double the standard rate.
+    /// </summary>
+    /// <remarks>
+    /// The wire field is <c>service_tier</c>. OpenAI renamed priority processing to
+    /// fast mode on 30 July 2026 and kept <c>"priority"</c> as an accepted alias; we
+    /// send the current spelling. Omitting the field entirely (standard processing)
+    /// is the default for every model, including those that implement
+    /// <see cref="IFast"/> but were left at <see cref="SpeedType.Standard"/>.
+    /// </remarks>
+    private static void ApplyServiceTier(ILlm llm, OpenAiResponsesRequest request)
+    {
+        if (llm is IFast { Speed: SpeedType.Fast })
+            request.ServiceTier = "fast";
     }
 
     /// <summary>
@@ -752,6 +847,8 @@ public sealed class OpenAiProvider : IModelProvider
         if (llm is OpenAiBase openAiBase && openAiBase.StoreLogs)
             request.Store = true;
 
+        ApplyServiceTier(llm, request);
+
         if (llm is OpenAiChatBase textLlm)
         {
             if (textLlm.Temperature < 1.0) request.Temperature = textLlm.Temperature;
@@ -810,6 +907,30 @@ internal sealed class OpenAiResponse
     public string? Status { get; set; }
     public OpenAiOutput[]? Output { get; set; }
     public OpenAiUsage? Usage { get; set; }
+
+    /// <summary>Why a non-<c>completed</c> response stopped (e.g. <c>max_output_tokens</c>, <c>content_filter</c>).</summary>
+    public OpenAiIncompleteDetails? IncompleteDetails { get; set; }
+
+    /// <summary>Set on a <c>failed</c> response; carries the server-side fault.</summary>
+    public OpenAiErrorDetail? Error { get; set; }
+
+    /// <summary>
+    /// Tier the request was actually served on. <c>"fast"</c> / <c>"priority"</c> confirm
+    /// fast mode was granted; <c>"default"</c> means it was downgraded to standard
+    /// processing (see <see cref="OpenAiProvider.ApplyServiceTier"/>).
+    /// </summary>
+    public string? ServiceTier { get; set; }
+}
+
+internal sealed class OpenAiIncompleteDetails
+{
+    public string? Reason { get; set; }
+}
+
+internal sealed class OpenAiErrorDetail
+{
+    public string? Code { get; set; }
+    public string? Message { get; set; }
 }
 
 internal sealed class OpenAiOutput
@@ -870,16 +991,6 @@ internal sealed class EmbeddingUsage
     public int PromptTokens { get; set; }
 }
 
-internal sealed class StreamChunk
-{
-    public StreamDelta? Delta { get; set; }
-}
-
-internal sealed class StreamDelta
-{
-    public string? Text { get; set; }
-}
-
 internal sealed class TranscriptionResponse
 {
     public string? Text { get; set; }
@@ -896,6 +1007,7 @@ internal sealed class OpenAiResponsesRequest
     public OpenAiTextConfig? Text { get; set; }
     public bool? Stream { get; set; }
     public bool? Store { get; set; }
+    public string? ServiceTier { get; set; }
     public double? Temperature { get; set; }
     public double? TopP { get; set; }
     public OpenAiReasoningConfig? Reasoning { get; set; }

@@ -440,6 +440,12 @@ var fast = await ai.GenerateAsync(
     "Draft a release note for v10.");
 ```
 
+The same property covers Anthropic fast mode, OpenAI fast mode (`Astra6`, `Sol56`, `Terra56`,
+`Luna56`) and xAI Priority Processing (`Grok46`) — each provider's wire format is handled for you,
+and every one of them charges 2× for it. Fast mode is best-effort everywhere: when a provider
+downgrades the request to standard speed, the reported cost follows it back down.
+See [models.md](./Instruction/models.md#fast-mode-ifast).
+
 ---
 
 ## Prompt caching
@@ -788,8 +794,8 @@ with full tool-calling (needs an `IAgentLlm` model).
 | `Chat(llm, prompt, history).RunStreamAsync()` | `IAsyncEnumerable<AgentEvent>` | yes | events |
 
 ¹ The **Streaming** column means "does the caller see partial output". Whether a call streams on the
-wire is a transport detail: Anthropic text calls always do, and the non-streaming entry points
-reassemble the reply before returning. Output size is therefore never a reason to pick a streaming
+wire is a transport detail: Anthropic, OpenAI and xAI text calls always do, and the non-streaming
+entry points reassemble the reply before returning. Output size is therefore never a reason to pick a streaming
 entry point — pick by whether you want to display partial output.
 
 Every entry point has a plain-`string` overload for when you do not need a typed response. On either

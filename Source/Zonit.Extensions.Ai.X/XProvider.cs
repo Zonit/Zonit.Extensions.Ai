@@ -31,18 +31,57 @@ public sealed class XProvider : IModelProvider
     private readonly HttpClient _httpClient;
     private readonly ILogger<XProvider> _logger;
     private readonly XOptions _options;
+    private readonly TimeSpan _interEventTimeout;
 
+    /// <param name="httpClient">Typed client carrying the streaming resilience pipeline.</param>
+    /// <param name="options">Provider options (key, base URL).</param>
+    /// <param name="logger">Provider logger.</param>
+    /// <param name="aiOptions">
+    /// Global AI options, for the stream watchdog. Optional so the constructor stays
+    /// source-compatible; DI always supplies it (<c>AddAi()</c> registers it).
+    /// </param>
     public XProvider(
         HttpClient httpClient,
         IOptions<XOptions> options,
-        ILogger<XProvider> logger)
+        ILogger<XProvider> logger,
+        IOptions<AiOptions>? aiOptions = null)
     {
         _httpClient = httpClient;
         _logger = logger;
         _options = options.Value;
 
+        // Dead-stream watchdog for the assembled (non-live) paths — the same knob the agent
+        // loop uses, so both streaming paths stall-detect identically.
+        var configured = aiOptions?.Value.Resilience.InterEventTimeout ?? TimeSpan.Zero;
+        _interEventTimeout = configured > TimeSpan.Zero ? configured : TimeSpan.FromMinutes(30);
+
         ConfigureHttpClient();
     }
+
+    /// <summary>
+    /// Issues one <c>POST /v1/responses</c> and returns the finished response body.
+    /// </summary>
+    /// <remarks>
+    /// Goes out as <c>stream: true</c> and comes back reassembled (see
+    /// <see cref="ResponsesApiTransport"/>): the buffered form held one HTTP response open for
+    /// the whole generation, so with <c>max_output_tokens</c> defaulting to the model's full
+    /// 131K capacity a long answer could outlive the per-attempt timeout and be retried from
+    /// zero. The caller still receives one finished result.
+    /// </remarks>
+    private Task<string> SendResponsesAsync(XResponsesRequest request, string operation, CancellationToken cancellationToken)
+        => ResponsesApiTransport.SendAsync(
+            _httpClient,
+            "/v1/responses",
+            streaming =>
+            {
+                request.Stream = streaming ? true : null;
+                return JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
+            },
+            _interEventTimeout,
+            Name,
+            operation,
+            _logger,
+            cancellationToken);
 
     /// <inheritdoc />
     public string Name => "X";
@@ -59,22 +98,10 @@ public sealed class XProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildRequest(llm, prompt, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
 
-        _logger.LogDebug("X request: {Payload}", jsonPayload);
-
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+        var responseJson = await SendResponsesAsync(request, "GenerateAsync", cancellationToken);
 
         stopwatch.Stop();
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("X error: {Status} - {Response}", response.StatusCode, responseJson);
-            throw new HttpRequestException($"X API failed: {response.StatusCode}: {responseJson}");
-        }
 
         var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
@@ -98,12 +125,16 @@ public sealed class XProvider : IModelProvider
         var cachedTokens = xResponse.Usage?.InputTokensDetails?.CachedTokens
             ?? xResponse.Usage?.PromptTokensDetails?.CachedTokens
             ?? 0;
+        // Priority Processing is best-effort: bill the tier xAI actually served, not the one
+        // asked for — xAI only charges the premium when it echoes "priority" back.
+        var fastGranted = AiFastTier.WasGranted(llm, xResponse.ServiceTier, _logger, Name, "GenerateAsync");
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens
-        });
+        }, fastGranted);
 
         return new Result<TResponse>
         {
@@ -375,10 +406,10 @@ public sealed class XProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize(data, XJsonContext.Default.StreamChunk);
-            var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
-
-            if (text != null)
+            // The Responses API streams text as `response.output_text.delta` with a plain
+            // string `delta` — not the buffered output[].content[].text shape, which never
+            // appears on a frame and left this loop yielding nothing.
+            if (ResponsesStreamAssembler.TryReadTextDelta(data) is { } text)
             {
                 emittedAny = true;
                 yield return text;
@@ -401,21 +432,10 @@ public sealed class XProvider : IModelProvider
         var stopwatch = Stopwatch.StartNew();
 
         var request = BuildChatRequest(llm, prompt, chat, typeof(TResponse));
-        var jsonPayload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
-        _logger.LogDebug("X chat request: {Payload}", jsonPayload);
 
-        using var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken);
+        var responseJson = await SendResponsesAsync(request, "ChatAsync", cancellationToken);
 
         stopwatch.Stop();
-
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            _logger.LogError("X chat error: {Status} - {Response}", response.StatusCode, responseJson);
-            throw new HttpRequestException($"X API failed: {response.StatusCode}: {responseJson}");
-        }
 
         var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
@@ -435,12 +455,16 @@ public sealed class XProvider : IModelProvider
         var cachedTokens = xResponse.Usage?.InputTokensDetails?.CachedTokens
             ?? xResponse.Usage?.PromptTokensDetails?.CachedTokens
             ?? 0;
+        // Priority Processing is best-effort: bill the tier xAI actually served, not the one
+        // asked for — xAI only charges the premium when it echoes "priority" back.
+        var fastGranted = AiFastTier.WasGranted(llm, xResponse.ServiceTier, _logger, Name, "ChatAsync");
+
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens
-        });
+        }, fastGranted);
 
         return new Result<TResponse>
         {
@@ -496,9 +520,8 @@ public sealed class XProvider : IModelProvider
             var data = line[6..];
             if (data == "[DONE]") break;
 
-            var chunk = JsonSerializer.Deserialize(data, XJsonContext.Default.StreamChunk);
-            var text = chunk?.Output?.FirstOrDefault()?.Content?.FirstOrDefault()?.Text;
-            if (text != null)
+            // See StreamAsync: the frame shape is `response.output_text.delta` + string delta.
+            if (ResponsesStreamAssembler.TryReadTextDelta(data) is { } text)
             {
                 emittedAny = true;
                 yield return text;
@@ -606,6 +629,8 @@ public sealed class XProvider : IModelProvider
                 }
             };
         }
+
+        ApplyServiceTier(llm, request);
 
         return request;
     }
@@ -726,6 +751,8 @@ public sealed class XProvider : IModelProvider
             };
         }
 
+        ApplyServiceTier(llm, request);
+
         if (llm is XBase xb && xb.Tools is { Length: > 0 } native)
         {
 #pragma warning disable CS0618 // Grok420MultiAgent is deprecated but still fully supported by this provider.
@@ -753,6 +780,26 @@ public sealed class XProvider : IModelProvider
     /// (e.g. <c>Grok41FastNonReasoning</c> exposes WebSearch + XSearch but
     /// not CodeExecution).
     /// </summary>
+    /// <summary>
+    /// Opts the request into xAI Priority Processing when the model asks for it
+    /// (<see cref="IFast"/> with <see cref="SpeedType.Fast"/>): higher scheduling
+    /// priority — lower time-to-first-token and inter-token latency when xAI is busy —
+    /// billed at 2× the standard rate on every token type.
+    /// </summary>
+    /// <remarks>
+    /// xAI's equivalent of OpenAI fast mode, and it shares the wire field name
+    /// (<c>service_tier</c>) but not its value: xAI accepts <c>"priority"</c> /
+    /// <c>"default"</c>, not <c>"fast"</c>. Priority is best-effort — when the capacity
+    /// is not there the request is served at the default tier and the response says so;
+    /// <see cref="AiFastTier.WasGranted"/> reads that echo back, warns, and bills the
+    /// request at the standard rate.
+    /// </remarks>
+    private static void ApplyServiceTier(ILlm llm, XResponsesRequest request)
+    {
+        if (llm is IFast { Speed: SpeedType.Fast })
+            request.ServiceTier = "priority";
+    }
+
     internal static XTool BuildToolForRequest(ILlm llm, Tools.IXTool tool) => tool switch
     {
         Tools.FunctionTool f => new XTool
@@ -937,6 +984,13 @@ internal sealed class XResponse
     public XOutput[]? Output { get; set; }
     public XUsage? Usage { get; set; }
     public string? Status { get; set; }
+
+    /// <summary>
+    /// Tier the request was actually served on — xAI always echoes it. <c>"priority"</c>
+    /// confirms Priority Processing was granted (and billed); <c>"default"</c> means
+    /// priority capacity was unavailable and the request ran at standard scheduling.
+    /// </summary>
+    public string? ServiceTier { get; set; }
 }
 
 internal sealed class XOutput
@@ -984,11 +1038,6 @@ internal sealed class XPromptTokensDetails
 internal sealed class XTokenDetails
 {
     public int ReasoningTokens { get; set; }
-}
-
-internal sealed class StreamChunk
-{
-    public XOutput[]? Output { get; set; }
 }
 
 // Image generation response models
@@ -1051,6 +1100,13 @@ internal sealed class XResponsesRequest
     public double? Temperature { get; set; }
     public double? TopP { get; set; }
     public bool? Stream { get; set; }
+    /// <summary>
+    /// Scheduling tier. <c>"priority"</c> opts into Priority Processing (lower TTFT and
+    /// inter-token latency during high demand) at double the standard token price;
+    /// omitted / <c>"default"</c> is standard scheduling. Set from <see cref="IFast"/>
+    /// — see <see cref="XProvider.ApplyServiceTier"/>.
+    /// </summary>
+    public string? ServiceTier { get; set; }
     /// <summary>
     /// Nested reasoning spec used by the Responses API. xAI rejects requests
     /// that send a flat <c>reasoning_effort</c> field on this endpoint, and

@@ -74,8 +74,6 @@ internal sealed class XAgentSession : IAgentSession
 
         var request = BuildRequest();
         request.PromptCacheKey = _cacheKey;
-        var payload = JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
-        _logger.LogDebug("X agent turn {Turn} payload: {Payload}", _turnIndex, payload);
 
         // Polly's HTTP resilience handler already retries connection failures /
         // 429 / 5xx BEFORE a response arrives. This loop covers the failure it
@@ -91,16 +89,28 @@ internal sealed class XAgentSession : IAgentSession
         while (true)
         {
             var sw = Stopwatch.StartNew();
-            using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-            using var response = await _httpClient.PostAsync("/v1/responses", content, cancellationToken).ConfigureAwait(false);
-            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            sw.Stop();
 
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("X agent error: {Status} - {Body}", response.StatusCode, body);
-                throw new HttpRequestException($"X API failed: {response.StatusCode}: {body}");
-            }
+            // Streamed on the wire and reassembled into one finished response body — a turn
+            // that thinks and writes for a long time keeps the connection busy with frames
+            // instead of sitting silent, so it is never cancelled mid-generation and retried
+            // from zero. See ResponsesApiTransport.
+            var body = await ResponsesApiTransport
+                .SendAsync(
+                    _httpClient,
+                    "/v1/responses",
+                    streaming =>
+                    {
+                        request.Stream = streaming ? true : null;
+                        return JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
+                    },
+                    _resilience.InterEventTimeout,
+                    "X",
+                    $"agent turn {_turnIndex}",
+                    _logger,
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            sw.Stop();
 
             var turn = ParseResponse(body, sw.Elapsed);
             if (turn.ToolCalls.Count != 0 || !string.IsNullOrWhiteSpace(turn.FinalText))
@@ -255,6 +265,11 @@ internal sealed class XAgentSession : IAgentSession
         else if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
             request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
 #pragma warning restore CS0618
+
+        // Priority Processing is a per-request tier, so it is set on every turn of the
+        // loop, not just the first (see XProvider.ApplyServiceTier).
+        if (llm is IFast { Speed: SpeedType.Fast })
+            request.ServiceTier = "priority";
 
         if (_context.ResponseType is { } responseType)
         {
@@ -428,6 +443,14 @@ internal sealed class XAgentSession : IAgentSession
         else if (usage.TryGetProperty("completion_tokens_details", out var cDetails)
             && cDetails.TryGetProperty("reasoning_tokens", out var crt))
             reasoning = crt.GetInt32();
+
+        // Priority Processing is per-request and best-effort — bill the tier this turn ran on.
+        var fastGranted = AiFastTier.WasGranted(
+            _context.Llm,
+            root.TryGetProperty("service_tier", out var tierEl) ? tierEl.GetString() : null,
+            _logger,
+            "X",
+            $"agent turn {_turnIndex}");
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(_context.Llm, new TokenUsage
         {

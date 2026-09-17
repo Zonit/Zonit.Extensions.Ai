@@ -59,18 +59,15 @@ public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFas
     public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <inheritdoc />
+    /// <remarks>
+    /// $10 / $50 per MTok — Anthropic's flat 2× on the standard card, which is exactly what
+    /// <see cref="IFast"/> assumes by default; stated explicitly here so the fast rates are
+    /// visible on the model. Whether they are charged is decided when the cost is computed.
+    /// </remarks>
     public decimal FastPriceInput => 10.00m;
 
-    /// <inheritdoc />
+    /// <inheritdoc cref="FastPriceInput" />
     public decimal FastPriceOutput => 50.00m;
-
-    /// <summary>Fast price when <see cref="Speed"/> is <see cref="SpeedType.Fast"/>, otherwise the standard price.</summary>
-    public override decimal GetInputPrice(long inputTokens)
-        => Speed == SpeedType.Fast ? FastPriceInput : PriceInput;
-
-    /// <summary>Fast price when <see cref="Speed"/> is <see cref="SpeedType.Fast"/>, otherwise the standard price.</summary>
-    public override decimal GetOutputPrice(long inputTokens, long outputTokens)
-        => Speed == SpeedType.Fast ? FastPriceOutput : PriceOutput;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_000_000;

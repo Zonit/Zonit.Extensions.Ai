@@ -47,7 +47,8 @@ public class OpenAiAgentSessionTests
             .ReturnsAsync(() => new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(responses.Dequeue(), Encoding.UTF8, "application/json"),
+                // Agent turns stream and reassemble; feed the canned body as SSE frames.
+                Content = new StringContent(ResponsesSse.FromResponseJson(responses.Dequeue()), Encoding.UTF8, "text/event-stream"),
             });
 
         var httpClient = new HttpClient(handler.Object) { BaseAddress = new Uri("https://api.openai.com") };
@@ -105,7 +106,8 @@ public class OpenAiAgentSessionTests
             .ReturnsAsync(() => new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(responses.Dequeue(), Encoding.UTF8, "application/json"),
+                // Agent turns stream and reassemble; feed the canned body as SSE frames.
+                Content = new StringContent(ResponsesSse.FromResponseJson(responses.Dequeue()), Encoding.UTF8, "text/event-stream"),
             });
 
         var httpClient = new HttpClient(handler.Object) { BaseAddress = new Uri("https://api.openai.com") };

@@ -127,7 +127,9 @@ public class XAgentSessionTests
             .ReturnsAsync(() => new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(jsonBody, Encoding.UTF8, "application/json"),
+                // Agent turns stream and reassemble; feed the canned body as SSE frames.
+                Content = new StringContent(
+                    ResponsesSse.FromResponseJson(jsonBody), Encoding.UTF8, "text/event-stream"),
             });
 
         var httpClient = new HttpClient(handler.Object) { BaseAddress = new Uri("https://api.x.ai") };
