@@ -106,8 +106,7 @@ public sealed class XProvider : IModelProvider
         var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
         // Responses API uses 'output' array instead of 'choices'
-        var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
-            ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+        var textContent = ExtractOutputText(xResponse);
 
         if (string.IsNullOrEmpty(textContent))
         {
@@ -439,8 +438,7 @@ public sealed class XProvider : IModelProvider
 
         var xResponse = JsonSerializer.Deserialize(responseJson, XJsonContext.Default.XResponse)!;
 
-        var textContent = xResponse.Output?.FirstOrDefault(o => o.Type == "message")?.Content
-            ?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+        var textContent = ExtractOutputText(xResponse);
 
         if (string.IsNullOrEmpty(textContent))
         {
@@ -780,6 +778,35 @@ public sealed class XProvider : IModelProvider
     /// (e.g. <c>Grok41FastNonReasoning</c> exposes WebSearch + XSearch but
     /// not CodeExecution).
     /// </summary>
+    /// <summary>
+    /// Concatenates <b>every</b> <c>output_text</c> part of <b>every</b> message item, in order.
+    /// </summary>
+    /// <remarks>
+    /// The Responses API returns a sequence of output items, and Grok searching the web emits a
+    /// long one — <c>reasoning</c> / <c>web_search_call</c> pairs repeated several times before
+    /// the <c>message</c>. Reading only the first part of the first message silently truncates any
+    /// answer that arrives in more than one piece.
+    /// </remarks>
+    private static string? ExtractOutputText(XResponse response)
+    {
+        if (response.Output is not { Length: > 0 } output)
+            return null;
+
+        var parts = output
+            .Where(o => o.Type == "message")
+            .SelectMany(o => o.Content ?? [])
+            .Where(c => c.Type == "output_text" && !string.IsNullOrEmpty(c.Text))
+            .Select(c => c.Text)
+            .ToList();
+
+        return parts.Count switch
+        {
+            0 => null,
+            1 => parts[0],
+            _ => string.Concat(parts),
+        };
+    }
+
     /// <summary>
     /// Opts the request into xAI Priority Processing when the model asks for it
     /// (<see cref="IFast"/> with <see cref="SpeedType.Fast"/>): higher scheduling

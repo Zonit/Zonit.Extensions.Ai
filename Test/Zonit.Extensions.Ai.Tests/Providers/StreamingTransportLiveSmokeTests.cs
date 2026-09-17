@@ -146,6 +146,55 @@ public class StreamingTransportLiveSmokeTests
         result.MetaData.Usage.OutputTokens.Should().BeGreaterThan(0);
     }
 
+    // ---------------- server-side web search (GenerateAsync, no agent loop) ----------------
+
+    [Fact]
+    public async Task Anthropic_WebSearch_ReturnsTheAnswer_NotJustThePreamble()
+    {
+        // Anthropic answers a web-search prompt with a *sequence* of text blocks around the
+        // server tool — a preamble, then the researched answer in pieces. Reading only the first
+        // block returned "I'll search for this." and dropped the rest.
+        var ai = Build("ANTHROPIC", (services, key) => services.AddAiAnthropic(key));
+        if (ai is null) return;
+
+        var result = await ai.GenerateAsync(
+            new Sonnet5 { Tools = [new Anthropic.Tools.WebSearchTool { MaxUses = 3 }] },
+            "What is the current price of Brent crude oil? Search the web and answer with the number.");
+
+        _output.WriteLine($"[{result.Value.Length} chars] {result.Value}");
+        // The digit is the precise guard: the discarded-answer bug returned the preamble
+        // ("I'll search for this."), which carries no price — and no digit.
+        result.Value.Should().MatchRegex(@"\d", "the answer must carry the price it looked up");
+    }
+
+    [Fact]
+    public async Task OpenAi_WebSearch_ReturnsTheAnswer()
+    {
+        var ai = Build("OPENAI", (services, key) => services.AddAiOpenAi(key));
+        if (ai is null) return;
+
+        var result = await ai.GenerateAsync(
+            new Luna56 { Tools = [new OpenAi.Tools.WebSearchTool()] },
+            "What is the current price of Brent crude oil? Search the web and answer with the number.");
+
+        _output.WriteLine($"[{result.Value.Length} chars] {result.Value}");
+        result.Value.Should().MatchRegex(@"\d", "the answer must carry the price it looked up");
+    }
+
+    [Fact]
+    public async Task Grok_WebSearch_ReturnsTheAnswer()
+    {
+        var ai = Build("X", (services, key) => services.AddAiX(key));
+        if (ai is null) return;
+
+        var result = await ai.GenerateAsync(
+            new Grok46 { WebSearch = new Search { Mode = ModeType.Always, MaxResults = 5 } },
+            "What is the current price of Brent crude oil? Search the web and answer with the number.");
+
+        _output.WriteLine($"[{result.Value.Length} chars] {result.Value}");
+        result.Value.Should().MatchRegex(@"\d", "the answer must carry the price it looked up");
+    }
+
     // ---------------- harness ----------------
 
     private IAiProvider? Build(string provider, Action<IServiceCollection, string> register)

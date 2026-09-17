@@ -66,6 +66,32 @@ Globally registered tools are **opt-in**, never silently active. A call that pas
 leaking into every other agent call. Either way, the model's `TInput` is always just a filter — the
 authorization key comes from `IRunContext` (below).
 
+## Provider-native tools (web search and friends)
+
+A provider-native tool — `WebSearchTool`, `FileSearchTool`, `CodeInterpreterTool`, or Grok's
+`WebSearch` model property — runs **on the provider's side**, inside the same request. You get the
+searched answer straight from `GenerateAsync`; no agent loop is needed, and none of your code is
+called:
+
+```csharp
+// Anthropic / OpenAI: a tool on the model
+await ai.GenerateAsync(new Sonnet5 { Tools = [new WebSearchTool { MaxUses = 3 }] }, "Brent price?");
+await ai.GenerateAsync(new Luna56 { Tools = [new WebSearchTool()] }, "Brent price?");
+
+// Grok: a model property rather than a tool
+await ai.GenerateAsync(new Grok46 { WebSearch = new Search { Mode = ModeType.Always } }, "Brent price?");
+```
+
+Each model only accepts the tools its `SupportedTools` mask lists (see
+[`models.md`](./models.md)) — asking for one it does not support fails the request build with a
+clear error rather than an opaque API 400.
+
+One thing worth knowing about the answer: once a server-side tool runs, the reply arrives as a
+**sequence** of blocks — a short preamble, the tool call, its results, then the answer, often split
+into several fragments carrying citations. The library concatenates the whole message for you, so
+`result.Value` is the complete answer on every provider and on every path (`GenerateAsync`,
+`ChatAsync`, the agent loop, streaming).
+
 ## Reading trusted server data the model must not see (`IRunContext`)
 
 When a tool must act on trusted data — the current user's id, the tenant, a permission scope —

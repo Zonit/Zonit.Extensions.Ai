@@ -51,10 +51,14 @@ internal static class ResponsesSse
             _ => "response.completed",
         };
 
-        Frame("{\"type\":\"" + terminal + "\",\"response\":" + root.GetRawText() + "}");
+        // Compacted: an SSE frame is one line, so a pretty-printed body would break the stream —
+        // and the API itself always sends the response object on a single line.
+        Frame("{\"type\":\"" + terminal + "\",\"response\":" + Compact(root) + "}");
 
         return sb.ToString();
     }
+
+    private static string Compact(JsonElement element) => JsonSerializer.Serialize(element);
 
     private static IEnumerable<string> EnumerateOutputText(JsonElement root)
     {

@@ -494,9 +494,7 @@ public sealed class OpenAiProvider : IModelProvider
     /// </summary>
     private string ExtractText(ILlm llm, OpenAiResponse response, string operation)
     {
-        var text = response.Output?
-            .FirstOrDefault(o => o.Type == "message")?
-            .Content?.FirstOrDefault(c => c.Type == "output_text")?.Text;
+        var text = ExtractOutputText(response);
 
         var reason = response.IncompleteDetails?.Reason;
 
@@ -539,6 +537,37 @@ public sealed class OpenAiProvider : IModelProvider
         }
 
         return text;
+    }
+
+    /// <summary>
+    /// Concatenates <b>every</b> <c>output_text</c> part of <b>every</b> message item, in order.
+    /// </summary>
+    /// <remarks>
+    /// The Responses API returns a sequence of output items — with a server-side tool the shape is
+    /// <c>reasoning</c> → <c>web_search_call</c> → <c>reasoning</c> → <c>message</c>, and a model
+    /// that searches more than once can emit several message items. Reading only the first part of
+    /// the first message is a silent truncation waiting to happen (the same defect that made
+    /// Anthropic's web-search answers come back as just their preamble), so the whole message is
+    /// read instead.
+    /// </remarks>
+    private static string? ExtractOutputText(OpenAiResponse response)
+    {
+        if (response.Output is not { Length: > 0 } output)
+            return null;
+
+        var parts = output
+            .Where(o => o.Type == "message")
+            .SelectMany(o => o.Content ?? [])
+            .Where(c => c.Type == "output_text" && !string.IsNullOrEmpty(c.Text))
+            .Select(c => c.Text)
+            .ToList();
+
+        return parts.Count switch
+        {
+            0 => null,
+            1 => parts[0],
+            _ => string.Concat(parts),
+        };
     }
 
     private void ConfigureHttpClient()

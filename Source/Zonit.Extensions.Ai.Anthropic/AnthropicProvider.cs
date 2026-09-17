@@ -575,8 +575,8 @@ public sealed class AnthropicProvider : IModelProvider
 
     /// <summary>
     /// Returns the JSON payload to parse for a response: the structured tool
-    /// call's <c>input</c> when present (the robust path), otherwise the first
-    /// text block (free-text fallback for plain-string responses and for the
+    /// call's <c>input</c> when present (the robust path), otherwise the message's
+    /// text (free-text fallback for plain-string responses and for the
     /// thinking + <c>auto</c> case where the model may answer in prose).
     /// Throws <see cref="BuildEmptyResponseError"/> when neither is available.
     /// </summary>
@@ -595,10 +595,38 @@ public sealed class AnthropicProvider : IModelProvider
                 return el.GetRawText();
         }
 
-        var text = response.Content?.FirstOrDefault(c => c.Type == "text")?.Text;
+        var text = ExtractText(response);
         if (string.IsNullOrEmpty(text))
             throw BuildEmptyResponseError(_logger, operation, llm, response.StopReason, response.Id);
         return text;
+    }
+
+    /// <summary>
+    /// Concatenates <b>every</b> text block of the message, in order.
+    /// </summary>
+    /// <remarks>
+    /// One assistant message is a <i>sequence</i> of blocks, not a single text — and with a
+    /// server-side tool (<c>web_search</c>, <c>web_fetch</c>, code execution) that sequence is
+    /// routinely <c>text</c> ("I'll look that up.") → <c>server_tool_use</c> →
+    /// <c>web_search_tool_result</c> → many more <c>text</c> blocks carrying the actual answer and
+    /// its citations. Reading only the first block returned the preamble and silently discarded
+    /// the answer; even without a preamble it returned one fragment of a dozen. This mirrors what
+    /// the agent loop and the live streaming path have always done (append every text delta), so
+    /// all three paths now return the same message.
+    /// </remarks>
+    private static string ExtractText(AnthropicResponse response)
+    {
+        if (response.Content is not { Length: > 0 } blocks)
+            return string.Empty;
+
+        // Fast path: the overwhelmingly common single-text-block message.
+        var texts = blocks.Where(c => c.Type == "text" && !string.IsNullOrEmpty(c.Text)).ToList();
+        return texts.Count switch
+        {
+            0 => string.Empty,
+            1 => texts[0].Text!,
+            _ => string.Concat(texts.Select(c => c.Text)),
+        };
     }
 
     private static AnthropicMessagesRequest BuildRequest<TResponse>(

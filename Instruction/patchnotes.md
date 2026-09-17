@@ -3,6 +3,32 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.8.1 — 2026-09-17
+
+### Fixed: a web-search answer came back as its preamble
+
+- **Fixed** `AnthropicProvider` reading only the **first** text block of a response. An assistant
+  message is a sequence of blocks, and once a server-side tool runs (`web_search`, `web_fetch`,
+  code execution) that sequence is `text` ("I'll search for this.") → `server_tool_use` →
+  `web_search_tool_result` → several more `text` blocks carrying the researched answer and its
+  citations. `GenerateAsync` / `ChatAsync` returned the preamble and silently discarded the answer
+  — and with no preamble, one fragment out of a dozen. The whole message is now concatenated, which
+  is what the agent loop and the streaming path had always done; that asymmetry is why the same
+  prompt worked through `ai.Agent(...)` and made the fault look like a missing tool-continuation
+  loop rather than lost text. Anthropic resolves web search **inside one request** (`stop_reason:
+  end_turn`), so no loop was ever needed.
+- **Changed** the OpenAI and xAI providers to read every `output_text` part of every `message` item
+  instead of the first part of the first one. Neither had visibly broken — both return a single
+  message today — but a model that searches more than once can emit several, and the truncation
+  would have been just as silent.
+- Live-verified on all three providers: a "what is the Brent price" prompt now returns the searched
+  answer with its numbers, through plain `GenerateAsync`.
+
+**Known limitation, unchanged:** when Anthropic caps its own server-side sampling loop it returns
+`stop_reason: pause_turn`, which a single-shot call cannot resume — it throws with a message
+pointing at `ai.Agent(...)`, which continues the turn transparently. Rare for a normal search; ask
+if you want single-shot to auto-resume too.
+
 ## 10.8.0 — 2026-09-17
 
 ### Fast mode on OpenAI and xAI, and a shared streaming transport for every Responses-API provider
