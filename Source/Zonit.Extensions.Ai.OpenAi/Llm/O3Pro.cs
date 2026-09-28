@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// o3-pro - Version of o3 with more compute for better responses.
 /// Premium reasoning model with highest accuracy.
 /// </summary>
-[Obsolete("Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship reasoning model. Still works — upgrade for better quality.")]
+[Obsolete("Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality.")]
 public class O3Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

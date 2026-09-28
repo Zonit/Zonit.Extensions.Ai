@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT Image 1 Mini - A cost-efficient version of GPT Image 1.
 /// </summary>
+[Obsolete("gpt-image-1-mini is deprecated and OpenAI shuts it down on 2026-12-01. Migrate to GPTImage2 (gpt-image-2).")]
 public class GPTImage1Mini : OpenAiImageBase<GPTImage1Mini.QualityType, GPTImage1Mini.SizeType>
 {
     /// <summary>

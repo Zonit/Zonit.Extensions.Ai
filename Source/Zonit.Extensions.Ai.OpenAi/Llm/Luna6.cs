@@ -1,42 +1,45 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-5.6 Sol — the frontier tier of the GPT-5.6 family, for the hardest
-/// reasoning, coding and security-research workloads. Sol, Terra and Luna are
-/// durable capability tiers (see <see cref="Terra56"/>, <see cref="Luna56"/>)
-/// that advance on their own cadence, replacing the earlier unsuffixed / mini /
-/// nano naming. Sol occupies the slot previously held by the unsuffixed model
-/// (e.g. <see cref="GPT55"/>).
+/// GPT-6 Luna — the fast, low-cost tier of the GPT-6 generation, released
+/// 22 September 2026, for cost-sensitive, high-volume work (summarization,
+/// drafting, routine automation). Successor to <see cref="Luna56"/> at half its
+/// price. See <see cref="Sol6"/> (frontier) and <see cref="Astra6"/> (flagship).
 /// </summary>
 /// <remarks>
-/// 1.05M token context window; standard pricing applies up to 272K input
-/// tokens, beyond which the long-context rates apply ($8 input / $0.80 cached /
-/// $30 output per 1M). Prices were cut from $5/$0.50/$30 — OpenAI lists the
-/// current rates as promotional through 21 November 2026. Model id
-/// <c>gpt-5.6-sol</c> (also aliased <c>gpt-5.6</c>). Supports the full
-/// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
-/// / <see cref="OpenAiReasonEffortExtended.Max"/>.
+/// <para>
+/// Model id <c>gpt-6-luna</c>. 1.05M token context window, 128K max output,
+/// knowledge cutoff 18 May 2026.
+/// </para>
+/// <para>
+/// Standard pricing ($0.10 input / $0.01 cached / $0.50 output per 1M) applies
+/// up to 272K input tokens, beyond which the long-context rates apply ($0.20 /
+/// $0.02 / $0.75). Batch and flex run at half the applicable rate. Supports the
+/// full reasoning range none / low / medium (default) / high /
+/// <see cref="OpenAiReasonEffortExtended.Xhigh"/> / <see cref="OpenAiReasonEffortExtended.Max"/>.
+/// Custom <c>temperature</c> / <c>top_p</c> are only accepted at effort
+/// <c>none</c>.
+/// </para>
 /// </remarks>
-[Obsolete("Superseded by Sol6 (gpt-6-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price.")]
-public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
+public class Luna6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
 {
     /// <inheritdoc />
-    public override string Name => "gpt-5.6-sol";
+    public override string Name => "gpt-6-luna";
 
     /// <inheritdoc />
-    public override decimal PriceInput => 4.00m;
+    public override decimal PriceInput => 0.10m;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 20.00m;
+    public override decimal PriceOutput => 0.50m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.40m;
+    public override decimal? PriceCachedInput => 0.01m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceInput => 2.00m;
+    public override decimal? BatchPriceInput => 0.05m;
 
     /// <inheritdoc />
-    public override decimal? BatchPriceOutput => 10.00m;
+    public override decimal? BatchPriceOutput => 0.25m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_050_000;
@@ -81,15 +84,14 @@ public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm,
     /// The premium itself lives in <see cref="IFast"/>'s defaults (a uniform 2×, applied on top of
     /// the long-context tiering below), and whether it is actually charged is decided when the
     /// cost is computed — OpenAI serves fast mode best-effort and only bills the premium when the
-    /// response echoes the tier back. Fast mode was renamed from "priority processing" on
-    /// 30 July 2026; the response echoes <c>priority</c> for GPT-5.6 and earlier either way. It is
+    /// response echoes the tier back. It is
     /// a synchronous-API tier only — Batch is unaffected, so the <c>GetBatch*</c> rates never
     /// carry it.
     /// </remarks>
     public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <summary>
-    /// Context size past which OpenAI switches GPT-5.6 to long-context pricing
+    /// Context size past which OpenAI switches GPT-6 to long-context pricing
     /// for the remainder of the session (standard, batch and flex alike).
     /// </summary>
     private const long LongContextThreshold = 272_000;
@@ -97,7 +99,7 @@ public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm,
     /// <summary>Input-side rates (input, cache read, cache write) double past the threshold.</summary>
     private const decimal LongContextInputMultiplier = 2m;
 
-    /// <summary>Output-side rates rise by half past the threshold ($20 → $30).</summary>
+    /// <summary>Output-side rates rise by half past the threshold ($0.50 → $0.75).</summary>
     private const decimal LongContextOutputMultiplier = 1.5m;
 
     /// <inheritdoc />

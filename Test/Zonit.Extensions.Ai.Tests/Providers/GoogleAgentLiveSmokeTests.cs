@@ -41,7 +41,7 @@ public class GoogleAgentLiveSmokeTests
         if (ai is null) return;
 
         var result = await ai
-            .Agent(new Gemini25Flash(),
+            .Agent(new Gemini38Flash(),
                 "What is the secret access code? Call the get_secret_code tool to find out, "
                 + "then reply with ONLY the code value, nothing else.")
             .AddTool(new SecretCodeTool())
@@ -61,7 +61,7 @@ public class GoogleAgentLiveSmokeTests
         if (ai is null) return;
 
         var result = await ai
-            .Agent(new Gemini25Flash(), new CodeAnswerPrompt
+            .Agent(new Gemini38Flash(), new CodeAnswerPrompt
             {
                 Text = "What is the secret access code? You MUST call the get_secret_code tool to find out. "
                      + "Do not guess. Put the exact code the tool returns into the 'code' field."
@@ -83,7 +83,7 @@ public class GoogleAgentLiveSmokeTests
         if (ai is null) return;
 
         var result = await ai
-            .Agent(new Gemini25Flash(),
+            .Agent(new Gemini38Flash(),
                 "Compute step by step using the tools only. First call add with a=2 and b=3. "
                 + "Then call multiply with a=(that result) and b=10. Reply with ONLY the final number.")
             .AddTool(new AddTool())
@@ -105,7 +105,7 @@ public class GoogleAgentLiveSmokeTests
         if (ai is null) return;
 
         var result = await ai
-            .Agent(new Gemini25Flash(),
+            .Agent(new Gemini38Flash(),
                 "Call the echo tool with value \"ping\", then reply with ONLY what it returned.")
             .AddTool(new RawEchoTool())
             .MaxIterations(5)

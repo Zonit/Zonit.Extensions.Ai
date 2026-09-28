@@ -10,7 +10,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// 1M token context window at standard pricing (no surcharge for long context).
 /// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
 /// </remarks>
-[Obsolete("Claude Opus 4.8 is being phased out — migrate to Opus5 (claude-opus-5), which has the same pricing and feature set. Still functional, but Anthropic will retire older models.")]
+[Obsolete("Claude Opus 4.8 is being phased out — migrate to Opus55 (claude-opus-5-5), which is cheaper on every rate. Still functional, but Anthropic will retire older models.")]
 public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFast
 {
     /// <summary>

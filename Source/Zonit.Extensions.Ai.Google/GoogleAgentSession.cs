@@ -229,12 +229,7 @@ internal sealed class GoogleAgentSession : IAgentSession
         var llm = _context.Llm;
         var prompt = _context.Prompt;
 
-        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
-        if (llm is GoogleBase g)
-        {
-            if (g.Temperature < 1.0) config.Temperature = g.Temperature;
-            if (g.TopP < 1.0) config.TopP = g.TopP;
-        }
+        var config = GoogleProvider.CreateGenerationConfig(llm);
 
         var request = new GeminiRequest
         {
@@ -292,6 +287,13 @@ internal sealed class GoogleAgentSession : IAgentSession
             {
                 foreach (var part in partsEl.EnumerateArray())
                 {
+                    // Gemini 3.x signs its reasoning; the signature must travel back
+                    // with the part it arrived on or the next turn is rejected.
+                    var signature = part.TryGetProperty("thoughtSignature", out var sig) ? sig.GetString() : null;
+
+                    if (part.TryGetProperty("thought", out var thoughtEl) && thoughtEl.ValueKind == JsonValueKind.True)
+                        continue;
+
                     if (part.TryGetProperty("functionCall", out var fc))
                     {
                         var name = fc.TryGetProperty("name", out var n) ? n.GetString()! : string.Empty;
@@ -312,13 +314,14 @@ internal sealed class GoogleAgentSession : IAgentSession
                         modelParts.Add(new GeminiPartItem
                         {
                             FunctionCall = new GeminiFunctionCall { Name = name, Args = args },
+                            ThoughtSignature = signature,
                         });
                     }
                     else if (part.TryGetProperty("text", out var text))
                     {
                         var s = text.GetString() ?? string.Empty;
                         finalTextBuilder.Append(s);
-                        modelParts.Add(new GeminiPartItem { Text = s });
+                        modelParts.Add(new GeminiPartItem { Text = s, ThoughtSignature = signature });
                     }
                 }
             }
@@ -347,10 +350,12 @@ internal sealed class GoogleAgentSession : IAgentSession
         var inputTokens = u.TryGetProperty("promptTokenCount", out var pt) ? pt.GetInt32() : 0;
         var outputTokens = u.TryGetProperty("candidatesTokenCount", out var ct) ? ct.GetInt32() : 0;
         var reasoningTokens = u.TryGetProperty("thoughtsTokenCount", out var tt) ? tt.GetInt32() : 0;
+        var cachedTokens = u.TryGetProperty("cachedContentTokenCount", out var cc) ? cc.GetInt32() : 0;
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(_context.Llm, new TokenUsage
         {
             InputTokens = inputTokens,
+            CachedTokens = cachedTokens,
             OutputTokens = outputTokens + reasoningTokens,
         });
 
@@ -358,6 +363,7 @@ internal sealed class GoogleAgentSession : IAgentSession
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
+            CachedTokens = cachedTokens,
             ReasoningTokens = reasoningTokens,
             InputCost = inputCost,
             OutputCost = outputCost,

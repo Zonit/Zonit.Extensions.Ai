@@ -598,13 +598,15 @@ public sealed class XProvider : IModelProvider
         }
 
         // Grok models that accept `reasoning.effort` on this endpoint:
-        //  - grok-4.6: thinking depth (low/medium/high/xhigh, default high).
+        //  - grok-4.7 / grok-4.6: thinking depth (low/medium/high/xhigh, default high).
         //  - grok-4.3: thinking depth (none/low/medium/high).
         //  - grok-4.5: thinking depth (low/medium/high, default high).
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
-#pragma warning disable CS0618 // Grok43 / Grok45 / Grok420MultiAgent are deprecated but still fully supported by this provider.
-        if (llm is Grok46 { Reason: { } grok46Effort })
+#pragma warning disable CS0618 // Grok46 / Grok43 / Grok45 / Grok420MultiAgent are deprecated but still fully supported by this provider.
+        if (llm is Grok47 { Reason: { } grok47Effort })
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok47Effort) };
+        else if (llm is Grok46 { Reason: { } grok46Effort })
             request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok46Effort) };
         else if (llm is Grok43 { Reason: { } grok43Effort })
             request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok43Effort) };
@@ -719,13 +721,15 @@ public sealed class XProvider : IModelProvider
         }
 
         // Grok models that accept `reasoning.effort` on this endpoint:
-        //  - grok-4.6: thinking depth (low/medium/high/xhigh, default high).
+        //  - grok-4.7 / grok-4.6: thinking depth (low/medium/high/xhigh, default high).
         //  - grok-4.3: thinking depth (none/low/medium/high).
         //  - grok-4.5: thinking depth (low/medium/high, default high).
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
-#pragma warning disable CS0618 // Grok43 / Grok45 / Grok420MultiAgent are deprecated but still fully supported by this provider.
-        if (llm is Grok46 { Reason: { } grok46Effort })
+#pragma warning disable CS0618 // Grok46 / Grok43 / Grok45 / Grok420MultiAgent are deprecated but still fully supported by this provider.
+        if (llm is Grok47 { Reason: { } grok47Effort })
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok47Effort) };
+        else if (llm is Grok46 { Reason: { } grok46Effort })
             request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok46Effort) };
         else if (llm is Grok43 { Reason: { } grok43Effort })
             request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok43Effort) };

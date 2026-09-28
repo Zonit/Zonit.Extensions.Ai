@@ -436,12 +436,12 @@ premium pricing. Cost calculation switches to the fast rate automatically when y
 
 ```csharp
 var fast = await ai.GenerateAsync(
-    new Opus5 { Speed = SpeedType.Fast },
+    new Opus55 { Speed = SpeedType.Fast },
     "Draft a release note for v10.");
 ```
 
-The same property covers Anthropic fast mode, OpenAI fast mode (`Astra6`, `Sol56`, `Terra56`,
-`Luna56`) and xAI Priority Processing (`Grok46`) — each provider's wire format is handled for you,
+The same property covers Anthropic fast mode, OpenAI fast mode (`Astra6`, `Sol6`, `Luna6`,
+`Terra56`) and xAI Priority Processing (`Grok47`) — each provider's wire format is handled for you,
 and every one of them charges 2× for it. Fast mode is best-effort everywhere: when a provider
 downgrades the request to standard speed, the reported cost follows it back down.
 See [models.md](./Instruction/models.md#fast-mode-ifast).
@@ -460,7 +460,7 @@ using Zonit.Extensions.Ai.Anthropic;   // the Cache enum
 
 // Agents, chat loops and any repeated-prefix calls benefit most.
 var result = await ai.Agent(
-        new Opus5 { Cache = Cache.FiveMinutes },     // None (default) | FiveMinutes | OneHour
+        new Opus55 { Cache = Cache.FiveMinutes },    // None (default) | FiveMinutes | OneHour
         new ResearchPrompt { Topic = "EU AI Act" })
     .AddTool<SearchTool>()
     .AddTool<SaveNoteTool>()

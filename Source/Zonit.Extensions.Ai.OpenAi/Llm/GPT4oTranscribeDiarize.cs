@@ -5,6 +5,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// and when (speaker diarization). Returns speaker-segmented transcripts; use when a
 /// recording has multiple speakers (interviews, meetings, calls).
 /// </summary>
+[Obsolete("gpt-4o-transcribe-diarize is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe).")]
 public class GPT4oTranscribeDiarize : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />
@@ -19,7 +20,7 @@ public class GPT4oTranscribeDiarize : OpenAiBase, IAudioLlm
     /// <summary>
     /// Price per minute of audio transcribed.
     /// </summary>
-    public decimal PricePerMinute => 0.012m;
+    public decimal PricePerMinute => 0.006m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 0;

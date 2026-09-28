@@ -265,6 +265,55 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithOpus55DefaultReason_ShouldOmitThinking()
+    {
+        // Opus 5.5 always thinks and rejects `thinking: disabled` with a 400, so an
+        // unset Reason must leave the field out entirely (server default: medium).
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Opus55(), new TestPrompt { Text = "Say hello" }, CancellationToken.None);
+
+        capturedRequest.Should().NotBeNull();
+        capturedRequest.Should().Contain("\"claude-opus-5-5\"");
+        capturedRequest.Should().NotContain("\"thinking\"");
+        capturedRequest.Should().NotContain("disabled");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithOpus55ReasonExtra_ShouldSendAdaptiveThinkingWithXHighEffort()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Opus55 { Reason = Opus55.ReasonType.Extra }, new TestPrompt { Text = "Think" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"adaptive\"");
+        capturedRequest.Should().Contain("\"effort\":\"xhigh\"");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Opus55Cost_UsesTheLowCacheReadRate()
+    {
+        SetupMockResponse("""{"id":"msg_c","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1000,"output_tokens":500,"cache_read_input_tokens":5000,"cache_creation_input_tokens":2000}}""");
+
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(new Opus55(), new TestPrompt { Text = "hi" }, CancellationToken.None);
+
+        var usage = result.MetaData.Usage!;
+        // regular 1000×$4 + cached 5000×$0.20 + write 2000×$5, per 1M = 0.004 + 0.001 + 0.010
+        usage.InputCost.Value.Should().BeApproximately(0.015m, 1e-9m);
+        usage.OutputCost.Value.Should().BeApproximately(0.010m, 1e-9m);
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithSonnet5ReasonExtra_ShouldSendAdaptiveThinkingWithXHighEffort()
     {
         // Reason.Extra is the Opus-tier "xhigh" level — Sonnet 4.6 doesn't

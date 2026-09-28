@@ -20,6 +20,7 @@ namespace Zonit.Extensions.Ai.Google;
 [JsonSerializable(typeof(GeminiFunctionResponse))]
 [JsonSerializable(typeof(GeminiFunctionCall))]
 [JsonSerializable(typeof(GeminiGenerationConfig))]
+[JsonSerializable(typeof(GeminiThinkingConfig))]
 [JsonSerializable(typeof(GeminiSystemInstruction))]
 [JsonSerializable(typeof(GeminiToolGroup))]
 [JsonSerializable(typeof(GeminiFunctionDeclaration))]

@@ -25,7 +25,7 @@ namespace Zonit.Extensions.Ai.X;
 /// and <see href="https://docs.x.ai/developers/grok-4-5"/>.
 /// </para>
 /// </remarks>
-[Obsolete("Superseded by Grok46 (grok-4.6), xAI's current frontier model — same price, plus the xhigh reasoning level. Still works — upgrade for better quality.")]
+[Obsolete("Superseded by Grok47 (grok-4.7), xAI's current frontier model — same price, plus the xhigh reasoning level. Still works — upgrade for better quality.")]
 public class Grok45 : XChatBase, IReasoningLlm
 {
     /// <summary>

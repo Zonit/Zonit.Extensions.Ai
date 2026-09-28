@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Gemini 2.0 Flash - Cost-effective Google model.
 /// </summary>
-[Obsolete("Superseded by Gemini25Flash (gemini-2.5-flash). Still works — upgrade for better quality and cost.")]
+[Obsolete("gemini-2.0-flash was shut down by Google on 2026-06-01 — requests fail. Migrate to Gemini38Flash (gemini-3.8-flash).")]
 public class Gemini20Flash : GoogleBase
 {
     /// <inheritdoc />

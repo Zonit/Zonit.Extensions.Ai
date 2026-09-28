@@ -3,6 +3,70 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.9.0 — 2026-09-28
+
+### New models: Claude Opus 5.5, GPT-6 Sol / Luna, Grok 4.7 and the Gemini 3.x line
+
+Additive — no API breaks. Models superseded by these are marked `[Obsolete]` (warning only) and keep
+working.
+
+New models:
+
+- **Anthropic `Opus55`** (`claude-opus-5-5`, released 2026-09-22). $4 input / $0.20 cache read /
+  $5 cache write (5 min; 1 h is $8) / $20 output per MTok — cheaper than Opus 5 on every rate, with
+  a 0.05× cache-read ratio. 1M context, 128K output, fast mode at $8 / $40. **Thinking is always on**:
+  there is no `ReasonType.None`, and an unset `Reason` omits the `thinking` field (server default
+  effort `medium`) instead of sending `thinking: disabled`, which Opus 5.5 rejects. Forced
+  `tool_choice` is rejected too, so structured output takes the `auto` + instruction path
+  (`SupportsForcedToolChoice => false`), as on Fable 5.1 / Mythos 5.1.
+- **OpenAI `Sol6`** (`gpt-6-sol`) and **`Luna6`** (`gpt-6-luna`), released 2026-09-22 — the GPT-6
+  generation of the Sol and Luna tiers at half the GPT-5.6 price: Sol $2 / $0.20 / $10, Luna
+  $0.10 / $0.01 / $0.50 per MTok. 1.05M context, 128K output, long-context rates above 272K input
+  (input and cache ×2, output ×1.5), fast mode at 2×, batch at half price, effort none → max.
+- **OpenAI `GPTTranscribe`** (`gpt-transcribe`, $0.0045/min) — the replacement for `whisper-1` and
+  the `gpt-4o-*-transcribe` family, which OpenAI shuts down on 2027-02-26.
+- **xAI `Grok47`** (`grok-4.7`, released 2026-09-21). Same rate card as Grok 4.6 ($2 / $0.50 / $6,
+  doubled from 200K prompt tokens), 500K context, effort `low` / `medium` / `high` / `xhigh`,
+  Priority Processing via `Speed = SpeedType.Fast`. Wired into the effort mapping of both
+  `XProvider` and the agent session.
+- **Google Gemini 3.x**: `Gemini38Flash` (`gemini-3.8-flash`, GA 2026-09-02 — launch price
+  $0.75 / $3.75 until 2026-12-31, then $1.50 / $7.50), `Gemini35Flash`, `Gemini35FlashLite`,
+  `Gemini31FlashLite` and `Gemini31Pro` (`gemini-3.1-pro-preview`, tiered above 200K prompt tokens),
+  plus the embedding model `GeminiEmbedding2` (`gemini-embedding-2`).
+
+Google provider:
+
+- **Added** thinking-level support. Gemini 3.x models derive from the new
+  `GoogleThinkingBase<TReason>` and send `Reason` as `generationConfig.thinkingConfig.thinkingLevel`
+  (`minimal` / `low` / `medium` / `high`, per model). They also default `TopP` to `1.0`, so the
+  sampling parameters Google deprecated on 2026-07-21 stay off the wire.
+- **Fixed** the agent loop for Gemini 3.x: the `thoughtSignature` Gemini returns on a function-call
+  part is now echoed back with it. Without it Gemini 3.x rejects the next turn with a 400.
+- **Fixed** `GenerateAsync` / `ChatAsync` / streaming reading only the first part of a candidate. A
+  thinking model can split its answer across parts; all non-thought text parts are now joined.
+- **Fixed** implicit cache hits being billed at the full input rate: `cachedContentTokenCount` is now
+  read and billed at the model's cached rate (Gemini 2.5 / 3.x publish one).
+- **Added** `outputDimensionality` on embedding requests, taken from `IEmbeddingLlm.Dimensions`.
+
+Pricing and model-id corrections:
+
+- `Gemini25Pro` / `Gemini25Flash` / `Gemini25FlashLite` pointed at preview ids that Google has shut
+  down; they now use the stable `gemini-2.5-pro` / `gemini-2.5-flash` / `gemini-2.5-flash-lite`.
+  Gemini 2.5 Flash was billed at $0.15 / $0.60 instead of $0.30 / $2.50, Flash-Lite at $0.075 / $0.30
+  instead of $0.10 / $0.40, and 2.5 Pro now tiers above 200K ($2.50 / $15). All three are marked
+  obsolete — Google limited Gemini 2.5 to existing users on 2026-09-18.
+- `GPT4oTranscribe` and `GPT4oTranscribeDiarize` were billed at $0.012/min; OpenAI charges $0.006.
+
+Deprecations (`[Obsolete]`, still functional unless noted):
+
+- Superseded: `Opus5` → `Opus55`, `Sol56` → `Sol6`, `Luna56` → `Luna6`, `Grok46` → `Grok47`.
+- Being shut down by the provider: `GPT4oTranscribe`, `GPT4oMiniTranscribe`,
+  `GPT4oTranscribeDiarize` (2027-02-26), `GPTImage1Mini` and `GPTImage15` (2026-12-01),
+  `GrokImagineImageQuality` (2026-11-02, then redirected to `grok-imagine-image-2.0`).
+- Already shut down (requests fail): `Gemini15Pro`, `Gemini20Flash`, `Gemini20FlashLite`,
+  `TextEmbedding004`; `Grok41FastReasoning` / `Grok41FastNonReasoning` are redirected by xAI to
+  grok-4.3.
+
 ## 10.8.1 — 2026-09-17
 
 ### Fixed: a web-search answer came back as its preamble

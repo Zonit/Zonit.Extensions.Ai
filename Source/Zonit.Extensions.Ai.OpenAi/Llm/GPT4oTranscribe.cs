@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT-4o Transcribe - Speech-to-text model powered by GPT-4o.
 /// </summary>
+[Obsolete("gpt-4o-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe).")]
 public class GPT4oTranscribe : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />
@@ -17,7 +18,7 @@ public class GPT4oTranscribe : OpenAiBase, IAudioLlm
     /// <summary>
     /// Price per minute of audio transcribed.
     /// </summary>
-    public decimal PricePerMinute => 0.012m;
+    public decimal PricePerMinute => 0.006m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 0;

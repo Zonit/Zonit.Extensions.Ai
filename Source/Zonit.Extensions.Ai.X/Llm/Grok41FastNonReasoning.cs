@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Grok 4.1 Fast Non-Reasoning - High-speed model without reasoning overhead.
 /// Best for quick responses where deep reasoning is not required.
 /// </summary>
-[Obsolete("Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality.")]
+[Obsolete("Retired by xAI on 2026-05-15 — requests are redirected to grok-4.3 and billed at its rates. Migrate to Grok47 (grok-4.7), xAI's current frontier model.")]
 public class Grok41FastNonReasoning : XChatBase
 {
     /// <inheritdoc />

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Xunit;
+using Zonit.Extensions.Ai.Google;
 using Zonit.Extensions.Ai.OpenAi;
 using Zonit.Extensions.Ai.X;
 
@@ -27,6 +28,8 @@ public class LongContextPricingTests
     [Theory]
     // model,             short in, long in, short out, long out, short cached, long cached
     [InlineData(typeof(Astra6), 10.00, 20.00, 50.00, 75.00, 1.00, 2.00)]
+    [InlineData(typeof(Sol6), 2.00, 4.00, 10.00, 15.00, 0.20, 0.40)]
+    [InlineData(typeof(Luna6), 0.10, 0.20, 0.50, 0.75, 0.01, 0.02)]
     [InlineData(typeof(Sol56), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
     [InlineData(typeof(Terra56), 2.00, 4.00, 12.00, 18.00, 0.20, 0.40)]
     [InlineData(typeof(Luna56), 0.20, 0.40, 1.20, 1.80, 0.02, 0.04)]
@@ -121,6 +124,7 @@ public class LongContextPricingTests
 
     [Theory]
     // model,            short in, long in, short out, long out, short cached, long cached
+    [InlineData(typeof(Grok47), 2.00, 4.00, 6.00, 12.00, 0.50, 1.00)]
     [InlineData(typeof(Grok46), 2.00, 4.00, 6.00, 12.00, 0.50, 1.00)]
     [InlineData(typeof(Grok45), 2.00, 4.00, 6.00, 12.00, 0.30, 0.60)]
     public void Grok4x_TiersEveryRateOnTheInputSize(
@@ -155,5 +159,39 @@ public class LongContextPricingTests
         model.GetInputPrice(200_000).Should().Be(4.00m);
         model.GetCachedInputPrice(200_000).Should().Be(1.00m);
         model.GetOutputPrice(200_000, outputTokens: 1_000).Should().Be(12.00m);
+    }
+
+    // ---- Google: input ×2, cache ×2, output ×1.5 above 200K prompt tokens ----
+
+    [Theory]
+    // model,             short in, long in, short out, long out, short cached, long cached
+    [InlineData(typeof(Gemini31Pro), 2.00, 4.00, 12.00, 18.00, 0.20, 0.40)]
+#pragma warning disable CS0618 // Gemini25Pro is limited to existing users but still priced.
+    [InlineData(typeof(Gemini25Pro), 1.25, 2.50, 10.00, 15.00, 0.125, 0.25)]
+#pragma warning restore CS0618
+    public void GeminiPro_TiersEveryRateOnTheInputSize(
+        Type modelType,
+        double shortIn, double longIn,
+        double shortOut, double longOut,
+        double shortCached, double longCached)
+    {
+        var model = (ILlm)Activator.CreateInstance(modelType)!;
+
+        model.GetInputPrice(Short).Should().Be((decimal)shortIn);
+        model.GetInputPrice(Long).Should().Be((decimal)longIn);
+        model.GetOutputPrice(Short, outputTokens: 1_000).Should().Be((decimal)shortOut);
+        model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be((decimal)longOut);
+        model.GetCachedInputPrice(Short).Should().Be((decimal)shortCached);
+        model.GetCachedInputPrice(Long).Should().Be((decimal)longCached);
+    }
+
+    [Fact]
+    public void GeminiFlash_IsFlatAcrossContextSizes()
+    {
+        var model = new Gemini38Flash();
+
+        model.GetInputPrice(Long).Should().Be(0.75m);
+        model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be(3.75m);
+        model.GetCachedInputPrice(Long).Should().Be(0.075m);
     }
 }

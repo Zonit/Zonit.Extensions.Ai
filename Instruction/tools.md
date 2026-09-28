@@ -76,10 +76,10 @@ called:
 ```csharp
 // Anthropic / OpenAI: a tool on the model
 await ai.GenerateAsync(new Sonnet5 { Tools = [new WebSearchTool { MaxUses = 3 }] }, "Brent price?");
-await ai.GenerateAsync(new Luna56 { Tools = [new WebSearchTool()] }, "Brent price?");
+await ai.GenerateAsync(new Luna6 { Tools = [new WebSearchTool()] }, "Brent price?");
 
 // Grok: a model property rather than a tool
-await ai.GenerateAsync(new Grok46 { WebSearch = new Search { Mode = ModeType.Always } }, "Brent price?");
+await ai.GenerateAsync(new Grok47 { WebSearch = new Search { Mode = ModeType.Always } }, "Brent price?");
 ```
 
 Each model only accepts the tools its `SupportedTools` mask lists (see

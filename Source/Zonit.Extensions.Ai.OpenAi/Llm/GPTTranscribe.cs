@@ -1,14 +1,18 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-4o mini Transcribe — cost-efficient speech-to-text model powered by GPT-4o mini.
-/// A lighter, cheaper alternative to <see cref="GPT4oTranscribe"/> for high-volume transcription.
+/// GPT Transcribe — OpenAI's current speech-to-text model (released 28 July 2026),
+/// replacing <c>whisper-1</c> and the <c>gpt-4o-*-transcribe</c> family, which shut
+/// down on 26 February 2027.
 /// </summary>
-[Obsolete("gpt-4o-mini-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe).")]
-public class GPT4oMiniTranscribe : OpenAiBase, IAudioLlm
+/// <remarks>
+/// Model id <c>gpt-transcribe</c>, served on <c>/v1/audio/transcriptions</c>.
+/// $0.0045 per minute of audio.
+/// </remarks>
+public class GPTTranscribe : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />
-    public override string Name => "gpt-4o-mini-transcribe";
+    public override string Name => "gpt-transcribe";
 
     /// <inheritdoc />
     public override decimal PriceInput => 0m;
@@ -19,7 +23,7 @@ public class GPT4oMiniTranscribe : OpenAiBase, IAudioLlm
     /// <summary>
     /// Price per minute of audio transcribed.
     /// </summary>
-    public decimal PricePerMinute => 0.006m;
+    public decimal PricePerMinute => 0.0045m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 0;

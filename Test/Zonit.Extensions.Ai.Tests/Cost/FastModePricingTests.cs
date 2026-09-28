@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
+using Zonit.Extensions.Ai.Anthropic;
 using Zonit.Extensions.Ai.OpenAi;
 using Zonit.Extensions.Ai.X;
 
@@ -22,6 +23,8 @@ public class FastModePricingTests
 
     [Theory]
     [InlineData(typeof(Astra6))]
+    [InlineData(typeof(Sol6))]
+    [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
     [InlineData(typeof(Terra56))]
     [InlineData(typeof(Luna56))]
@@ -41,6 +44,8 @@ public class FastModePricingTests
 
     [Theory]
     [InlineData(typeof(Astra6))]
+    [InlineData(typeof(Sol6))]
+    [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
     [InlineData(typeof(Terra56))]
     [InlineData(typeof(Luna56))]
@@ -53,6 +58,8 @@ public class FastModePricingTests
     [Theory]
     // model,          fast short in, fast long in, fast short out, fast long out, fast short cached, fast long cached
     [InlineData(typeof(Astra6), 20.00, 40.00, 100.00, 150.00, 2.00, 4.00)]
+    [InlineData(typeof(Sol6), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
+    [InlineData(typeof(Luna6), 0.20, 0.40, 1.00, 1.50, 0.02, 0.04)]
     [InlineData(typeof(Sol56), 8.00, 16.00, 40.00, 60.00, 0.80, 1.60)]
     [InlineData(typeof(Terra56), 4.00, 8.00, 24.00, 36.00, 0.40, 0.80)]
     [InlineData(typeof(Luna56), 0.40, 0.80, 2.40, 3.60, 0.04, 0.08)]
@@ -110,6 +117,28 @@ public class FastModePricingTests
 
         priority.GetFastCachedInputPrice(Short).Should().Be(1.00m);
         priority.GetFastCachedInputPrice(Long).Should().Be(2.00m);
+    }
+
+    [Fact]
+    public void Grok47PriorityCard_MatchesGrok46()
+    {
+        var priority = (IFast)new Grok47 { Speed = SpeedType.Fast };
+
+        priority.GetFastInputPrice(Short).Should().Be(4.00m);
+        priority.GetFastInputPrice(Long).Should().Be(8.00m);
+        priority.GetFastOutputPrice(Long, outputTokens: 1_000).Should().Be(24.00m);
+        priority.GetFastCachedInputPrice(Long).Should().Be(2.00m);
+    }
+
+    [Fact]
+    public void Opus55FastCard_IsTwiceTheStandardCard()
+    {
+        var fast = (IFast)new Opus55 { Speed = SpeedType.Fast };
+
+        fast.FastPriceInput.Should().Be(8.00m);
+        fast.FastPriceOutput.Should().Be(40.00m);
+        fast.GetFastInputPrice(Short).Should().Be(8.00m);
+        fast.GetFastOutputPrice(Short, outputTokens: 1_000).Should().Be(40.00m);
     }
 
     [Fact]
@@ -241,6 +270,8 @@ public class FastModePricingTests
     private static ILlm CreateFast(Type modelType) => modelType switch
     {
         _ when modelType == typeof(Astra6) => new Astra6 { Speed = SpeedType.Fast },
+        _ when modelType == typeof(Sol6) => new Sol6 { Speed = SpeedType.Fast },
+        _ when modelType == typeof(Luna6) => new Luna6 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Sol56) => new Sol56 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Terra56) => new Terra56 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Luna56) => new Luna56 { Speed = SpeedType.Fast },

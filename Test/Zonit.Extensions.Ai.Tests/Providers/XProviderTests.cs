@@ -284,6 +284,35 @@ public class XProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithGrok47ReasonExtra_ShouldSendXHighEffort()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Grok47 { Reason = ReasoningEffort.Extra }, new TestPrompt { Text = "Test" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"model\":\"grok-4.7\"");
+        capturedRequest.Should().Contain("\"effort\":\"xhigh\"");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithGrok47Fast_ShouldRequestPriorityTier()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"resp-123","service_tier":"priority","output":[{"type":"message","content":[{"type":"output_text","text":"Hi"}]}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Grok47 { Speed = SpeedType.Fast }, new TestPrompt { Text = "Test" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"service_tier\":\"priority\"");
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithGrok46ReasonHigh_ShouldSendHighEffort()
     {
         // Arrange

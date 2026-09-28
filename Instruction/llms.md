@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 143 models across 17 providers.
+Total: 154 models across 17 providers.
 
 ## Alibaba
 
@@ -46,7 +46,8 @@ Total: 143 models across 17 providers.
 | `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus48` ⚠️ | `claude-opus-4-8` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
-| `Opus5` | `claude-opus-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
+| `Opus5` ⚠️ | `claude-opus-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
+| `Opus55` | `claude-opus-5-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
 | `Sonnet45` ⚠️ | `claude-sonnet-4-5-20250929` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Sonnet46` ⚠️ | `claude-sonnet-4-6` | 1,000,000 | 64,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Sonnet5` | `claude-sonnet-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
@@ -65,6 +66,7 @@ Total: 143 models across 17 providers.
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
 | `Opus48` | $5 | $0.5 | $6.25 | $25 |
 | `Opus5` | $5 | $0.5 | $6.25 | $25 |
+| `Opus55` | $4 | $0.2 | $5 | $20 |
 | `Sonnet45` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet46` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet5` | $2 | $0.2 | $2.5 | $10 |
@@ -196,10 +198,16 @@ Total: 143 models across 17 providers.
 | `Gemini15Pro` ⚠️ | `gemini-1.5-pro` | 2,097,152 | 8,192 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
 | `Gemini20Flash` ⚠️ | `gemini-2.0-flash` | 1,048,576 | 8,192 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
 | `Gemini20FlashLite` ⚠️ | `gemini-2.0-flash-lite` | 1,048,576 | 8,192 | Text, Image → Text | chat, agent | — |
-| `Gemini25Flash` | `gemini-2.5-flash-preview-05-20` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
-| `Gemini25FlashLite` | `gemini-2.5-flash-lite-preview` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | — |
-| `Gemini25Pro` | `gemini-2.5-pro-preview-06-05` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
-| `TextEmbedding004` | `text-embedding-004` | 2,048 | 768 | Text → Embedding | chat, agent, embedding | — |
+| `Gemini25Flash` ⚠️ | `gemini-2.5-flash` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
+| `Gemini25FlashLite` ⚠️ | `gemini-2.5-flash-lite` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | — |
+| `Gemini25Pro` ⚠️ | `gemini-2.5-pro` | 1,048,576 | 65,536 | Text, Image, Audio → Text | chat, agent | WebSearch, CodeInterpreter |
+| `Gemini31FlashLite` | `gemini-3.1-flash-lite` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini31Pro` | `gemini-3.1-pro-preview` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini35Flash` | `gemini-3.5-flash` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini35FlashLite` | `gemini-3.5-flash-lite` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini38Flash` | `gemini-3.8-flash` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `GeminiEmbedding2` | `gemini-embedding-2` | 8,192 | 3,072 | Text → Embedding | chat, agent, embedding | — |
+| `TextEmbedding004` ⚠️ | `text-embedding-004` | 2,048 | 768 | Text → Embedding | chat, agent, embedding | — |
 
 ### Pricing — USD / 1M tokens
 
@@ -208,9 +216,15 @@ Total: 143 models across 17 providers.
 | `Gemini15Pro` | $1.25 | — | — | $5 |
 | `Gemini20Flash` | $0.1 | — | — | $0.4 |
 | `Gemini20FlashLite` | $0.075 | — | — | $0.3 |
-| `Gemini25Flash` | $0.15 | — | — | $0.6 |
-| `Gemini25FlashLite` | $0.075 | — | — | $0.3 |
-| `Gemini25Pro` | $1.25 | — | — | $10 |
+| `Gemini25Flash` | $0.3 | $0.03 | — | $2.5 |
+| `Gemini25FlashLite` | $0.1 | $0.01 | — | $0.4 |
+| `Gemini25Pro` | $1.25 | $0.125 | — | $10 |
+| `Gemini31FlashLite` | $0.25 | $0.025 | — | $1.5 |
+| `Gemini31Pro` | $2 | $0.2 | — | $12 |
+| `Gemini35Flash` | $1.5 | $0.15 | — | $9 |
+| `Gemini35FlashLite` | $0.3 | $0.03 | — | $2.5 |
+| `Gemini38Flash` | $0.75 | $0.075 | — | $3.75 |
+| `GeminiEmbedding2` | $0.2 | — | — | $0 |
 | `TextEmbedding004` | $0.025 | — | — | $0 |
 
 ## Groq
@@ -295,9 +309,9 @@ Total: 143 models across 17 providers.
 | `GPT41Mini` ⚠️ | `gpt-4.1-mini-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `GPT4o` ⚠️ | `gpt-4o` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | WebSearch, FileSearch, CodeInterpreter |
 | `GPT4oMini` ⚠️ | `gpt-4o-mini` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | FileSearch, CodeInterpreter |
-| `GPT4oMiniTranscribe` | `gpt-4o-mini-transcribe` | — | — | Audio → Text | audio | — |
-| `GPT4oTranscribe` | `gpt-4o-transcribe` | — | — | Audio → Text | audio | — |
-| `GPT4oTranscribeDiarize` | `gpt-4o-transcribe-diarize` | — | — | Audio → Text | audio | — |
+| `GPT4oMiniTranscribe` ⚠️ | `gpt-4o-mini-transcribe` | — | — | Audio → Text | audio | — |
+| `GPT4oTranscribe` ⚠️ | `gpt-4o-transcribe` | — | — | Audio → Text | audio | — |
+| `GPT4oTranscribeDiarize` ⚠️ | `gpt-4o-transcribe-diarize` | — | — | Audio → Text | audio | — |
 | `GPT5` ⚠️ | `gpt-5-2025-08-07` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT51Pro` ⚠️ | `gpt-5.1-pro` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT52` ⚠️ | `gpt-5.2` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
@@ -313,14 +327,17 @@ Total: 143 models across 17 providers.
 | `GPT5Nano` ⚠️ | `gpt-5-nano` | 400,000 | 32,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch |
 | `GPT5Pro` ⚠️ | `gpt-5-pro` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPTImage15` ⚠️ | `gpt-image-1.5` | 128,000 | — | Text, Image → Image | image | — |
-| `GPTImage1Mini` | `gpt-image-1-mini` | 128,000 | — | Text, Image → Image | image | — |
+| `GPTImage1Mini` ⚠️ | `gpt-image-1-mini` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage2` | `gpt-image-2` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Flare` | `gpt-image-2.5-flare` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Sunburst` | `gpt-image-2.5-sunburst` | 128,000 | — | Text, Image → Image | image | — |
-| `Luna56` | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch |
+| `GPTTranscribe` | `gpt-transcribe` | — | — | Audio → Text | audio | — |
+| `Luna56` ⚠️ | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch |
+| `Luna6` | `gpt-6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `O3` ⚠️ | `o3-2025-04-16` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `O3Pro` ⚠️ | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
-| `Sol56` | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Sol56` ⚠️ | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Sol6` | `gpt-6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
 | `TextEmbedding3Small` | `text-embedding-3-small` | 8,191 | 1,536 | Text → Embedding | embedding | — |
@@ -358,10 +375,13 @@ Total: 143 models across 17 providers.
 | `GPTImage2` | $5 | — | — | $30 |
 | `GPTImage25Flare` | $5 | — | — | $30 |
 | `GPTImage25Sunburst` | $5 | — | — | $30 |
+| `GPTTranscribe` | $0 | — | — | $0 |
 | `Luna56` | $0.2 | $0.02 | — | $1.2 |
+| `Luna6` | $0.1 | $0.01 | — | $0.5 |
 | `O3` | $2 | $0.5 | — | $8 |
 | `O3Pro` | $20 | $5 | — | $80 |
 | `Sol56` | $4 | $0.4 | — | $20 |
+| `Sol6` | $2 | $0.2 | — | $10 |
 | `Terra56` | $2 | $0.2 | — | $12 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
 | `TextEmbedding3Small` | $0.02 | — | — | $0 |
@@ -434,10 +454,11 @@ Total: 143 models across 17 providers.
 | `Grok420Reasoning` ⚠️ | `grok-4.20-0309-reasoning` | 2,000,000 | 131,072 | Text, Image → Text | chat, agent | WebSearch, CodeExecution, XSearch |
 | `Grok43` ⚠️ | `grok-4.3` | 1,000,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
 | `Grok45` ⚠️ | `grok-4.5` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning | WebSearch, CodeExecution, XSearch |
-| `Grok46` | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, CodeExecution, XSearch |
+| `Grok46` ⚠️ | `grok-4.6` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, CodeExecution, XSearch |
+| `Grok47` | `grok-4.7` | 500,000 | 131,072 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, CodeExecution, XSearch |
 | `GrokImagineImage` | `grok-imagine-image` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineImage20` | `grok-imagine-image-2.0` | 32,000 | — | Text, Image → Image | image | — |
-| `GrokImagineImageQuality` | `grok-imagine-image-quality` | 32,000 | — | Text, Image → Image | image | — |
+| `GrokImagineImageQuality` ⚠️ | `grok-imagine-image-quality` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineVideo` ⚠️ | `grok-imagine-video` | 32,000 | — | Text, Image, Video → Video | video | — |
 | `GrokImagineVideo15` | `grok-imagine-video-1.5` | 32,000 | — | Text, Image → Video | video | — |
 
@@ -453,6 +474,7 @@ Total: 143 models across 17 providers.
 | `Grok43` | $1.25 | $0.3125 | — | $2.5 |
 | `Grok45` | $2 | $0.3 | — | $6 |
 | `Grok46` | $2 | $0.5 | — | $6 |
+| `Grok47` | $2 | $0.5 | — | $6 |
 | `GrokImagineImage` | $0 | — | — | $0.02 |
 | `GrokImagineImage20` | $0 | — | — | $0.04 |
 | `GrokImagineImageQuality` | $0 | — | — | $0.05 |
@@ -508,40 +530,53 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
-| Anthropic | `Opus48` | `claude-opus-4-8` | Claude Opus 4.8 is being phased out — migrate to Opus5 (claude-opus-5), which has the same pricing and feature set. Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus48` | `claude-opus-4-8` | Claude Opus 4.8 is being phased out — migrate to Opus55 (claude-opus-5-5), which is cheaper on every rate. Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus5` | `claude-opus-5` | Claude Opus 5 is superseded by Opus55 (claude-opus-5-5), which is cheaper on every rate ($4 / $20 per MTok). Still functional, but Anthropic will retire older models. Note Opus 5.5 cannot disable thinking and rejects a forced tool_choice. |
 | Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet46 (adaptive thinking). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet46` | `claude-sonnet-4-6` | Claude Sonnet 4.6 is being phased out — migrate to Sonnet5 (claude-sonnet-5). Still functional, but Anthropic will retire older models. |
-| Google | `Gemini15Pro` | `gemini-1.5-pro` | Superseded by Gemini25Pro (gemini-2.5-pro). Still works — upgrade for better quality. |
-| Google | `Gemini20Flash` | `gemini-2.0-flash` | Superseded by Gemini25Flash (gemini-2.5-flash). Still works — upgrade for better quality and cost. |
-| Google | `Gemini20FlashLite` | `gemini-2.0-flash-lite` | Superseded by Gemini25FlashLite (gemini-2.5-flash-lite). Still works — upgrade for better quality and cost. |
+| Google | `Gemini15Pro` | `gemini-1.5-pro` | gemini-1.5-pro was shut down by Google on 2025-09-29 — requests fail. Migrate to Gemini31Pro (gemini-3.1-pro-preview). |
+| Google | `Gemini20Flash` | `gemini-2.0-flash` | gemini-2.0-flash was shut down by Google on 2026-06-01 — requests fail. Migrate to Gemini38Flash (gemini-3.8-flash). |
+| Google | `Gemini20FlashLite` | `gemini-2.0-flash-lite` | gemini-2.0-flash-lite was shut down by Google on 2026-06-01 — requests fail. Migrate to Gemini35FlashLite (gemini-3.5-flash-lite). |
+| Google | `Gemini25Flash` | `gemini-2.5-flash` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini38Flash (gemini-3.8-flash). |
+| Google | `Gemini25FlashLite` | `gemini-2.5-flash-lite` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini35FlashLite (gemini-3.5-flash-lite) or Gemini31FlashLite. |
+| Google | `Gemini25Pro` | `gemini-2.5-pro` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini31Pro (gemini-3.1-pro-preview) or Gemini38Flash. |
+| Google | `TextEmbedding004` | `text-embedding-004` | text-embedding-004 was shut down by Google on 2026-01-14 — requests fail. Migrate to GeminiEmbedding2 (gemini-embedding-2). |
 | OpenAi | `GPT41` | `gpt-4.1-2025-04-14` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT41Mini` | `gpt-4.1-mini-2025-04-14` | Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT41Mini` | `gpt-4.1-mini-2025-04-14` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT4o` | `gpt-4o` | Superseded by Terra56 (gpt-5.6-terra) for text and vision. Still works — upgrade for better quality. |
-| OpenAi | `GPT4oMini` | `gpt-4o-mini` | Superseded by Luna56 (gpt-5.6-luna) for text and vision. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT4oMini` | `gpt-4o-mini` | Superseded by Luna6 (gpt-6-luna) for text and vision. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT4oMiniTranscribe` | `gpt-4o-mini-transcribe` | gpt-4o-mini-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
+| OpenAi | `GPT4oTranscribe` | `gpt-4o-transcribe` | gpt-4o-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
+| OpenAi | `GPT4oTranscribeDiarize` | `gpt-4o-transcribe-diarize` | gpt-4o-transcribe-diarize is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
 | OpenAi | `GPT5` | `gpt-5-2025-08-07` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT51Pro` | `gpt-5.1-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality. |
+| OpenAi | `GPT51Pro` | `gpt-5.1-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT52` | `gpt-5.2` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT52Chat` | `gpt-5.2-chat-latest` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT52Pro` | `gpt-5.2-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality. |
+| OpenAi | `GPT52Pro` | `gpt-5.2-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT54` | `gpt-5.4` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT54Mini` | `gpt-5.4-mini` | Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT54Nano` | `gpt-5.4-nano` | Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT54Pro` | `gpt-5.4-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality. |
+| OpenAi | `GPT54Mini` | `gpt-5.4-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT54Nano` | `gpt-5.4-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT54Pro` | `gpt-5.4-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT55` | `gpt-5.5` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT55Pro` | `gpt-5.5-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality. |
-| OpenAi | `GPT5Mini` | `gpt-5-mini` | Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT5Nano` | `gpt-5-nano` | Superseded by Luna56 (gpt-5.6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT5Pro` | `gpt-5-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship. Still works — upgrade for better quality. |
-| OpenAi | `GPTImage15` | `gpt-image-1.5` | Superseded by GPTImage2 (gpt-image-2), OpenAI's next-generation image model (higher quality, 2K/4K sizes). Still works — upgrade for noticeably better images. |
-| OpenAi | `O3` | `o3-2025-04-16` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship reasoning model. Still works — upgrade for better quality. |
-| OpenAi | `O3Pro` | `o3-pro` | Superseded by Sol56 (gpt-5.6-sol), OpenAI's current flagship reasoning model. Still works — upgrade for better quality. |
-| OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost. |
-| X | `Grok41FastNonReasoning` | `grok-4-1-fast-non-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok41FastReasoning` | `grok-4-1-fast-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok420MultiAgent` | `grok-4.20-multi-agent-0309` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok420NonReasoning` | `grok-4.20-0309-non-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok420Reasoning` | `grok-4.20-0309-reasoning` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok43` | `grok-4.3` | Superseded by Grok46 (grok-4.6), xAI's current frontier model. Still works — upgrade for better quality. |
-| X | `Grok45` | `grok-4.5` | Superseded by Grok46 (grok-4.6), xAI's current frontier model — same price, plus the xhigh reasoning level. Still works — upgrade for better quality. |
+| OpenAi | `GPT55Pro` | `gpt-5.5-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT5Mini` | `gpt-5-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT5Nano` | `gpt-5-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
+| OpenAi | `GPT5Pro` | `gpt-5-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPTImage15` | `gpt-image-1.5` | Superseded by GPTImage2 (gpt-image-2), OpenAI's next-generation image model (higher quality, 2K/4K sizes). OpenAI shuts gpt-image-1.5 down on 2026-12-01. |
+| OpenAi | `GPTImage1Mini` | `gpt-image-1-mini` | gpt-image-1-mini is deprecated and OpenAI shuts it down on 2026-12-01. Migrate to GPTImage2 (gpt-image-2). |
+| OpenAi | `Luna56` | `gpt-5.6-luna` | Superseded by Luna6 (gpt-6-luna) — the GPT-6 generation of the Luna tier at half the price ($0.10 / $0.50 per MTok). Still works — upgrade for the lower price. |
+| OpenAi | `O3` | `o3-2025-04-16` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
+| OpenAi | `O3Pro` | `o3-pro` | Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
+| OpenAi | `Sol56` | `gpt-5.6-sol` | Superseded by Sol6 (gpt-6-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price. |
+| OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is shut down on 2027-02-26. Use GPTTranscribe (gpt-transcribe). |
+| X | `Grok41FastNonReasoning` | `grok-4-1-fast-non-reasoning` | Retired by xAI on 2026-05-15 — requests are redirected to grok-4.3 and billed at its rates. Migrate to Grok47 (grok-4.7), xAI's current frontier model. |
+| X | `Grok41FastReasoning` | `grok-4-1-fast-reasoning` | Retired by xAI on 2026-05-15 — requests are redirected to grok-4.3 and billed at its rates. Migrate to Grok47 (grok-4.7), xAI's current frontier model. |
+| X | `Grok420MultiAgent` | `grok-4.20-multi-agent-0309` | Superseded by Grok47 (grok-4.7), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok420NonReasoning` | `grok-4.20-0309-non-reasoning` | Superseded by Grok47 (grok-4.7), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok420Reasoning` | `grok-4.20-0309-reasoning` | Superseded by Grok47 (grok-4.7), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok43` | `grok-4.3` | Superseded by Grok47 (grok-4.7), xAI's current frontier model. Still works — upgrade for better quality. |
+| X | `Grok45` | `grok-4.5` | Superseded by Grok47 (grok-4.7), xAI's current frontier model — same price, plus the xhigh reasoning level. Still works — upgrade for better quality. |
+| X | `Grok46` | `grok-4.6` | Superseded by Grok47 (grok-4.7), xAI's current frontier model — same price, context window and reasoning levels. Still works — upgrade for better quality. |
+| X | `GrokImagineImageQuality` | `grok-imagine-image-quality` | grok-imagine-image-quality is retired by xAI on 2026-11-02 (requests are then redirected to grok-imagine-image-2.0 at low quality). Migrate to GrokImagineImage20. |
 | X | `GrokImagineVideo` | `grok-imagine-video` | Superseded by GrokImagineVideo15 (grok-imagine-video-1.5) for text-to-video and image-to-video. Still works — and remains the only option for video-to-video (edit), which 1.5 does not support. |
 

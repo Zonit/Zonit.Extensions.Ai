@@ -79,8 +79,7 @@ public sealed class GoogleProvider : IModelProvider
 
         var geminiResponse = JsonSerializer.Deserialize(responseJson, GoogleJsonContext.Default.GeminiResponse)!;
 
-        var textContent = geminiResponse.Candidates?.FirstOrDefault()?
-            .Content?.Parts?.FirstOrDefault()?.Text;
+        var textContent = JoinAnswerText(geminiResponse);
 
         if (string.IsNullOrEmpty(textContent))
             throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Google returned no text — server-side data loss; usually transient, re-run the operation.");
@@ -90,12 +89,14 @@ public sealed class GoogleProvider : IModelProvider
         var inputTokens = geminiResponse.UsageMetadata?.PromptTokenCount ?? 0;
         var outputTokens = geminiResponse.UsageMetadata?.CandidatesTokenCount ?? 0;
         var reasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0;
+        var cachedTokens = geminiResponse.UsageMetadata?.CachedContentTokenCount ?? 0;
 
         // Gemini thinking tokens are billed at the output token rate but are NOT
         // included in CandidatesTokenCount — add them to cost calculation separately.
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
+            CachedTokens = cachedTokens,
             OutputTokens = outputTokens + reasoningTokens
         });
 
@@ -112,6 +113,7 @@ public sealed class GoogleProvider : IModelProvider
                 {
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
+                    CachedTokens = cachedTokens,
                     ReasoningTokens = reasoningTokens,
                     InputCost = inputCost,
                     OutputCost = outputCost
@@ -149,6 +151,7 @@ public sealed class GoogleProvider : IModelProvider
         var request = new GeminiEmbedRequest
         {
             Model = $"models/{llm.Name}",
+            OutputDimensionality = llm.Dimensions > 0 ? llm.Dimensions : null,
             Content = new GeminiEmbedContent
             {
                 Parts = new List<GeminiPartItem> { new() { Text = input } }
@@ -209,8 +212,8 @@ public sealed class GoogleProvider : IModelProvider
             var data = line[6..];
             var chunk = JsonSerializer.Deserialize(data, GoogleJsonContext.Default.GeminiResponse);
 
-            var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
-            if (text != null)
+            var text = chunk is null ? null : JoinAnswerText(chunk);
+            if (!string.IsNullOrEmpty(text))
                 yield return text;
         }
     }
@@ -245,8 +248,7 @@ public sealed class GoogleProvider : IModelProvider
 
         var geminiResponse = JsonSerializer.Deserialize(responseJson, GoogleJsonContext.Default.GeminiResponse)!;
 
-        var textContent = geminiResponse.Candidates?.FirstOrDefault()?
-            .Content?.Parts?.FirstOrDefault()?.Text;
+        var textContent = JoinAnswerText(geminiResponse);
 
         if (string.IsNullOrEmpty(textContent))
             throw new AiEmptyResponseException(AiResponseError.EmptyAfterRetries, "Google returned no text — server-side data loss; usually transient, re-run the operation.");
@@ -256,10 +258,12 @@ public sealed class GoogleProvider : IModelProvider
         var inputTokens = geminiResponse.UsageMetadata?.PromptTokenCount ?? 0;
         var outputTokens = geminiResponse.UsageMetadata?.CandidatesTokenCount ?? 0;
         var reasoningTokens = geminiResponse.UsageMetadata?.ThoughtsTokenCount ?? 0;
+        var cachedTokens = geminiResponse.UsageMetadata?.CachedContentTokenCount ?? 0;
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
             InputTokens = inputTokens,
+            CachedTokens = cachedTokens,
             OutputTokens = outputTokens + reasoningTokens
         });
 
@@ -276,6 +280,7 @@ public sealed class GoogleProvider : IModelProvider
                 {
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
+                    CachedTokens = cachedTokens,
                     ReasoningTokens = reasoningTokens,
                     InputCost = inputCost,
                     OutputCost = outputCost
@@ -312,8 +317,8 @@ public sealed class GoogleProvider : IModelProvider
 
             var data = line[6..];
             var chunk = JsonSerializer.Deserialize(data, GoogleJsonContext.Default.GeminiResponse);
-            var text = chunk?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
-            if (text != null)
+            var text = chunk is null ? null : JoinAnswerText(chunk);
+            if (!string.IsNullOrEmpty(text))
                 yield return text;
         }
     }
@@ -332,6 +337,75 @@ public sealed class GoogleProvider : IModelProvider
     {
         var baseUrl = _options.BaseUrl ?? "https://generativelanguage.googleapis.com";
         _httpClient.BaseAddress = new Uri(baseUrl);
+    }
+
+    /// <summary>
+    /// Generation settings shared by every request shape (single-shot, chat and the
+    /// agent loop): output cap, sampling overrides and — for Gemini 3.x — the
+    /// <c>thinkingConfig.thinkingLevel</c> chosen through
+    /// <see cref="GoogleThinkingBase{TReason}.Reason"/>.
+    /// </summary>
+    internal static GeminiGenerationConfig CreateGenerationConfig(ILlm llm)
+    {
+        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
+
+        if (llm is GoogleBase googleLlm)
+        {
+            if (googleLlm.Temperature < 1.0)
+                config.Temperature = googleLlm.Temperature;
+            if (googleLlm.TopP < 1.0)
+                config.TopP = googleLlm.TopP;
+        }
+
+        if (llm is IReasoningLlm { Reason: { } effort } && llm is GoogleThinkingBase)
+            config.ThinkingConfig = new GeminiThinkingConfig { ThinkingLevel = ThinkingLevelToWire(effort) };
+
+        return config;
+    }
+
+    /// <summary>
+    /// Maps the global effort onto Gemini's <c>thinkingLevel</c>. Gemini has no
+    /// "off" for the 3.x line, so <see cref="ReasoningEffort.None"/> becomes
+    /// <c>minimal</c> — only exposed on models whose API accepts it.
+    /// </summary>
+    internal static string ThinkingLevelToWire(ReasoningEffort effort) => effort switch
+    {
+        ReasoningEffort.None => "minimal",
+        ReasoningEffort.Low => "low",
+        ReasoningEffort.Medium => "medium",
+        _ => "high",
+    };
+
+    /// <summary>
+    /// Concatenates every answer part of the first candidate. Thinking models can
+    /// split an answer across several parts (each carrying its own
+    /// <c>thoughtSignature</c>), and reading only the first one silently truncated
+    /// it; <c>thought: true</c> parts are reasoning summaries, not answer text.
+    /// </summary>
+    internal static string? JoinAnswerText(GeminiResponse response)
+    {
+        var parts = response.Candidates?.FirstOrDefault()?.Content?.Parts;
+        if (parts is null)
+            return null;
+
+        string? single = null;
+        StringBuilder? builder = null;
+        foreach (var part in parts)
+        {
+            if (part.Thought == true || string.IsNullOrEmpty(part.Text))
+                continue;
+
+            if (single is null)
+            {
+                single = part.Text;
+                continue;
+            }
+
+            builder ??= new StringBuilder(single);
+            builder.Append(part.Text);
+        }
+
+        return builder?.ToString() ?? single;
     }
 
     private static GeminiRequest BuildRequest<TResponse>(
@@ -368,15 +442,7 @@ public sealed class GoogleProvider : IModelProvider
             Contents = new List<GeminiRequestContent> { new() { Parts = parts } }
         };
 
-        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
-
-        if (llm is GoogleBase googleLlm)
-        {
-            if (googleLlm.Temperature < 1.0)
-                config.Temperature = googleLlm.Temperature;
-            if (googleLlm.TopP < 1.0)
-                config.TopP = googleLlm.TopP;
-        }
+        var config = CreateGenerationConfig(llm);
 
         if (responseType != typeof(string))
         {
@@ -453,13 +519,7 @@ public sealed class GoogleProvider : IModelProvider
         }
 
         var request = new GeminiRequest { Contents = contents };
-        var config = new GeminiGenerationConfig { MaxOutputTokens = llm.MaxTokens };
-
-        if (llm is GoogleBase googleLlm)
-        {
-            if (googleLlm.Temperature < 1.0) config.Temperature = googleLlm.Temperature;
-            if (googleLlm.TopP < 1.0) config.TopP = googleLlm.TopP;
-        }
+        var config = CreateGenerationConfig(llm);
 
         if (responseType != typeof(string))
         {
@@ -615,6 +675,7 @@ internal sealed class GeminiContent
 internal sealed class GeminiPart
 {
     public string? Text { get; set; }
+    public bool? Thought { get; set; }
 }
 
 internal sealed class GeminiUsageMetadata
@@ -622,6 +683,7 @@ internal sealed class GeminiUsageMetadata
     public int PromptTokenCount { get; set; }
     public int CandidatesTokenCount { get; set; }
     public int ThoughtsTokenCount { get; set; }
+    public int CachedContentTokenCount { get; set; }
 }
 
 internal sealed class EmbeddingResponse
@@ -655,6 +717,13 @@ internal sealed class GeminiPartItem
     public GeminiInlineData? InlineData { get; set; }
     public GeminiFunctionResponse? FunctionResponse { get; set; }
     public GeminiFunctionCall? FunctionCall { get; set; }
+
+    /// <summary>
+    /// Opaque signature of the model's internal reasoning. Gemini 3.x returns it on
+    /// function-call (and some text) parts and rejects the next turn with a 400 when a
+    /// function call is sent back without it, so the agent loop echoes it verbatim.
+    /// </summary>
+    public string? ThoughtSignature { get; set; }
 }
 
 internal sealed class GeminiFunctionCall
@@ -682,6 +751,12 @@ internal sealed class GeminiGenerationConfig
     public double? TopP { get; set; }
     public string? ResponseMimeType { get; set; }
     public JsonElement? ResponseSchema { get; set; }
+    public GeminiThinkingConfig? ThinkingConfig { get; set; }
+}
+
+internal sealed class GeminiThinkingConfig
+{
+    public string? ThinkingLevel { get; set; }
 }
 
 internal sealed class GeminiSystemInstruction
@@ -704,6 +779,7 @@ internal sealed class GeminiFunctionDeclaration
 internal sealed class GeminiEmbedRequest
 {
     public string Model { get; set; } = "";
+    public int? OutputDimensionality { get; set; }
     public GeminiEmbedContent Content { get; set; } = new();
 }
 

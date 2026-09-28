@@ -1,11 +1,10 @@
 namespace Zonit.Extensions.Ai.X;
 
 /// <summary>
-/// Grok 4.6 — xAI's frontier model, built for coding, agentic tasks and
-/// knowledge work. Successor to <see cref="Grok45"/>: same $2 / $6 headline
-/// pricing and 500K context, plus a fourth reasoning level
-/// (<see cref="ReasoningEffort.Extra"/>, wire <c>xhigh</c>) that grok-4.5
-/// does not accept.
+/// Grok 4.7 — xAI's frontier model, released 21 September 2026, built for coding,
+/// agentic tasks and knowledge work. Successor to <see cref="Grok46"/> at the same
+/// $2 / $6 headline pricing, 500K context and reasoning range
+/// (<c>low</c> / <c>medium</c> / <c>high</c> / <c>xhigh</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -13,29 +12,31 @@ namespace Zonit.Extensions.Ai.X;
 /// $6.00 output per 1M tokens below 200K prompt tokens, and <b>double that</b>
 /// ($4.00 / $1.00 / $12.00) from 200K up. The higher rate applies to
 /// <i>every</i> token in the request, not just the tokens past the threshold —
-/// see <see cref="GetInputPrice"/>. Note the cached-read rate is tiered too,
-/// which is why this class overrides <see cref="GetCachedInputPrice"/>.
+/// see <see cref="GetInputPrice"/>. The cached-read rate is tiered too, which is
+/// why this class overrides <see cref="GetCachedInputPrice"/>.
 /// </para>
 /// <para>
 /// Supports the <c>reasoning.effort</c> parameter ∈ { <c>low</c>, <c>medium</c>,
-/// <c>high</c>, <c>xhigh</c> }; xAI defaults to <c>high</c> when omitted. Set
-/// <see cref="Reason"/> to override. Like <see cref="Grok45"/>, grok-4.6 does
-/// not accept <see cref="ReasoningEffort.None"/> — leave <see cref="Reason"/>
-/// null to take the <c>high</c> default. Reasoning summaries are emitted by
-/// xAI automatically — no client-side toggle is required.
+/// <c>high</c>, <c>xhigh</c> }; xAI defaults to <c>high</c> when omitted. Reasoning
+/// cannot be switched off — <see cref="ReasoningEffort.None"/> is rejected, so
+/// leave <see cref="Reason"/> null to take the <c>high</c> default. Reasoning
+/// summaries are emitted by xAI automatically. Like every xAI reasoning model it
+/// rejects <c>presence_penalty</c>, <c>frequency_penalty</c> and <c>stop</c>, and it
+/// is not available on the Batch API.
 /// </para>
 /// <para>
-/// xAI publishes no output-token ceiling for grok-4.6;
-/// <see cref="MaxOutputTokens"/> keeps grok-4.5's 131,072 as the request-side
-/// default. Knowledge cutoff: February 1, 2026.
+/// xAI publishes no output-token ceiling for grok-4.7 ("no text output limit");
+/// <see cref="MaxOutputTokens"/> keeps the 131,072 used across the Grok 4.x line as
+/// the request-side default. Knowledge cutoff: May 2026. "Grok 4.7 Fast" is only
+/// offered inside Cursor and Grok Build, not on the public API — the API's fast
+/// option is Priority Processing (<see cref="Speed"/>).
 /// </para>
 /// <para>
-/// See <see href="https://docs.x.ai/developers/grok-4-6"/> and
-/// <see href="https://docs.x.ai/docs/pricing"/>.
+/// See <see href="https://docs.x.ai/developers/grok-4-7"/> and
+/// <see href="https://docs.x.ai/developers/pricing"/>.
 /// </para>
 /// </remarks>
-[Obsolete("Superseded by Grok47 (grok-4.7), xAI's current frontier model — same price, context window and reasoning levels. Still works — upgrade for better quality.")]
-public class Grok46 : XChatBase, IReasoningLlm, IFast
+public class Grok47 : XChatBase, IReasoningLlm, IFast
 {
     /// <summary>
     /// Prompt size at which xAI switches to the higher rate card. The docs read
@@ -65,7 +66,7 @@ public class Grok46 : XChatBase, IReasoningLlm, IFast
 
     /// <summary>
     /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).
-    /// grok-4.6 accepts <c>low</c>, <c>medium</c>, <c>high</c> and
+    /// grok-4.7 accepts <c>low</c>, <c>medium</c>, <c>high</c> and
     /// <see cref="ReasoningEffort.Extra"/> (wire <c>xhigh</c>) —
     /// <see cref="ReasoningEffort.None"/> and <see cref="ReasoningEffort.Max"/>
     /// are rejected by the API.
@@ -77,17 +78,17 @@ public class Grok46 : XChatBase, IReasoningLlm, IFast
 
     /// <inheritdoc />
     /// <remarks>
-    /// xAI emits reasoning summaries automatically for grok-4.6 — no
+    /// xAI emits reasoning summaries automatically for grok-4.7 — no
     /// client-side toggle. Always returns <c>null</c>.
     /// </remarks>
     ReasoningSummary? IReasoningLlm.ReasonSummary => null;
 
     /// <inheritdoc />
-    /// <remarks>grok-4.6 does not expose a verbosity knob.</remarks>
+    /// <remarks>grok-4.7 does not expose a verbosity knob.</remarks>
     Verbosity? IReasoningLlm.OutputVerbosity => null;
 
     /// <inheritdoc />
-    public override string Name => "grok-4.6";
+    public override string Name => "grok-4.7";
 
     /// <inheritdoc />
     public override decimal PriceInput => 2.00m;

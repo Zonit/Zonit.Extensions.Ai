@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.Google;
 /// <summary>
 /// Text Embedding 004 - Google's embedding model.
 /// </summary>
+[Obsolete("text-embedding-004 was shut down by Google on 2026-01-14 — requests fail. Migrate to GeminiEmbedding2 (gemini-embedding-2).")]
 public class TextEmbedding004 : GoogleBase, IEmbeddingLlm
 {
     /// <inheritdoc />

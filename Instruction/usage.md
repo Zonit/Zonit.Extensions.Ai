@@ -52,10 +52,10 @@ nothing reaches the model unless you add it, and there is no positional overload
 `tools` / `mcps` / `context` — that lives only on the builder.
 
 ```csharp
-var quick  = await ai.GenerateAsync(new Opus5(), "summarise this", ct);              // 1
-await foreach (var t in ai.StreamAsync(new Opus5(), "tell me a story", ct))          // 2
+var quick  = await ai.GenerateAsync(new Opus55(), "summarise this", ct);              // 1
+await foreach (var t in ai.StreamAsync(new Opus55(), "tell me a story", ct))          // 2
     Console.Write(t);
-var answer = await ai.Agent(new Opus5(), prompt).AddTool<SearchTool>().RunAsync(ct); // 3
+var answer = await ai.Agent(new Opus55(), prompt).AddTool<SearchTool>().RunAsync(ct); // 3
 ```
 
 > **Do not reach for (2) because the output is large.** Streaming is about *display*, not capacity.

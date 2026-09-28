@@ -29,7 +29,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             ("OpenAI GPT-4.1 - Text", async ct => await TestTextGeneration(new GPT41(), "OpenAI", ct)),
             ("OpenAI GPT-4.1 Mini - Text", async ct => await TestTextGeneration(new GPT41Mini(), "OpenAI Mini", ct)),
             ("Anthropic Claude 4 - Text", async ct => await TestTextGeneration(new Sonnet46(), "Anthropic", ct)),
-            ("Google Gemini 2.5 - Text", async ct => await TestTextGeneration(new Gemini25Flash(), "Google", ct)),
+            ("Google Gemini 3.8 - Text", async ct => await TestTextGeneration(new Gemini38Flash(), "Google", ct)),
             ("Mistral Large - Text", async ct => await TestTextGeneration(new MistralLarge(), "Mistral", ct)),
             ("DeepSeek V3 - Text", async ct => await TestTextGeneration(new DeepSeekV3(), "DeepSeek", ct)),
             ("X Grok 4.3 - Text", async ct => await TestTextGeneration(new Grok43(), "X/Grok", ct)),
@@ -37,7 +37,7 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             // Structured output (JSON Schema) tests
             ("OpenAI - Structured Output", async ct => await TestStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
             ("Anthropic - Structured Output", async ct => await TestStructuredOutput(new Sonnet46(), "Anthropic", ct)),
-            ("Google - Structured Output", async ct => await TestStructuredOutput(new Gemini25Flash(), "Google", ct)),
+            ("Google - Structured Output", async ct => await TestStructuredOutput(new Gemini38Flash(), "Google", ct)),
 
             // Structured output with enums, decimals, guids
             ("OpenAI - Enum/Complex Types", async ct => await TestEnumStructuredOutput(new GPT41Mini(), "OpenAI", ct)),
@@ -51,14 +51,14 @@ internal class ComprehensiveTestBackground(IAiProvider provider) : BackgroundSer
             // Image analysis tests (using URL instead of bytes for reliability)
             ("OpenAI - Image Analysis", async ct => await TestImageAnalysisUrl(new GPT41(), "OpenAI", ct)),
             ("Anthropic - Image Analysis", async ct => await TestImageAnalysisUrl(new Sonnet46(), "Anthropic", ct)),
-            ("Google - Image Analysis", async ct => await TestImageAnalysisUrl(new Gemini25Flash(), "Google", ct)),
+            ("Google - Image Analysis", async ct => await TestImageAnalysisUrl(new Gemini38Flash(), "Google", ct)),
 
             // Streaming tests
             ("Anthropic - Streaming", async ct => await TestStreaming(new Sonnet46(), "Anthropic", ct)),
 
             // Embedding tests
             ("OpenAI - Embeddings", async ct => await TestEmbeddings(new TextEmbedding3Small(), "OpenAI", ct)),
-            ("Google - Embeddings", async ct => await TestEmbeddings(new TextEmbedding004(), "Google", ct)),
+            ("Google - Embeddings", async ct => await TestEmbeddings(new GeminiEmbedding2(), "Google", ct)),
             ("Mistral - Embeddings", async ct => await TestEmbeddings(new MistralEmbed(), "Mistral", ct)),
 
             // Web search tests

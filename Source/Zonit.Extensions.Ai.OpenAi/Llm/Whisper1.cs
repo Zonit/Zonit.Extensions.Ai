@@ -3,8 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// Whisper - General-purpose speech recognition model (legacy).
 /// </summary>
-[Obsolete("whisper-1 is OpenAI's legacy speech-recognition model and is being phased out. " +
-          "Use GPT4oTranscribe (gpt-4o-transcribe) for best quality, or GPT4oMiniTranscribe for lower cost.")]
+[Obsolete("whisper-1 is OpenAI's legacy speech-recognition model and is shut down on 2027-02-26. Use GPTTranscribe (gpt-transcribe).")]
 public class Whisper1 : OpenAiBase, IAudioLlm
 {
     /// <inheritdoc />

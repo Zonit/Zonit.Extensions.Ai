@@ -13,6 +13,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
 /// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
+[Obsolete("Superseded by Luna6 (gpt-6-luna) — the GPT-6 generation of the Luna tier at half the price ($0.10 / $0.50 per MTok). Still works — upgrade for the lower price.")]
 public class Luna56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
 {
     /// <inheritdoc />

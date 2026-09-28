@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// GPT Image 1.5 - State-of-the-art image generation model.
 /// </summary>
-[Obsolete("Superseded by GPTImage2 (gpt-image-2), OpenAI's next-generation image model (higher quality, 2K/4K sizes). Still works — upgrade for noticeably better images.")]
+[Obsolete("Superseded by GPTImage2 (gpt-image-2), OpenAI's next-generation image model (higher quality, 2K/4K sizes). OpenAI shuts gpt-image-1.5 down on 2026-12-01.")]
 public class GPTImage15 : OpenAiImageBase<GPTImage15.QualityType, GPTImage15.SizeType>
 {
     /// <summary>

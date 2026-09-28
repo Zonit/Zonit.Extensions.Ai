@@ -7,8 +7,11 @@ namespace Zonit.Extensions.Ai.X;
 /// </summary>
 /// <remarks>
 /// Model id <c>grok-imagine-image-quality</c>. $0.05 per image regardless of
-/// resolution or quality setting.
+/// resolution or quality setting. xAI retires the model on 2 November 2026: from
+/// then on requests are served by <c>grok-imagine-image-2.0</c> at
+/// <c>quality: "low"</c> (see <see href="https://docs.x.ai/developers/migration/imagine-image-quality-nov-2"/>).
 /// </remarks>
+[Obsolete("grok-imagine-image-quality is retired by xAI on 2026-11-02 (requests are then redirected to grok-imagine-image-2.0 at low quality). Migrate to GrokImagineImage20.")]
 public class GrokImagineImageQuality : XImagineImageBase
 {
     /// <inheritdoc />
