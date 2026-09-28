@@ -14,12 +14,15 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <para>
 /// Standard pricing applies up to 272K input tokens, beyond which the
 /// long-context rates apply ($20 input / $2 cached / $75 output per 1M).
-/// Batch and flex run at half the applicable rate. Supports the full reasoning
-/// range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
-/// / <see cref="OpenAiReasonEffortExtended.Max"/>.
+/// Batch and flex run at half the applicable rate. Reasoning effort low / medium /
+/// high / <see cref="OpenAiReasonEffortAlwaysOn.Xhigh"/> / <see cref="OpenAiReasonEffortAlwaysOn.Max"/>
+/// — Astra always reasons and rejects <c>none</c>, hence
+/// <see cref="OpenAiReasonEffortAlwaysOn"/> rather than
+/// <see cref="OpenAiReasonEffortExtended"/>. Custom <c>temperature</c> /
+/// <c>top_p</c> are not accepted.
 /// </para>
 /// </remarks>
-public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
+public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast
 {
     /// <inheritdoc />
     public override string Name => "gpt-6-astra";
@@ -32,6 +35,10 @@ public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
 
     /// <inheritdoc />
     public override decimal? PriceCachedInput => 1.00m;
+
+    /// <inheritdoc />
+    /// <remarks>1.25× the uncached input rate; doubles with it past 272K input tokens.</remarks>
+    public override decimal? PriceCachedInputWrite => 12.50m;
 
     /// <inheritdoc />
     public override decimal? BatchPriceInput => 5.00m;

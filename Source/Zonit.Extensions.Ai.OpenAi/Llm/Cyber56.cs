@@ -35,6 +35,10 @@ public class Cyber56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLl
     public override decimal? PriceCachedInput => 1.25m;
 
     /// <inheritdoc />
+    /// <remarks>1.25× the uncached input rate; doubles with it past 272K input tokens.</remarks>
+    public override decimal? PriceCachedInputWrite => 15.625m;
+
+    /// <inheritdoc />
     public override int MaxInputTokens => 400_000;
 
     /// <inheritdoc />

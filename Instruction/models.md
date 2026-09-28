@@ -273,7 +273,9 @@ await ai.GenerateAsync(new O3 { Reason = OpenAiReasonEffort.High }, "Prove...", 
 
 // GPT-5.6+ (Sol / Terra / Luna) and GPT-6 (Astra / Sol / Luna) add two deeper effort levels: Xhigh and Max.
 await ai.GenerateAsync(new Sol6 { Reason = OpenAiReasonEffortExtended.Xhigh }, prompt, ct);
-await ai.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortExtended.Max }, prompt, ct);
+
+// GPT-6 Astra always reasons: its enum has no None (the API rejects it).
+await ai.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortAlwaysOn.Max }, prompt, ct);
 ```
 
 Gemini 3.x models take a `thinkingLevel` the same way, through a model-specific `ReasonType`. Gemini

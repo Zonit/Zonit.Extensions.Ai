@@ -359,6 +359,40 @@ public class OpenAiProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_CacheWrites_AreBilledAtTheirOwnRate()
+    {
+        // OpenAI's own example: 15K input = 12K cache reads + 3K cache writes. On
+        // GPT-5.6+ writes cost 1.25× input; they used to be billed as plain input.
+        _testHandler.ResponseJson = """
+            {"status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],
+             "usage":{"input_tokens":15000,"output_tokens":1000,
+                      "input_tokens_details":{"cached_tokens":12000,"cache_write_tokens":3000}}}
+            """;
+
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(new Sol6(), new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        var usage = result.MetaData.Usage!;
+        usage.CachedTokens.Should().Be(12_000);
+        usage.CacheWriteTokens.Should().Be(3_000);
+        // 12K × $0.20 + 3K × $2.50, per 1M = 0.0024 + 0.0075 (no uncached remainder)
+        usage.InputCost.Value.Should().BeApproximately(0.0099m, 1e-9m);
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Astra6Reason_IsSentWithoutANoneLevel()
+    {
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortAlwaysOn.Low }, new TestPrompt { Text = "Go" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("low");
+        Enum.GetNames<OpenAiReasonEffortAlwaysOn>().Should().NotContain("None", "gpt-6-astra answers effort \"none\" with HTTP 400");
+    }
+
+    [Fact]
     public async Task GenerateAsync_AtStandardSpeed_OmitsServiceTier()
     {
         // Standard processing is the default and must not be spelled out — sending a

@@ -3,6 +3,27 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.10.0 — 2026-09-28
+
+### OpenAI cache-write billing, date-aware Gemini 3.8 Flash pricing, Astra6 effort enum
+
+- **Added** cache-write billing for OpenAI GPT-5.6 and later (`Astra6`, `Sol6`, `Luna6`, `Sol56`,
+  `Terra56`, `Luna56`, `Cyber56`). OpenAI charges 1.25× the uncached input rate for tokens written to
+  the prompt cache and reports them as `usage.input_tokens_details.cache_write_tokens` (part of
+  `input_tokens`). The provider and the agent session now read that field into
+  `TokenUsage.CacheWriteTokens`, and the models publish `PriceCachedInputWrite`. Previously those
+  tokens were billed as plain input, under-reporting them by 20%. The write rate follows the input
+  rate's long-context tier (×2 past 272K input tokens) and the fast-mode 2×. GPT-5.5 and earlier bill
+  no cache-write premium and are unchanged.
+- **Changed** `Gemini38Flash` to switch its rate card on its own: $0.75 / $0.075 / $3.75 through
+  31 December 2026, $1.50 / $0.15 / $7.50 from 1 January 2027 (UTC). The new `PricingDate` property
+  (default: now) prices a request at a specific date, e.g. for re-costing historical usage;
+  `IsLaunchPricing` says which card applies.
+- **Breaking (compile-time):** `Astra6` now takes the new `OpenAiReasonEffortAlwaysOn` enum (`Low` …
+  `Max`, no `None`). gpt-6-astra always reasons and answers `reasoning.effort: "none"` with HTTP 400,
+  so the old `OpenAiReasonEffortExtended.None` could only fail at runtime. Replace
+  `OpenAiReasonEffortExtended.X` with `OpenAiReasonEffortAlwaysOn.X` on `Astra6`.
+
 ## 10.9.0 — 2026-09-28
 
 ### New models: Claude Opus 5.5, GPT-6 Sol / Luna, Grok 4.7 and the Gemini 3.x line

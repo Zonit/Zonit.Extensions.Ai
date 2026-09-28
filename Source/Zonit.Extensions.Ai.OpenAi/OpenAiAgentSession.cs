@@ -445,9 +445,14 @@ internal sealed class OpenAiAgentSession : IAgentSession
         var outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
 
         var cached = 0;
-        if (usage.TryGetProperty("input_tokens_details", out var inDetails)
-            && inDetails.TryGetProperty("cached_tokens", out var ct))
-            cached = ct.GetInt32();
+        var cacheWrites = 0;
+        if (usage.TryGetProperty("input_tokens_details", out var inDetails))
+        {
+            if (inDetails.TryGetProperty("cached_tokens", out var ct))
+                cached = ct.GetInt32();
+            if (inDetails.TryGetProperty("cache_write_tokens", out var cw))
+                cacheWrites = cw.GetInt32();
+        }
 
         var reasoning = 0;
         if (usage.TryGetProperty("output_tokens_details", out var outDetails)
@@ -467,6 +472,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cached,
+            CacheWriteTokens = cacheWrites,
         }, fastGranted);
 
         return new TokenUsage
@@ -474,6 +480,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
             CachedTokens = cached,
+            CacheWriteTokens = cacheWrites,
             ReasoningTokens = reasoning,
             InputCost = inputCost,
             OutputCost = outputCost,

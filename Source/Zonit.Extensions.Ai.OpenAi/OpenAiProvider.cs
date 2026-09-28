@@ -84,6 +84,7 @@ public sealed class OpenAiProvider : IModelProvider
         var inputTokens = openAiResponse.Usage?.InputTokens ?? 0;
         var outputTokens = openAiResponse.Usage?.OutputTokens ?? 0;
         var cachedTokens = openAiResponse.Usage?.InputTokensDetails?.CachedTokens ?? 0;
+        var cacheWriteTokens = openAiResponse.Usage?.InputTokensDetails?.CacheWriteTokens ?? 0;
 
         // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
         var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "GenerateAsync");
@@ -92,7 +93,8 @@ public sealed class OpenAiProvider : IModelProvider
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
-            CachedTokens = cachedTokens
+            CachedTokens = cachedTokens,
+            CacheWriteTokens = cacheWriteTokens
         }, fastGranted);
 
         return new Result<TResponse>
@@ -110,6 +112,7 @@ public sealed class OpenAiProvider : IModelProvider
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
                     CachedTokens = cachedTokens,
+                    CacheWriteTokens = cacheWriteTokens,
                     ReasoningTokens = openAiResponse.Usage?.OutputTokensDetails?.ReasoningTokens ?? 0,
                     InputCost = inputCost,
                     OutputCost = outputCost
@@ -139,6 +142,7 @@ public sealed class OpenAiProvider : IModelProvider
         var inputTokens = openAiResponse.Usage?.InputTokens ?? 0;
         var outputTokens = openAiResponse.Usage?.OutputTokens ?? 0;
         var cachedTokens = openAiResponse.Usage?.InputTokensDetails?.CachedTokens ?? 0;
+        var cacheWriteTokens = openAiResponse.Usage?.InputTokensDetails?.CacheWriteTokens ?? 0;
 
         // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
         var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "ChatAsync");
@@ -147,7 +151,8 @@ public sealed class OpenAiProvider : IModelProvider
         {
             InputTokens = inputTokens,
             OutputTokens = outputTokens,
-            CachedTokens = cachedTokens
+            CachedTokens = cachedTokens,
+            CacheWriteTokens = cacheWriteTokens
         }, fastGranted);
 
         return new Result<TResponse>
@@ -165,6 +170,7 @@ public sealed class OpenAiProvider : IModelProvider
                     InputTokens = inputTokens,
                     OutputTokens = outputTokens,
                     CachedTokens = cachedTokens,
+                    CacheWriteTokens = cacheWriteTokens,
                     ReasoningTokens = openAiResponse.Usage?.OutputTokensDetails?.ReasoningTokens ?? 0,
                     InputCost = inputCost,
                     OutputCost = outputCost
@@ -985,6 +991,11 @@ internal sealed class OpenAiUsage
 internal sealed class OpenAiTokenDetails
 {
     public int CachedTokens { get; set; }
+
+    // Tokens written to the prompt cache (GPT-5.6+ bills them at 1.25× input). Part of
+    // input_tokens, like cached_tokens — the calculator splits them back out.
+    public int CacheWriteTokens { get; set; }
+
     public int ReasoningTokens { get; set; }
 
     // Only populated by the images endpoints, which split both sides of the

@@ -43,6 +43,26 @@ public enum OpenAiReasonEffortExtended
 }
 
 /// <summary>
+/// Reasoning effort levels for OpenAI models that cannot switch reasoning off
+/// (GPT-6 Astra): the <see cref="OpenAiReasonEffortExtended"/> range without
+/// <c>None</c>, which the API rejects on these models. Numeric values align with
+/// the global <see cref="ReasoningEffort"/> enum.
+/// </summary>
+public enum OpenAiReasonEffortAlwaysOn
+{
+    /// <summary>Low reasoning effort.</summary>
+    Low = 1,
+    /// <summary>Medium reasoning effort.</summary>
+    Medium = 2,
+    /// <summary>High reasoning effort.</summary>
+    High = 3,
+    /// <summary>Extra effort above <see cref="High"/>. Wire value <c>"xhigh"</c>.</summary>
+    Xhigh = 4,
+    /// <summary>Maximum thinking budget — slowest, highest accuracy. Wire value <c>"max"</c>.</summary>
+    Max = 5,
+}
+
+/// <summary>
 /// Non-generic marker for OpenAI reasoning models (o-series, GPT-5+). Carries
 /// the reasoning knobs shared by every tier — summary and output verbosity —
 /// and lets the provider read the resolved effort without reflecting over the
@@ -54,6 +74,25 @@ public abstract class OpenAiReasoningBase : OpenAiBase, IReasoningLlm
 {
     /// <inheritdoc />
     public virtual decimal? PriceCachedInput { get; } = null;
+
+    /// <summary>
+    /// Price per 1M cache-write tokens at standard context, or <c>null</c> when the model
+    /// does not bill cache writes separately. OpenAI charges 1.25× the uncached input rate
+    /// for tokens written to the prompt cache on GPT-5.6 and later (reported as
+    /// <c>usage.input_tokens_details.cache_write_tokens</c>); GPT-5.5 and earlier bill no
+    /// cache-write premium.
+    /// </summary>
+    public virtual decimal? PriceCachedInputWrite => null;
+
+    /// <summary>
+    /// Cache-write rate for this context size. Follows the input rate's long-context
+    /// tiering (the write rate is a fixed multiple of the input rate), so a model that
+    /// overrides <see cref="LlmBase.GetInputPrice"/> gets a tiered write rate for free.
+    /// </summary>
+    public override decimal GetCachedInputWritePrice(long inputTokens)
+        => PriceCachedInputWrite is { } write && PriceInput > 0
+            ? write * GetInputPrice(inputTokens) / PriceInput
+            : base.GetCachedInputWritePrice(inputTokens);
 
     private ReasoningSummary? _reasonSummary;
     private Verbosity? _verbosity;
@@ -155,8 +194,9 @@ public abstract class OpenAiReasoningBase : OpenAiBase, IReasoningLlm
 /// Base class for OpenAI reasoning models (o-series, GPT-5+). Generic over
 /// <typeparamref name="TReason"/> so each model exposes only the effort levels
 /// its API actually accepts — passing an unsupported level is a compile-time
-/// error. Use <see cref="OpenAiReasonEffort"/> for GPT-5.0–5.5 / o-series and
-/// <see cref="OpenAiReasonEffortExtended"/> for GPT-5.6+.
+/// error. Use <see cref="OpenAiReasonEffort"/> for GPT-5.0–5.5 / o-series,
+/// <see cref="OpenAiReasonEffortExtended"/> for GPT-5.6+ and
+/// <see cref="OpenAiReasonEffortAlwaysOn"/> for models that reject <c>none</c>.
 /// </summary>
 /// <typeparam name="TReason">
 /// Model-specific effort enum whose numeric values align with the global

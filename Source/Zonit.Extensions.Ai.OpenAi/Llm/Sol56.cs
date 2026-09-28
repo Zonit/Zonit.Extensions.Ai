@@ -33,6 +33,10 @@ public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm,
     public override decimal? PriceCachedInput => 0.40m;
 
     /// <inheritdoc />
+    /// <remarks>1.25× the uncached input rate; doubles with it past 272K input tokens.</remarks>
+    public override decimal? PriceCachedInputWrite => 5.00m;
+
+    /// <inheritdoc />
     public override decimal? BatchPriceInput => 2.00m;
 
     /// <inheritdoc />

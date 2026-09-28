@@ -89,7 +89,8 @@ public class GoogleProviderTests
             """{"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":1000000,"cachedContentTokenCount":400000,"candidatesTokenCount":100000,"thoughtsTokenCount":100000}}""";
         var provider = CreateProvider(body);
 
-        var result = await provider.GenerateAsync(new Gemini38Flash(), new TestPrompt { Text = "Hi" }, CancellationToken.None);
+        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero) };
+        var result = await provider.GenerateAsync(model, new TestPrompt { Text = "Hi" }, CancellationToken.None);
 
         var usage = result.MetaData.Usage!;
         usage.CachedTokens.Should().Be(400_000);

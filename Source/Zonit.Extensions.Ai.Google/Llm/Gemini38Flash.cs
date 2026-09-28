@@ -11,9 +11,9 @@ namespace Zonit.Extensions.Ai.Google;
 /// </para>
 /// <para>
 /// Launch pricing: $0.75 input / $0.075 cached / $3.75 output per 1M tokens until
-/// 31 December 2026, then <b>$1.50 / $0.15 / $7.50</b> from 1 January 2027 — the
-/// rates here are the launch ones, so bump them (or the package) once the
-/// promotion ends. Batch and Flex run at half price.
+/// 31 December 2026, then <b>$1.50 / $0.15 / $7.50</b> from 1 January 2027 (UTC).
+/// The prices switch on their own — see <see cref="PricingDate"/>. Batch and Flex
+/// run at half the applicable rate.
 /// </para>
 /// <para>
 /// Thinking levels <c>low</c> / <c>medium</c> / <c>high</c> — <c>minimal</c> is
@@ -39,14 +39,31 @@ public class Gemini38Flash : GoogleThinkingBase<Gemini38Flash.ReasonType>
     /// <inheritdoc />
     public override string Name => "gemini-3.8-flash";
 
-    /// <inheritdoc />
-    public override decimal PriceInput => 0.75m;
+    /// <summary>First moment (UTC) the post-launch rate card applies.</summary>
+    private static readonly DateTimeOffset StandardPricingFrom = new(2027, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+    /// <summary>
+    /// Moment the rate card is resolved for. <c>null</c> (the default) means "now", so
+    /// a request costed on or after 1 January 2027 is billed at the post-launch rates
+    /// without a package update. Set it to price a request at a specific date — e.g.
+    /// re-costing historical usage, or pinning the rate in a test.
+    /// </summary>
+    public DateTimeOffset? PricingDate { get; init; }
+
+    /// <summary><c>true</c> while Google's launch pricing (through 31 December 2026) applies.</summary>
+    public bool IsLaunchPricing => (PricingDate ?? DateTimeOffset.UtcNow) < StandardPricingFrom;
 
     /// <inheritdoc />
-    public override decimal PriceOutput => 3.75m;
+    /// <remarks>$0.75 until 31 December 2026, $1.50 from 1 January 2027.</remarks>
+    public override decimal PriceInput => IsLaunchPricing ? 0.75m : 1.50m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.075m;
+    /// <remarks>$3.75 until 31 December 2026, $7.50 from 1 January 2027.</remarks>
+    public override decimal PriceOutput => IsLaunchPricing ? 3.75m : 7.50m;
+
+    /// <inheritdoc />
+    /// <remarks>$0.075 until 31 December 2026, $0.15 from 1 January 2027.</remarks>
+    public override decimal? PriceCachedInput => IsLaunchPricing ? 0.075m : 0.15m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_048_576;

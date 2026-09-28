@@ -29,6 +29,10 @@ public class Luna56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm
     public override decimal? PriceCachedInput => 0.02m;
 
     /// <inheritdoc />
+    /// <remarks>1.25× the uncached input rate; doubles with it past 272K input tokens.</remarks>
+    public override decimal? PriceCachedInputWrite => 0.25m;
+
+    /// <inheritdoc />
     public override decimal? BatchPriceInput => 0.10m;
 
     /// <inheritdoc />

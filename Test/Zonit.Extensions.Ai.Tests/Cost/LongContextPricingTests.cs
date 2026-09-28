@@ -57,6 +57,47 @@ public class LongContextPricingTests
         model.GetCachedInputPrice(Long).Should().Be((decimal)longCached);
     }
 
+    // ---- OpenAI GPT-5.6+: cache writes cost 1.25× input and tier with it ----
+
+    [Theory]
+    // model,              short write, long write
+    [InlineData(typeof(Astra6), 12.50, 25.00)]
+    [InlineData(typeof(Sol6), 2.50, 5.00)]
+    [InlineData(typeof(Luna6), 0.125, 0.25)]
+#pragma warning disable CS0618 // superseded, still billed
+    [InlineData(typeof(Sol56), 5.00, 10.00)]
+    [InlineData(typeof(Luna56), 0.25, 0.50)]
+#pragma warning restore CS0618
+    [InlineData(typeof(Terra56), 2.50, 5.00)]
+    [InlineData(typeof(Cyber56), 15.625, 15.625)]
+    public void Gpt56Plus_CacheWriteRate_Is125PercentOfInput_AndTiers(Type modelType, double shortWrite, double longWrite)
+    {
+        var model = (ILlm)Activator.CreateInstance(modelType)!;
+
+        model.GetCachedInputWritePrice(Short).Should().Be((decimal)shortWrite);
+        model.GetCachedInputWritePrice(Long).Should().Be((decimal)longWrite);
+    }
+
+    [Fact]
+    public void Gpt55_HasNoCacheWritePremium()
+    {
+#pragma warning disable CS0618
+        var model = new GPT55();
+#pragma warning restore CS0618
+
+        model.PriceCachedInputWrite.Should().BeNull();
+        model.GetCachedInputWritePrice(Short).Should().Be(model.GetInputPrice(Short));
+    }
+
+    [Fact]
+    public void Sol6_FastCacheWrite_IsDoubled()
+    {
+        var fast = (IFast)new Sol6 { Speed = SpeedType.Fast };
+
+        fast.GetFastCachedInputWritePrice(Short).Should().Be(5.00m);
+        fast.GetFastCachedInputWritePrice(Long).Should().Be(10.00m);
+    }
+
     [Fact]
     public void Sol56_LongContextCost_BillsCacheAndOutputAtTheRaisedRates()
     {
@@ -188,10 +229,60 @@ public class LongContextPricingTests
     [Fact]
     public void GeminiFlash_IsFlatAcrossContextSizes()
     {
-        var model = new Gemini38Flash();
+        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero) };
 
         model.GetInputPrice(Long).Should().Be(0.75m);
         model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be(3.75m);
         model.GetCachedInputPrice(Long).Should().Be(0.075m);
+    }
+
+    // ---- Google: Gemini 3.8 Flash leaves its launch pricing on 1 January 2027 ----
+
+    [Fact]
+    public void Gemini38Flash_UsesLaunchRatesThrough31December2026()
+    {
+        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero) };
+
+        model.IsLaunchPricing.Should().BeTrue();
+        model.PriceInput.Should().Be(0.75m);
+        model.PriceOutput.Should().Be(3.75m);
+        model.PriceCachedInput.Should().Be(0.075m);
+    }
+
+    [Fact]
+    public void Gemini38Flash_DoublesEveryRateFrom1January2027()
+    {
+        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero) };
+
+        model.IsLaunchPricing.Should().BeFalse();
+        model.GetInputPrice(Short).Should().Be(1.50m);
+        model.GetOutputPrice(Short, outputTokens: 1_000).Should().Be(7.50m);
+        model.GetCachedInputPrice(Short).Should().Be(0.15m);
+        model.GetBatchInputPrice(Short).Should().Be(0.75m);
+    }
+
+    [Fact]
+    public void Gemini38Flash_ComparesTheSwitchInUtc()
+    {
+        // 00:30 on 1 January in Warsaw is still 31 December in UTC.
+        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 1, 1, 0, 30, 0, TimeSpan.FromHours(1)) };
+
+        model.IsLaunchPricing.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Gemini38Flash_Cost_FollowsThePricingDate()
+    {
+        var usage = new TokenUsage { InputTokens = 1_000_000, OutputTokens = 100_000 };
+
+        var launch = AiCostCalculator.CalculateCosts(
+            new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero) }, usage);
+        var standard = AiCostCalculator.CalculateCosts(
+            new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 2, 1, 0, 0, 0, TimeSpan.Zero) }, usage);
+
+        launch.InputCost.Value.Should().BeApproximately(0.75m, 1e-9m);
+        launch.OutputCost.Value.Should().BeApproximately(0.375m, 1e-9m);
+        standard.InputCost.Value.Should().BeApproximately(1.50m, 1e-9m);
+        standard.OutputCost.Value.Should().BeApproximately(0.75m, 1e-9m);
     }
 }
