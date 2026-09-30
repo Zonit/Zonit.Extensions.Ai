@@ -96,18 +96,35 @@ public sealed class AnthropicProvider : IModelProvider
     /// <seealso href="https://platform.claude.com/docs/en/build-with-claude/prompt-engineering/claude-prompting-best-practices">Migrating from Sonnet 4.5 to Sonnet 4.6</seealso>
     internal static int ApplyThinking(ILlm llm, AnthropicMessagesRequest request)
     {
+        // Tool-step reasoning (Sonnet 5.5): no up-front thinking, reasoning only between
+        // tool calls — Anthropic's "between_tools". Takes no other field in `thinking`;
+        // the effort (optional, server default high) travels in output_config and is
+        // capped at high — xhigh / max are a 400 in this mode. The ZAI001 analyzer catches
+        // the constant case at compile time; this guard catches the rest before sending.
+        if (llm is AnthropicAdaptiveBase { ReasonsAtToolStepsOnly: true })
+        {
+            var toolStepEffort = (llm as IReasoningLlm)?.Reason;
+            if (toolStepEffort is > ReasoningEffort.High)
+            {
+                throw new InvalidOperationException(
+                    $"{llm.GetType().Name}: ToolStepReasoning allows Reason up to High, but Reason is {toolStepEffort}. " +
+                    "Anthropic rejects between_tools thinking at xhigh / max with HTTP 400 — lower Reason or turn ToolStepReasoning off.");
+            }
+
+            request.Thinking = new AnthropicThinking { Type = "between_tools" };
+            if (toolStepEffort is { } level)
+                request.OutputConfig = new AnthropicOutputConfig { Effort = EffortToWire(level) };
+
+            return toolStepEffort == ReasoningEffort.Medium ? Math.Min(16_384, llm.MaxOutputTokens) : 0;
+        }
+
         // Adaptive path: sonnet 4.6 / opus 4.7 / future models.
         if (llm is AnthropicAdaptiveBase
             && llm is IReasoningLlm rl
             && rl.Reason is { } effort
             && effort != ReasoningEffort.None)
         {
-            // Tool-step reasoning (Sonnet 5.5): no up-front thinking, reasoning only
-            // between tool calls — Anthropic's "between_tools". The effort still travels
-            // in output_config; the level enums keep it at low / medium / high, the only
-            // levels the API accepts in this mode.
-            var toolStepsOnly = llm is AnthropicAdaptiveBase { ReasonsAtToolStepsOnly: true };
-            request.Thinking = new AnthropicThinking { Type = toolStepsOnly ? "between_tools" : "adaptive" };
+            request.Thinking = new AnthropicThinking { Type = "adaptive" };
             request.OutputConfig = new AnthropicOutputConfig { Effort = EffortToWire(effort) };
 
             // Adaptive thinking counts toward max_tokens. Anthropic's

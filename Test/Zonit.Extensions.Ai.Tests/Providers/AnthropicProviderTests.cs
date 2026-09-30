@@ -311,7 +311,7 @@ public class AnthropicProviderTests
         var provider = CreateProvider();
 
         await provider.GenerateAsync(
-            new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium },
+            new Sonnet55 { ToolStepReasoning = true, Reason = Sonnet55.ReasonType.Medium },
             new TestPrompt { Text = "Hi" },
             CancellationToken.None);
 
@@ -320,6 +320,50 @@ public class AnthropicProviderTests
         thinking.GetProperty("type").GetString().Should().Be("between_tools");
         thinking.EnumerateObject().Should().ContainSingle("between_tools takes no other field (display, budget_tokens, block_binding → 400)");
         doc.RootElement.GetProperty("output_config").GetProperty("effort").GetString().Should().Be("medium");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Sonnet55ToolStepWithoutReason_SendsBetweenToolsAndNoEffort()
+    {
+        // Reason unset = server default effort (high), which between_tools accepts.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        await CreateProvider().GenerateAsync(new Sonnet55 { ToolStepReasoning = true }, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedRequest!);
+        doc.RootElement.GetProperty("thinking").GetProperty("type").GetString().Should().Be("between_tools");
+        doc.RootElement.TryGetProperty("output_config", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Sonnet55ToolStepAboveHigh_ThrowsBeforeSending()
+    {
+        // A level the compiler cannot see (ZAI001 only catches constants) must still
+        // never reach the API as a guaranteed 400.
+        var sent = false;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"x"}],"usage":{"input_tokens":1,"output_tokens":1}}""",
+            _ => sent = true);
+        var level = Enum.Parse<Sonnet55.ReasonType>("Max");
+
+        var act = () => CreateProvider().GenerateAsync(
+            new Sonnet55 { ToolStepReasoning = true, Reason = level }, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        (await act.Should().ThrowAsync<InvalidOperationException>()).WithMessage("*ToolStepReasoning allows Reason up to High*");
+        sent.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Sonnet55Default_ThinksAdaptively()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        await CreateProvider().GenerateAsync(new Sonnet55 { Reason = Sonnet55.ReasonType.Medium }, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"adaptive\"").And.NotContain("between_tools");
     }
 
     [Fact]

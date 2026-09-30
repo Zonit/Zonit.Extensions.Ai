@@ -14,11 +14,17 @@ namespace Zonit.Extensions.Ai.Tests.Models;
 /// </summary>
 public class ModelGuardrailTests
 {
-    [Theory]
-    [InlineData(typeof(Sonnet55.ToolStepReasonType))]
-    public void ToolStepReasoning_OffersOnlyLowMediumHigh(Type enumType)
-        // between_tools at xhigh / max is a 400.
-        => Enum.GetNames(enumType).Should().Equal("Low", "Medium", "High");
+    [Fact]
+    public void ToolStepReasoning_IsOffByDefault_AndCapsReasonAtHigh()
+    {
+        // between_tools at xhigh / max is a 400; the attribute drives analyzer ZAI001.
+        new Sonnet55().ToolStepReasoning.Should().BeFalse();
+
+        var attribute = typeof(Sonnet55).GetProperty(nameof(Sonnet55.ToolStepReasoning))!
+            .GetCustomAttribute<CapsReasonAttribute>();
+        attribute.Should().NotBeNull();
+        attribute!.MaxEffort.Should().Be(ReasoningEffort.High);
+    }
 
     [Theory]
     // thinking: disabled is a 400 on these models, so "None" must not exist.

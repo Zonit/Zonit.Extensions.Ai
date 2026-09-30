@@ -32,8 +32,8 @@ public abstract class AnthropicAdaptiveBase : AnthropicBase, IReasoningLlm
     /// <c>true</c> when the selected reasoning is <b>tool-step reasoning</b> — no up-front
     /// thinking, reasoning only between tool calls (Anthropic <c>thinking.type =
     /// "between_tools"</c>). Only models deriving from
-    /// <see cref="AnthropicToolStepReasoningBase{TReason, TToolStepReason}"/> can return
-    /// <c>true</c>. Defaults to <c>false</c>.
+    /// <see cref="AnthropicToolStepReasoningBase{TReason}"/> can return <c>true</c>.
+    /// Defaults to <c>false</c>.
     /// </summary>
     protected internal virtual bool ReasonsAtToolStepsOnly => false;
 }

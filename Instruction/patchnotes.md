@@ -3,6 +3,39 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.13.0 — 2026-09-30
+
+### Tool-step reasoning becomes a separate switch (`ToolStepReasoning`), guarded by analyzer ZAI001
+
+Replaces the 10.12.0 design, where the mode was chosen by assigning a second enum to `Reason`. A
+separate switch reads better and keeps "does the model think up front?" independent of "how hard".
+
+- **Changed** `Sonnet55`: new `bool ToolStepReasoning` (default `false`). Off → adaptive thinking
+  exactly as before; on → `thinking.type = "between_tools"` (no up-front thinking, reasoning only
+  between tool calls, none without tools), with `Reason` as its effort. `Reason` is back to the plain
+  `Sonnet55.ReasonType?`.
+  - `ToolStepReasoning = true` with `Reason` unset sends no `output_config.effort` (server default
+    `high`, which the mode accepts).
+- **Added analyzer ZAI001** (shipped in the existing `analyzers/dotnet/cs/Zonit.Extensions.Ai.SourceGenerators.dll`,
+  so every package consumer gets it): a compile error when an object initializer sets a switch marked
+  `[CapsReason(max)]` to `true` together with a `Reason` above `max` —
+  `new Sonnet55 { ToolStepReasoning = true, Reason = Sonnet55.ReasonType.Max }` does not build.
+  Verified against a consumer that references the packed packages, not the projects.
+- **Added** `CapsReasonAttribute` (Abstractions): declares the cap on a model switch; provider-neutral,
+  so a similar mode from another provider can reuse it and the analyzer picks it up without changes.
+- **Added a runtime guard**: `AnthropicProvider.ApplyThinking` throws `InvalidOperationException`
+  before sending when `ToolStepReasoning` is on and `Reason` is above `High` (the case the compiler
+  cannot see, e.g. a level read from configuration). Covers `GenerateAsync`, `ChatAsync`, streaming
+  and the agent loop.
+- **Removed** (from 10.12.0, published earlier the same day): `Sonnet55.ToolStepReasonType`,
+  `AnthropicReason<TReason, TToolStepReason>`, and the two-parameter
+  `AnthropicToolStepReasoningBase<TReason, TToolStepReason>` — now
+  `AnthropicToolStepReasoningBase<TReason>` (derives from `AnthropicFixedSamplingBase<TReason>`).
+  Migration: `Reason = Sonnet55.ToolStepReasonType.Medium` →
+  `ToolStepReasoning = true, Reason = Sonnet55.ReasonType.Medium`.
+- Tests: `CapsReasonAnalyzerTests` runs the analyzer over in-memory snippets (invalid → ZAI001 error,
+  valid → nothing); provider tests cover the wire shape, the no-effort case and the runtime guard.
+
 ## 10.12.0 — 2026-09-30
 
 ### Tool-step reasoning on Sonnet 5.5; settings that would be an HTTP 400 no longer compile

@@ -300,17 +300,24 @@ and the natural choice for price-sensitive tool loops. Today only Claude Sonnet 
 (Anthropic wire value `thinking.type = "between_tools"`); every other Claude model answers it with a
 400, so it is not exposed on them.
 
-The mode is chosen by **which enum you assign to `Reason`** — one property, two enums:
+It is a separate switch, **off by default** — the model thinks normally unless you turn it on.
+`Reason` keeps its meaning: with the switch off it is the adaptive-thinking level, with it on it is
+the effort of the tool-step reasoning.
 
 ```csharp
-new Sonnet55 { Reason = Sonnet55.ReasonType.Max }            // adaptive thinking: low … max
-new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium } // tool-step reasoning: low / medium / high
-new Sonnet55()                                               // server default: adaptive, high
+new Sonnet55()                                                                  // adaptive thinking, server default (high)
+new Sonnet55 { Reason = Sonnet55.ReasonType.Max }                               // adaptive thinking, max
+new Sonnet55 { ToolStepReasoning = true }                                       // tool-step, server default (high)
+new Sonnet55 { ToolStepReasoning = true, Reason = Sonnet55.ReasonType.Medium } // tool-step, medium
+new Sonnet55 { ToolStepReasoning = true, Reason = Sonnet55.ReasonType.Max }    // error ZAI001 — does not compile
 ```
 
-`ToolStepReasonType` has only `Low`, `Medium` and `High` because the API rejects tool-step reasoning
-at `xhigh` / `max` — `Sonnet55.ToolStepReasonType.Max` does not compile. Progress notes the model
-writes between tool calls come back as `thinking` blocks and are billed as output.
+The API accepts tool-step reasoning only up to `high`. The switch carries `[CapsReason(High)]`, and the
+analyzer shipped in the `Zonit.Extensions.Ai` package reports **ZAI001** (a compile error) when an
+object initializer sets it together with `Extra` / `Max`. A level the compiler cannot see (computed at
+runtime) is rejected by the provider with an `InvalidOperationException` before anything is sent.
+Progress notes the model writes between tool calls come back as `thinking` blocks and are billed as
+output.
 
 ### Settings that do not compile (instead of failing with HTTP 400)
 
@@ -322,7 +329,7 @@ rather than a 400 at runtime:
 | `ReasonType.None` | `Opus55`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Thinking cannot be disabled (`thinking: disabled` → 400). Leave `Reason` null for the server default. |
 | `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra6`, `Sol61` | Reasoning effort `none` → 400. |
 | `Grok47.ReasonType` etc. (no `Max`; no `None` on 4.5–4.7; no `Extra` on 4.5) | `Grok43`, `Grok45`, `Grok46`, `Grok47` | Levels xAI does not accept → 400. |
-| `ToolStepReasonType` (only `Low` / `Medium` / `High`) | `Sonnet55` | Tool-step reasoning at `xhigh` / `max` → 400. |
+| `ToolStepReasoning = true` with `Reason` above `High` (analyzer **ZAI001**) | `Sonnet55` | Tool-step reasoning at `xhigh` / `max` → 400. Runtime values are checked before sending. |
 | `Temperature`, `TopP` (`[Obsolete(error: true)]`) | `Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Non-default sampling parameters → 400. A value set through `ITextLlm` is not sent. |
 
 ## Fast mode (`IFast`)
