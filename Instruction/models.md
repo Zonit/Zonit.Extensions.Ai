@@ -256,8 +256,10 @@ catalog lists what ships in the box, your models are yours.
 Reasoning models expose effort, summary and verbosity through typed properties. The effort enum is
 per tier, so a model only accepts the levels its API actually supports (passing an unsupported level
 is a compile-time error). OpenAI GPT-5.0–5.5 / o-series use `OpenAiReasonEffort`
-(none/low/medium/high); GPT-5.6 (Sol / Terra / Luna), GPT-5.6 Cyber and GPT-6 Astra use
-`OpenAiReasonEffortExtended`, which adds `Xhigh` and `Max`.
+(none/low/medium/high); GPT-5.6 (Sol / Terra / Luna), GPT-5.6 Cyber, GPT-6 Sol and GPT-6 Luna use
+`OpenAiReasonEffortExtended`, which adds `Xhigh` and `Max`; GPT-6 Astra and GPT-6.1 Sol, which
+always reason, use `OpenAiReasonEffortAlwaysOn` (no `None`). Anthropic, Google and xAI models carry
+a nested `ReasonType` per model (e.g. `Opus55.ReasonType`, `Grok47.ReasonType`).
 
 ```csharp
 var r = await ai.GenerateAsync(
@@ -289,6 +291,39 @@ await ai.GenerateAsync(new Gemini35FlashLite { Reason = Gemini35FlashLite.Reason
 ```
 
 Reasoning tokens are reported on `MetaData.Usage.ReasoningTokens`. See [`results.md`](./results.md).
+
+### Tool-step reasoning (cheapest thinking mode)
+
+Some models can skip up-front thinking and reason **only between tool calls**. Without tools they do
+not think at all. It is the cheapest thinking mode on models where thinking cannot be switched off,
+and the natural choice for price-sensitive tool loops. Today only Claude Sonnet 5.5 offers it
+(Anthropic wire value `thinking.type = "between_tools"`); every other Claude model answers it with a
+400, so it is not exposed on them.
+
+The mode is chosen by **which enum you assign to `Reason`** — one property, two enums:
+
+```csharp
+new Sonnet55 { Reason = Sonnet55.ReasonType.Max }            // adaptive thinking: low … max
+new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium } // tool-step reasoning: low / medium / high
+new Sonnet55()                                               // server default: adaptive, high
+```
+
+`ToolStepReasonType` has only `Low`, `Medium` and `High` because the API rejects tool-step reasoning
+at `xhigh` / `max` — `Sonnet55.ToolStepReasonType.Max` does not compile. Progress notes the model
+writes between tool calls come back as `thinking` blocks and are billed as output.
+
+### Settings that do not compile (instead of failing with HTTP 400)
+
+The library keeps settings a provider rejects off the model type, so a mistake is a compile error
+rather than a 400 at runtime:
+
+| Setting | Models | Why |
+| :--- | :--- | :--- |
+| `ReasonType.None` | `Opus55`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Thinking cannot be disabled (`thinking: disabled` → 400). Leave `Reason` null for the server default. |
+| `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra6`, `Sol61` | Reasoning effort `none` → 400. |
+| `Grok47.ReasonType` etc. (no `Max`; no `None` on 4.5–4.7; no `Extra` on 4.5) | `Grok43`, `Grok45`, `Grok46`, `Grok47` | Levels xAI does not accept → 400. |
+| `ToolStepReasonType` (only `Low` / `Medium` / `High`) | `Sonnet55` | Tool-step reasoning at `xhigh` / `max` → 400. |
+| `Temperature`, `TopP` (`[Obsolete(error: true)]`) | `Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Non-default sampling parameters → 400. A value set through `ITextLlm` is not sent. |
 
 ## Fast mode (`IFast`)
 

@@ -23,17 +23,17 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// that rate, so the higher figure is used rather than under-reporting cost.
 /// </para>
 /// </remarks>
-public class Mythos51 : AnthropicReasoningBase<Mythos51.ReasonType>, IAgentLlm
+public class Mythos51 : AnthropicFixedSamplingBase<Mythos51.ReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Mythos 5.1. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot.
+    /// There is no <c>None</c> slot — thinking is always on for this model and an
+    /// explicit <c>thinking: disabled</c> is rejected with a 400.
     /// </summary>
     public enum ReasonType
     {
-        /// <summary>No thinking — model responds directly.</summary>
-        None = 0,
         /// <summary>Light reasoning — fastest, lowest cost.</summary>
         Low = 1,
         /// <summary>Balanced reasoning depth.</summary>

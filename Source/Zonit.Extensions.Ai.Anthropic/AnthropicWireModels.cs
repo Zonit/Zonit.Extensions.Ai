@@ -200,7 +200,10 @@ internal sealed class AnthropicCacheControl
 
 internal sealed class AnthropicThinking
 {
-    /// <summary>Either <c>"enabled"</c> (legacy + <see cref="BudgetTokens"/>) or <c>"adaptive"</c> (effort hint via <c>output_config</c>).</summary>
+    /// <summary>
+    /// <c>"enabled"</c> (legacy + <see cref="BudgetTokens"/>), <c>"adaptive"</c> (effort hint via
+    /// <c>output_config</c>), <c>"between_tools"</c> (tool-step reasoning, Sonnet 5.5) or <c>"disabled"</c>.
+    /// </summary>
     public string Type { get; set; } = "";
     public int? BudgetTokens { get; set; }
 }

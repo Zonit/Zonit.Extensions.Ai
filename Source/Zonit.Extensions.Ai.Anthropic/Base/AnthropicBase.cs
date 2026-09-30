@@ -41,6 +41,13 @@ public abstract class AnthropicBase : LlmBase, ITextLlm
     /// </summary>
     protected internal virtual bool SupportsForcedToolChoice => true;
 
+    /// <summary>
+    /// <c>false</c> for models that reject a non-default <c>temperature</c> / <c>top_p</c> /
+    /// <c>top_k</c> with a 400 (Opus 4.7+, Sonnet 5+, Fable, Mythos). The provider then never
+    /// sends them. Defaults to <c>true</c>.
+    /// </summary>
+    protected internal virtual bool SupportsSamplingParameters => true;
+
     /// <inheritdoc />
     public virtual decimal? PriceCachedInput => PriceCachedRead;
 

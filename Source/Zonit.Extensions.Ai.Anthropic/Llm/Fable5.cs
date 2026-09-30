@@ -10,17 +10,17 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// 1M token context window at standard pricing (no surcharge for long context).
 /// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
 /// </remarks>
-public class Fable5 : AnthropicReasoningBase<Fable5.ReasonType>, IAgentLlm
+public class Fable5 : AnthropicFixedSamplingBase<Fable5.ReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Fable 5. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot.
+    /// There is no <c>None</c> slot — thinking is always on for this model and an
+    /// explicit <c>thinking: disabled</c> is rejected with a 400.
     /// </summary>
     public enum ReasonType
     {
-        /// <summary>No thinking — model responds directly.</summary>
-        None = 0,
         /// <summary>Light reasoning — fastest, lowest cost.</summary>
         Low = 1,
         /// <summary>Balanced reasoning depth.</summary>

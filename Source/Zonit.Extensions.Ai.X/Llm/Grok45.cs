@@ -16,7 +16,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Supports the <c>reasoning.effort</c> parameter ∈ { <c>low</c>, <c>medium</c>,
 /// <c>high</c> }; xAI defaults to <c>high</c> when omitted. Set <see cref="Reason"/>
 /// to override. Unlike <see cref="Grok43"/>, grok-4.5 does not accept
-/// <see cref="ReasoningEffort.None"/> — leave <see cref="Reason"/> null to take the
+/// <c>none</c> — leave <see cref="Reason"/> null to take the
 /// <c>high</c> default. Reasoning summaries are emitted by xAI automatically — no
 /// client-side toggle is required.
 /// </para>
@@ -38,14 +38,27 @@ public class Grok45 : XChatBase, IReasoningLlm
     private const decimal LongContextMultiplier = 2m;
 
     /// <summary>
-    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).
-    /// grok-4.5 accepts only <c>low</c>, <c>medium</c> and <c>high</c> —
-    /// <see cref="ReasoningEffort.None"/> is rejected by the API.
+    /// Reasoning levels accepted by <c>grok-4.5</c> (<c>low</c> / <c>medium</c> / <c>high</c>). Levels the API rejects
+    /// (<c>none</c>, <c>xhigh</c>, <c>max</c>) are not members, so passing one is a compile-time error rather than an
+    /// HTTP 400. Numeric values align with <see cref="ReasoningEffort"/>.
     /// </summary>
-    public ReasoningEffort? Reason { get; init; }
+    public enum ReasonType
+    {
+        /// <summary>Light reasoning — fastest, lowest cost.</summary>
+        Low = 1,
+        /// <summary>Balanced reasoning depth.</summary>
+        Medium = 2,
+        /// <summary>Deep multistep reasoning.</summary>
+        High = 3,
+    }
+
+    /// <summary>
+    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).
+    /// </summary>
+    public ReasonType? Reason { get; init; }
 
     /// <inheritdoc />
-    ReasoningEffort? IReasoningLlm.Reason => Reason;
+    ReasoningEffort? IReasoningLlm.Reason => Reason is { } reason ? (ReasoningEffort)reason : null;
 
     /// <inheritdoc />
     /// <remarks>

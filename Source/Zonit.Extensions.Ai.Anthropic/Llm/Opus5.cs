@@ -42,7 +42,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// </para>
 /// </remarks>
 [Obsolete("Claude Opus 5 is superseded by Opus55 (claude-opus-5-5), which is cheaper on every rate ($4 / $20 per MTok). Still functional, but Anthropic will retire older models. Note Opus 5.5 cannot disable thinking and rejects a forced tool_choice.")]
-public class Opus5 : AnthropicReasoningBase<Opus5.ReasonType>, IAgentLlm, IFast
+public class Opus5 : AnthropicFixedSamplingBase<Opus5.ReasonType>, IAgentLlm, IFast
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Opus 5. Numeric

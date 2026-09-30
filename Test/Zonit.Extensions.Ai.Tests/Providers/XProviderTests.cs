@@ -271,7 +271,7 @@ public class XProviderTests
             request => capturedRequest = request);
 
         var provider = CreateProvider();
-        var model = new Grok46 { Reason = ReasoningEffort.Extra };
+        var model = new Grok46 { Reason = Grok46.ReasonType.Extra };
         var prompt = new TestPrompt { Text = "Test" };
 
         // Act
@@ -292,7 +292,7 @@ public class XProviderTests
 
         var provider = CreateProvider();
 
-        await provider.GenerateAsync(new Grok47 { Reason = ReasoningEffort.Extra }, new TestPrompt { Text = "Test" }, CancellationToken.None);
+        await provider.GenerateAsync(new Grok47 { Reason = Grok47.ReasonType.Extra }, new TestPrompt { Text = "Test" }, CancellationToken.None);
 
         capturedRequest.Should().Contain("\"model\":\"grok-4.7\"");
         capturedRequest.Should().Contain("\"effort\":\"xhigh\"");
@@ -321,7 +321,7 @@ public class XProviderTests
             request => capturedRequest = request);
 
         var provider = CreateProvider();
-        var model = new Grok46 { Reason = ReasoningEffort.High };
+        var model = new Grok46 { Reason = Grok46.ReasonType.High };
         var prompt = new TestPrompt { Text = "Test" };
 
         // Act

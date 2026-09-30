@@ -11,7 +11,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
 /// </remarks>
 [Obsolete("Claude Opus 4.8 is being phased out — migrate to Opus55 (claude-opus-5-5), which is cheaper on every rate. Still functional, but Anthropic will retire older models.")]
-public class Opus48 : AnthropicReasoningBase<Opus48.ReasonType>, IAgentLlm, IFast
+public class Opus48 : AnthropicFixedSamplingBase<Opus48.ReasonType>, IAgentLlm, IFast
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Opus 4.8. Numeric

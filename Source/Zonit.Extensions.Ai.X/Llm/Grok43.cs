@@ -12,8 +12,8 @@ namespace Zonit.Extensions.Ai.X;
 /// </para>
 /// <para>
 /// Supports the <c>reasoning.effort</c> parameter ∈ { <c>none</c>, <c>low</c>,
-/// <c>medium</c>, <c>high</c> }; xAI defaults to <c>low</c> when omitted. Set
-/// <see cref="Reason"/> to override (use <see cref="ReasoningEffort.None"/> to
+/// <c>medium</c>, <c>high</c>, <c>xhigh</c> }; xAI defaults to <c>low</c> when omitted. Set
+/// <see cref="Reason"/> to override (use <c>none</c> to
 /// disable thinking entirely). Reasoning summaries are emitted by xAI
 /// automatically — no client-side toggle is required.
 /// </para>
@@ -26,13 +26,31 @@ namespace Zonit.Extensions.Ai.X;
 public class Grok43 : XChatBase, IReasoningLlm
 {
     /// <summary>
-    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>low</c>).
-    /// <see cref="ReasoningEffort.None"/> disables reasoning entirely.
+    /// Reasoning levels accepted by <c>grok-4.3</c> (<c>none</c> / <c>low</c> / <c>medium</c> / <c>high</c> / <c>xhigh</c>). Levels the API rejects
+    /// (<c>max</c>) are not members, so passing one is a compile-time error rather than an
+    /// HTTP 400. Numeric values align with <see cref="ReasoningEffort"/>.
     /// </summary>
-    public ReasoningEffort? Reason { get; init; }
+    public enum ReasonType
+    {
+        /// <summary>No reasoning — the model answers directly. Wire value <c>"none"</c>.</summary>
+        None = 0,
+        /// <summary>Light reasoning — fastest, lowest cost.</summary>
+        Low = 1,
+        /// <summary>Balanced reasoning depth.</summary>
+        Medium = 2,
+        /// <summary>Deep multistep reasoning.</summary>
+        High = 3,
+        /// <summary>Extra effort above <see cref="High"/>. Wire value <c>"xhigh"</c>.</summary>
+        Extra = 4,
+    }
+
+    /// <summary>
+    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>low</c>).
+    /// </summary>
+    public ReasonType? Reason { get; init; }
 
     /// <inheritdoc />
-    ReasoningEffort? IReasoningLlm.Reason => Reason;
+    ReasoningEffort? IReasoningLlm.Reason => Reason is { } reason ? (ReasoningEffort)reason : null;
 
     /// <inheritdoc />
     /// <remarks>

@@ -250,20 +250,20 @@ internal sealed class XAgentSession : IAgentSession
 
         // Grok models that accept the `reasoning.effort` field:
         //  - grok-4.7 / grok-4.6: thinking depth (low/medium/high/xhigh), default "high".
-        //  - grok-4.3: thinking depth (none/low/medium/high), default "low".
+        //  - grok-4.3: thinking depth (none/low/medium/high/xhigh), default "low".
         //  - grok-4.5: thinking depth (low/medium/high), default "high".
         //  - grok-4.20-multi-agent: agent count (low/medium/high/xhigh) — same
         //    wire field, different semantics per xAI docs.
         // Every other Grok reasoning model returns HTTP 400 if we send it.
 #pragma warning disable CS0618 // Grok46 / Grok43 / Grok45 / Grok420MultiAgent are deprecated but still fully supported by this provider.
         if (llm is Grok47 { Reason: { } grok47Effort })
-            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok47Effort) };
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map((ReasoningEffort)grok47Effort) };
         else if (llm is Grok46 { Reason: { } grok46Effort })
-            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok46Effort) };
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map((ReasoningEffort)grok46Effort) };
         else if (llm is Grok43 { Reason: { } grok43Effort })
-            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok43Effort) };
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map((ReasoningEffort)grok43Effort) };
         else if (llm is Grok45 { Reason: { } grok45Effort })
-            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map(grok45Effort) };
+            request.Reasoning = new XReasoningSpec { Effort = XEffortWire.Map((ReasoningEffort)grok45Effort) };
         else if (llm is Grok420MultiAgent { Agents: not null } multiAgent)
             request.Reasoning = new XReasoningSpec { Effort = multiAgent.Agents.Value.ToString().ToLowerInvariant() };
 #pragma warning restore CS0618

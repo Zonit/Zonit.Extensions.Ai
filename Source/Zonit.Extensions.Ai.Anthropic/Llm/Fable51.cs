@@ -23,17 +23,17 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// 400 unless Anthropic has expressly authorised it.
 /// </para>
 /// </remarks>
-public class Fable51 : AnthropicReasoningBase<Fable51.ReasonType>, IAgentLlm
+public class Fable51 : AnthropicFixedSamplingBase<Fable51.ReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Fable 5.1. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot.
+    /// There is no <c>None</c> slot — thinking is always on for this model and an
+    /// explicit <c>thinking: disabled</c> is rejected with a 400.
     /// </summary>
     public enum ReasonType
     {
-        /// <summary>No thinking — model responds directly.</summary>
-        None = 0,
         /// <summary>Light reasoning — fastest, lowest cost.</summary>
         Low = 1,
         /// <summary>Balanced reasoning depth.</summary>

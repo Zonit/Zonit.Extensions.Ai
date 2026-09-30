@@ -302,6 +302,62 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_Sonnet55ToolStepReason_SendsBetweenToolsWithEffort()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(
+            new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium },
+            new TestPrompt { Text = "Hi" },
+            CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedRequest!);
+        var thinking = doc.RootElement.GetProperty("thinking");
+        thinking.GetProperty("type").GetString().Should().Be("between_tools");
+        thinking.EnumerateObject().Should().ContainSingle("between_tools takes no other field (display, budget_tokens, block_binding → 400)");
+        doc.RootElement.GetProperty("output_config").GetProperty("effort").GetString().Should().Be("medium");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Sonnet55AdaptiveReason_SendsAdaptive()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Sonnet55 { Reason = Sonnet55.ReasonType.Max }, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"adaptive\"");
+        capturedRequest.Should().Contain("\"effort\":\"max\"");
+        capturedRequest.Should().NotContain("between_tools");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_SamplingSetThroughTheInterface_IsNotSentToAModelThatRejectsIt()
+    {
+        // The model type hides Temperature / TopP behind a compile error; a value that
+        // still arrives through ITextLlm must be dropped instead of becoming a 400.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var model = new Opus55();
+        ((ITextLlm)model).Temperature = 0.2;
+        ((ITextLlm)model).TopP = 0.5;
+
+        await CreateProvider().GenerateAsync(model, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+
+        capturedRequest.Should().NotContain("temperature");
+        capturedRequest.Should().NotContain("top_p");
+    }
+
+    [Fact]
     public async Task GenerateAsync_Sonnet55StructuredOutput_DoesNotForceTheTool()
     {
         string? capturedRequest = null;

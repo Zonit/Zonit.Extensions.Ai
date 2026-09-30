@@ -32,7 +32,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// rejected too.
 /// </para>
 /// </remarks>
-public class Opus55 : AnthropicReasoningBase<Opus55.ReasonType>, IAgentLlm, IFast
+public class Opus55 : AnthropicFixedSamplingBase<Opus55.ReasonType>, IAgentLlm, IFast
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Opus 5.5. Numeric

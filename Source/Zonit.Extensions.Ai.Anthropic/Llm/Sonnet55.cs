@@ -4,7 +4,8 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude Sonnet 5.5 - Successor to <see cref="Sonnet5"/> and the current Sonnet-tier
 /// model, released 28 September 2026. Same $2 / $10 per MTok pricing as Sonnet 5.
 /// Supports adaptive thinking with five effort levels (see <see cref="ReasonType"/>),
-/// including <see cref="ReasonType.Extra"/>.
+/// including <see cref="ReasonType.Extra"/>, and — the only Claude model so far — tool-step
+/// reasoning (see <see cref="ToolStepReasonType"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,9 +18,20 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <b>Thinking cannot be disabled.</b> Unlike <see cref="Sonnet5"/>, an explicit
 /// <c>thinking: { "type": "disabled" }</c> (and the legacy <c>budget_tokens</c> mode)
 /// is rejected with a 400, so there is no <c>None</c> level here and leaving
-/// <see cref="AnthropicReasoningBase{TReason}.Reason"/> <c>null</c> omits the
-/// <c>thinking</c> field — the server then thinks adaptively at its default effort,
-/// <c>high</c>.
+/// <see cref="AnthropicToolStepReasoningBase{TReason, TToolStepReason}.Reason"/> <c>null</c>
+/// omits the <c>thinking</c> field — the server then thinks adaptively at its default
+/// effort, <c>high</c>.
+/// </para>
+/// <para>
+/// <b>Tool-step reasoning</b> is the cheapest mode: assign a <see cref="ToolStepReasonType"/>
+/// level to <c>Reason</c> and the model skips up-front thinking, reasoning only between
+/// tool calls (short progress notes arrive as <c>thinking</c> blocks, billed as output).
+/// Without tools it does not think at all — the closest thing to "thinking off" this
+/// model offers. Wire value <c>thinking.type = "between_tools"</c>.
+/// <code>
+/// new Sonnet55 { Reason = Sonnet55.ReasonType.Max }            // adaptive thinking
+/// new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium } // tool-step reasoning
+/// </code>
 /// </para>
 /// <para>
 /// Forced <c>tool_choice</c> (<c>any</c> / <c>tool</c>) is rejected, so structured
@@ -29,7 +41,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// too.
 /// </para>
 /// </remarks>
-public class Sonnet55 : AnthropicReasoningBase<Sonnet55.ReasonType>, IAgentLlm
+public class Sonnet55 : AnthropicToolStepReasoningBase<Sonnet55.ReasonType, Sonnet55.ToolStepReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Sonnet 5.5. Numeric values
@@ -48,6 +60,22 @@ public class Sonnet55 : AnthropicReasoningBase<Sonnet55.ReasonType>, IAgentLlm
         Extra = 4,
         /// <summary>Maximum thinking budget — slowest, highest accuracy.</summary>
         Max = 5,
+    }
+
+    /// <summary>
+    /// Tool-step reasoning levels: no up-front thinking, reasoning only between tool calls
+    /// (without tools: no thinking at all). The API accepts this mode only at
+    /// <c>low</c> / <c>medium</c> / <c>high</c>, so <c>Extra</c> and <c>Max</c> are not
+    /// members. Numeric values match <see cref="ReasoningEffort"/>.
+    /// </summary>
+    public enum ToolStepReasonType
+    {
+        /// <summary>Brief notes between tool calls — cheapest.</summary>
+        Low = 1,
+        /// <summary>Balanced reasoning between tool calls.</summary>
+        Medium = 2,
+        /// <summary>Deeper reasoning between tool calls.</summary>
+        High = 3,
     }
 
     /// <inheritdoc />

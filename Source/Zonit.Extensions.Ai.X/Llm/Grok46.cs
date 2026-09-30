@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Grok 4.6 — xAI's frontier model, built for coding, agentic tasks and
 /// knowledge work. Successor to <see cref="Grok45"/>: same $2 / $6 headline
 /// pricing and 500K context, plus a fourth reasoning level
-/// (<see cref="ReasoningEffort.Extra"/>, wire <c>xhigh</c>) that grok-4.5
+/// (<see cref="ReasonType.Extra"/>, wire <c>xhigh</c>) that grok-4.5
 /// does not accept.
 /// </summary>
 /// <remarks>
@@ -20,7 +20,7 @@ namespace Zonit.Extensions.Ai.X;
 /// Supports the <c>reasoning.effort</c> parameter ∈ { <c>low</c>, <c>medium</c>,
 /// <c>high</c>, <c>xhigh</c> }; xAI defaults to <c>high</c> when omitted. Set
 /// <see cref="Reason"/> to override. Like <see cref="Grok45"/>, grok-4.6 does
-/// not accept <see cref="ReasoningEffort.None"/> — leave <see cref="Reason"/>
+/// not accept <c>none</c> — leave <see cref="Reason"/>
 /// null to take the <c>high</c> default. Reasoning summaries are emitted by
 /// xAI automatically — no client-side toggle is required.
 /// </para>
@@ -64,16 +64,29 @@ public class Grok46 : XChatBase, IReasoningLlm, IFast
     public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <summary>
-    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).
-    /// grok-4.6 accepts <c>low</c>, <c>medium</c>, <c>high</c> and
-    /// <see cref="ReasoningEffort.Extra"/> (wire <c>xhigh</c>) —
-    /// <see cref="ReasoningEffort.None"/> and <see cref="ReasoningEffort.Max"/>
-    /// are rejected by the API.
+    /// Reasoning levels accepted by <c>grok-4.6</c> (<c>low</c> / <c>medium</c> / <c>high</c> / <c>xhigh</c>). Levels the API rejects
+    /// (<c>none</c>, <c>max</c>) are not members, so passing one is a compile-time error rather than an
+    /// HTTP 400. Numeric values align with <see cref="ReasoningEffort"/>.
     /// </summary>
-    public ReasoningEffort? Reason { get; init; }
+    public enum ReasonType
+    {
+        /// <summary>Light reasoning — fastest, lowest cost.</summary>
+        Low = 1,
+        /// <summary>Balanced reasoning depth.</summary>
+        Medium = 2,
+        /// <summary>Deep multistep reasoning.</summary>
+        High = 3,
+        /// <summary>Extra effort above <see cref="High"/>. Wire value <c>"xhigh"</c>.</summary>
+        Extra = 4,
+    }
+
+    /// <summary>
+    /// Thinking effort. <c>null</c> lets xAI pick the default (<c>high</c>).
+    /// </summary>
+    public ReasonType? Reason { get; init; }
 
     /// <inheritdoc />
-    ReasoningEffort? IReasoningLlm.Reason => Reason;
+    ReasoningEffort? IReasoningLlm.Reason => Reason is { } reason ? (ReasoningEffort)reason : null;
 
     /// <inheritdoc />
     /// <remarks>

@@ -188,7 +188,7 @@ public class XAgentLiveSmokeTests
         try
         {
             result = await ai.GenerateAsync(
-                new Grok45 { Reason = ReasoningEffort.Low },
+                new Grok45 { Reason = Grok45.ReasonType.Low },
                 "Reply with ONLY the word: pong");
         }
         catch (HttpRequestException ex) when (ex.Message.Contains("not available in your region"))

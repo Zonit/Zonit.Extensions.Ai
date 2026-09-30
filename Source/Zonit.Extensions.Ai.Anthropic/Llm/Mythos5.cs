@@ -11,17 +11,17 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
 /// Requires Project Glasswing access on the Anthropic account.
 /// </remarks>
-public class Mythos5 : AnthropicReasoningBase<Mythos5.ReasonType>, IAgentLlm
+public class Mythos5 : AnthropicFixedSamplingBase<Mythos5.ReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Mythos 5. Numeric
     /// values match <see cref="ReasoningEffort"/> exactly, including the
     /// <see cref="Extra"/> slot.
+    /// There is no <c>None</c> slot — thinking is always on for this model and an
+    /// explicit <c>thinking: disabled</c> is rejected with a 400.
     /// </summary>
     public enum ReasonType
     {
-        /// <summary>No thinking — model responds directly.</summary>
-        None = 0,
         /// <summary>Light reasoning — fastest, lowest cost.</summary>
         Low = 1,
         /// <summary>Balanced reasoning depth.</summary>

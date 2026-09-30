@@ -102,7 +102,12 @@ public sealed class AnthropicProvider : IModelProvider
             && rl.Reason is { } effort
             && effort != ReasoningEffort.None)
         {
-            request.Thinking = new AnthropicThinking { Type = "adaptive" };
+            // Tool-step reasoning (Sonnet 5.5): no up-front thinking, reasoning only
+            // between tool calls — Anthropic's "between_tools". The effort still travels
+            // in output_config; the level enums keep it at low / medium / high, the only
+            // levels the API accepts in this mode.
+            var toolStepsOnly = llm is AnthropicAdaptiveBase { ReasonsAtToolStepsOnly: true };
+            request.Thinking = new AnthropicThinking { Type = toolStepsOnly ? "between_tools" : "adaptive" };
             request.OutputConfig = new AnthropicOutputConfig { Effort = EffortToWire(effort) };
 
             // Adaptive thinking counts toward max_tokens. Anthropic's
@@ -696,7 +701,7 @@ public sealed class AnthropicProvider : IModelProvider
         // extended thinking). Structured output is enforced by a forced tool
         // call instead — see ApplyStructuredOutputTool below.
 
-        if (llm is AnthropicBase anthropicLlm)
+        if (llm is AnthropicBase { SupportsSamplingParameters: true } anthropicLlm)
         {
             if (anthropicLlm.TopP < 1.0)
                 request.TopP = anthropicLlm.TopP;
@@ -902,7 +907,7 @@ public sealed class AnthropicProvider : IModelProvider
 
         request.Messages = messages;
 
-        if (llm is AnthropicBase anthropicLlm)
+        if (llm is AnthropicBase { SupportsSamplingParameters: true } anthropicLlm)
         {
             if (anthropicLlm.TopP < 1.0) request.TopP = anthropicLlm.TopP;
             else if (anthropicLlm.Temperature < 1.0) request.Temperature = anthropicLlm.Temperature;

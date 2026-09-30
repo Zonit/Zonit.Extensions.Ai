@@ -852,7 +852,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         if (_context.InitialChat is { Count: > 0 } && !string.IsNullOrEmpty(prompt.Text))
             request.System = new List<AnthropicContentBlock> { new() { Type = "text", Text = prompt.Text } };
 
-        if (llm is AnthropicBase anth)
+        if (llm is AnthropicBase { SupportsSamplingParameters: true } anth)
         {
             if (anth.TopP < 1.0) request.TopP = anth.TopP;
             else if (anth.Temperature < 1.0) request.Temperature = anth.Temperature;

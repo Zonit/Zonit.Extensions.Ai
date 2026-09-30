@@ -3,6 +3,46 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.12.0 — 2026-09-30
+
+### Tool-step reasoning on Sonnet 5.5; settings that would be an HTTP 400 no longer compile
+
+Breaking (compile-time) — every break below replaces a setting the provider already answered with a
+400, so code that compiled against 10.11.0 *and worked* is unaffected except for the Grok enum
+rename.
+
+- **Added tool-step reasoning** on `Sonnet55` — the cheapest thinking mode it offers. The model skips
+  up-front thinking and reasons only between tool calls; without tools it does not think at all.
+  Wire value `thinking.type = "between_tools"` (Anthropic, Sonnet 5.5 only — Opus 5.5 and every other
+  Claude model answer it with a 400, verified against the thinking-configuration table). Selected by
+  assigning the new `Sonnet55.ToolStepReasonType` (`Low` / `Medium` / `High`) to `Reason`:
+  `new Sonnet55 { Reason = Sonnet55.ToolStepReasonType.Medium }`. `Reason = Sonnet55.ReasonType.X`
+  still selects adaptive thinking, unchanged.
+  - Why one property with two enums rather than a separate flag: two properties could both be set,
+    and the API rejects tool-step reasoning at `xhigh` / `max`. `ToolStepReasonType` has no `Extra`
+    or `Max`, so the invalid combination is unrepresentable.
+  - New types: `AnthropicReason<TReason, TToolStepReason>` (the value `Reason` holds; implicit
+    conversions from both enums) and `AnthropicToolStepReasoningBase<TReason, TToolStepReason>`.
+    Provider hook: `AnthropicAdaptiveBase.ReasonsAtToolStepsOnly`. The name is provider-neutral on
+    purpose, so an equivalent mode from another provider can reuse it.
+- **Removed `ReasonType.None`** from `Fable5`, `Fable51`, `Mythos5` and `Mythos51`. These models always
+  think; `None` silently meant "server default", not "no thinking". (`Opus55` and `Sonnet55` never had
+  it.)
+- **Changed** `Grok43` / `Grok45` / `Grok46` / `Grok47` `Reason` from the global `ReasoningEffort?` to a
+  nested per-model `ReasonType` holding only the levels xAI accepts: grok-4.3 none…xhigh; grok-4.5
+  low/medium/high; grok-4.6 and grok-4.7 low…xhigh. `ReasoningEffort.Max` (and `None` on 4.5–4.7) used
+  to compile and fail with a 400. Migration: `Reason = ReasoningEffort.High` →
+  `Reason = Grok47.ReasonType.High`.
+- **Hid `Temperature` / `TopP`** behind `[Obsolete(error: true)]` on every Claude model that rejects
+  non-default sampling parameters (`Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`,
+  `Fable5`, `Fable51`, `Mythos5`, `Mythos51`), via the new `AnthropicFixedSamplingBase<TReason>`. The
+  provider and agent session also stop sending them for these models
+  (`AnthropicBase.SupportsSamplingParameters`), so a value set through `ITextLlm` is ignored instead of
+  rejected. `Sonnet46`, `Opus46`, `Haiku45` and older keep working sampling parameters.
+- `ModelGuardrailTests` pins all of the above by reflection; a scratch compile was used to confirm each
+  invalid form fails to build (CS0117 / CS0619 / CS0266).
+- Docs: `models.md` gains "Tool-step reasoning" and "Settings that do not compile".
+
 ## 10.11.0 — 2026-09-30
 
 ### New models: Claude Sonnet 5.5 and GPT-6.1 Sol; Gemini 3.8 Flash pricing follows the clock

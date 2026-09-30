@@ -37,7 +37,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// </para>
 /// </remarks>
 [Obsolete("Claude Sonnet 5 is superseded by Sonnet55 (claude-sonnet-5-5) at the same price. Still functional, but Anthropic will retire older models. Note Sonnet 5.5 cannot disable thinking and rejects a forced tool_choice.")]
-public class Sonnet5 : AnthropicReasoningBase<Sonnet5.ReasonType>, IAgentLlm
+public class Sonnet5 : AnthropicFixedSamplingBase<Sonnet5.ReasonType>, IAgentLlm
 {
     /// <summary>
     /// Adaptive-thinking effort levels accepted by Claude Sonnet 5. Numeric
