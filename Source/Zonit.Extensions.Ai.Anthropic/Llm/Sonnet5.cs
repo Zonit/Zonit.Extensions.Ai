@@ -36,6 +36,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// for September 1, 2026 was cancelled.
 /// </para>
 /// </remarks>
+[Obsolete("Claude Sonnet 5 is superseded by Sonnet55 (claude-sonnet-5-5) at the same price. Still functional, but Anthropic will retire older models. Note Sonnet 5.5 cannot disable thinking and rejects a forced tool_choice.")]
 public class Sonnet5 : AnthropicReasoningBase<Sonnet5.ReasonType>, IAgentLlm
 {
     /// <summary>

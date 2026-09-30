@@ -75,7 +75,7 @@ called:
 
 ```csharp
 // Anthropic / OpenAI: a tool on the model
-await ai.GenerateAsync(new Sonnet5 { Tools = [new WebSearchTool { MaxUses = 3 }] }, "Brent price?");
+await ai.GenerateAsync(new Sonnet55 { Tools = [new WebSearchTool { MaxUses = 3 }] }, "Brent price?");
 await ai.GenerateAsync(new Luna6 { Tools = [new WebSearchTool()] }, "Brent price?");
 
 // Grok: a model property rather than a tool

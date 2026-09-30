@@ -144,7 +144,7 @@ await foreach (var chunk in ai.StreamAsync(new GPT5(), "Tell me a story", ct))
     Console.Write(chunk);
 
 // Multi-turn chat without tools (chat.md)
-Result<string> reply = await ai.ChatAsync(new Sonnet5(), systemPrompt, history, ct);
+Result<string> reply = await ai.ChatAsync(new Sonnet55(), systemPrompt, history, ct);
 
 // Image. Returns Result<Asset>; bytes in .Value.Data. Needs an image provider (providers.md).
 var img = await ai.GenerateAsync(

@@ -5,7 +5,7 @@
     <!-- Package-specific metadata -->
     <PackageId>Zonit.Extensions.Ai.Google</PackageId>
     <Title>Zonit.Extensions.Ai.Google</Title>
-    <Description>Google Gemini provider for Zonit.Extensions.Ai. Supports Gemini 2.5 Pro/Flash with thinking, Gemini 2.0, and embeddings.</Description>
+    <Description>Google Gemini provider for Zonit.Extensions.Ai. Supports Gemini 3.x Pro/Flash/Flash-Lite with thinking levels, Gemini 2.5, and embeddings.</Description>
     <PackageTags>ai;google;gemini;gemini-pro;gemini-flash;embeddings;llm</PackageTags>
   </PropertyGroup>
   
@@ -16,5 +16,10 @@
   
   <ItemGroup>
     <ProjectReference Include="..\Zonit.Extensions.Ai\Zonit.Extensions.Ai.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Deterministic tests for the date-switched Gemini 3.8 Flash rate card. -->
+    <InternalsVisibleTo Include="Zonit.Extensions.Ai.Tests" />
   </ItemGroup>
 </Project>

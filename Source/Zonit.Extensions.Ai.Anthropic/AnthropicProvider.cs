@@ -285,7 +285,7 @@ public sealed class AnthropicProvider : IModelProvider
             body.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase))
         {
             message += $" - the prompt exceeded model '{llm.Name}'s {llm.MaxInputTokens}-token context window. "
-                     + "Route this step to a 1M-context model (Opus55, Opus5, Opus46/Opus47/Opus48, Sonnet46 or Sonnet5) or reduce the input.";
+                     + "Route this step to a 1M-context model (Opus55, Sonnet55, Opus5, Sonnet5, Opus46/Opus47/Opus48 or Sonnet46) or reduce the input.";
         }
 
         return message;

@@ -89,15 +89,14 @@ public class GoogleProviderTests
             """{"candidates":[{"content":{"parts":[{"text":"ok"}]}}],"usageMetadata":{"promptTokenCount":1000000,"cachedContentTokenCount":400000,"candidatesTokenCount":100000,"thoughtsTokenCount":100000}}""";
         var provider = CreateProvider(body);
 
-        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero) };
-        var result = await provider.GenerateAsync(model, new TestPrompt { Text = "Hi" }, CancellationToken.None);
+        var result = await provider.GenerateAsync(new Gemini31FlashLite(), new TestPrompt { Text = "Hi" }, CancellationToken.None);
 
         var usage = result.MetaData.Usage!;
         usage.CachedTokens.Should().Be(400_000);
-        // 600K × $0.75 + 400K × $0.075 = 0.45 + 0.03
-        usage.InputCost.Value.Should().BeApproximately(0.48m, 1e-9m);
-        // (100K answer + 100K thinking) × $3.75
-        usage.OutputCost.Value.Should().BeApproximately(0.75m, 1e-9m);
+        // 600K × $0.25 + 400K × $0.025 = 0.15 + 0.01
+        usage.InputCost.Value.Should().BeApproximately(0.16m, 1e-9m);
+        // (100K answer + 100K thinking) × $1.50
+        usage.OutputCost.Value.Should().BeApproximately(0.30m, 1e-9m);
     }
 
     [Fact]

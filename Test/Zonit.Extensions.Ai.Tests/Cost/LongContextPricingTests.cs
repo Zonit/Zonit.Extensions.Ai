@@ -28,6 +28,7 @@ public class LongContextPricingTests
     [Theory]
     // model,             short in, long in, short out, long out, short cached, long cached
     [InlineData(typeof(Astra6), 10.00, 20.00, 50.00, 75.00, 1.00, 2.00)]
+    [InlineData(typeof(Sol61), 2.00, 4.00, 10.00, 15.00, 0.10, 0.20)]
     [InlineData(typeof(Sol6), 2.00, 4.00, 10.00, 15.00, 0.20, 0.40)]
     [InlineData(typeof(Luna6), 0.10, 0.20, 0.50, 0.75, 0.01, 0.02)]
     [InlineData(typeof(Sol56), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
@@ -62,6 +63,7 @@ public class LongContextPricingTests
     [Theory]
     // model,              short write, long write
     [InlineData(typeof(Astra6), 12.50, 25.00)]
+    [InlineData(typeof(Sol61), 2.50, 5.00)]
     [InlineData(typeof(Sol6), 2.50, 5.00)]
     [InlineData(typeof(Luna6), 0.125, 0.25)]
 #pragma warning disable CS0618 // superseded, still billed
@@ -229,60 +231,40 @@ public class LongContextPricingTests
     [Fact]
     public void GeminiFlash_IsFlatAcrossContextSizes()
     {
-        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero) };
+        var model = new Gemini38Flash();
 
-        model.GetInputPrice(Long).Should().Be(0.75m);
-        model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be(3.75m);
-        model.GetCachedInputPrice(Long).Should().Be(0.075m);
+        model.GetInputPrice(Long).Should().Be(model.GetInputPrice(Short));
+        model.GetOutputPrice(Long, outputTokens: 1_000).Should().Be(model.GetOutputPrice(Short, outputTokens: 1_000));
+        model.GetCachedInputPrice(Long).Should().Be(model.GetCachedInputPrice(Short));
     }
 
     // ---- Google: Gemini 3.8 Flash leaves its launch pricing on 1 January 2027 ----
 
     [Fact]
     public void Gemini38Flash_UsesLaunchRatesThrough31December2026()
-    {
-        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero) };
-
-        model.IsLaunchPricing.Should().BeTrue();
-        model.PriceInput.Should().Be(0.75m);
-        model.PriceOutput.Should().Be(3.75m);
-        model.PriceCachedInput.Should().Be(0.075m);
-    }
+        => Gemini38Flash.RateCard(new DateTimeOffset(2026, 12, 31, 23, 59, 59, TimeSpan.Zero))
+            .Should().Be((0.75m, 0.075m, 3.75m));
 
     [Fact]
     public void Gemini38Flash_DoublesEveryRateFrom1January2027()
-    {
-        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero) };
-
-        model.IsLaunchPricing.Should().BeFalse();
-        model.GetInputPrice(Short).Should().Be(1.50m);
-        model.GetOutputPrice(Short, outputTokens: 1_000).Should().Be(7.50m);
-        model.GetCachedInputPrice(Short).Should().Be(0.15m);
-        model.GetBatchInputPrice(Short).Should().Be(0.75m);
-    }
+        => Gemini38Flash.RateCard(new DateTimeOffset(2027, 1, 1, 0, 0, 0, TimeSpan.Zero))
+            .Should().Be((1.50m, 0.15m, 7.50m));
 
     [Fact]
     public void Gemini38Flash_ComparesTheSwitchInUtc()
-    {
         // 00:30 on 1 January in Warsaw is still 31 December in UTC.
-        var model = new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 1, 1, 0, 30, 0, TimeSpan.FromHours(1)) };
-
-        model.IsLaunchPricing.Should().BeTrue();
-    }
+        => Gemini38Flash.RateCard(new DateTimeOffset(2027, 1, 1, 0, 30, 0, TimeSpan.FromHours(1)))
+            .Input.Should().Be(0.75m);
 
     [Fact]
-    public void Gemini38Flash_Cost_FollowsThePricingDate()
+    public void Gemini38Flash_PricesFollowTheSystemClock()
     {
-        var usage = new TokenUsage { InputTokens = 1_000_000, OutputTokens = 100_000 };
+        var model = new Gemini38Flash();
+        var card = Gemini38Flash.RateCard(DateTimeOffset.UtcNow);
 
-        var launch = AiCostCalculator.CalculateCosts(
-            new Gemini38Flash { PricingDate = new DateTimeOffset(2026, 10, 1, 0, 0, 0, TimeSpan.Zero) }, usage);
-        var standard = AiCostCalculator.CalculateCosts(
-            new Gemini38Flash { PricingDate = new DateTimeOffset(2027, 2, 1, 0, 0, 0, TimeSpan.Zero) }, usage);
-
-        launch.InputCost.Value.Should().BeApproximately(0.75m, 1e-9m);
-        launch.OutputCost.Value.Should().BeApproximately(0.375m, 1e-9m);
-        standard.InputCost.Value.Should().BeApproximately(1.50m, 1e-9m);
-        standard.OutputCost.Value.Should().BeApproximately(0.75m, 1e-9m);
+        model.PriceInput.Should().Be(card.Input);
+        model.PriceCachedInput.Should().Be(card.CachedInput);
+        model.PriceOutput.Should().Be(card.Output);
+        model.GetBatchInputPrice(Short).Should().Be(card.Input * 0.5m);
     }
 }

@@ -1,31 +1,33 @@
 namespace Zonit.Extensions.Ai.OpenAi;
 
 /// <summary>
-/// GPT-6 Sol — the frontier tier of the GPT-6 generation, released 22 September
-/// 2026. Successor to <see cref="Sol56"/> at half its price, for demanding
-/// reasoning, coding and agentic work that does not need the full
-/// <see cref="Astra6"/>. See <see cref="Luna6"/> for the low-cost tier.
+/// GPT-6.1 Sol — the current frontier tier of the GPT-6 generation, released
+/// 29 September 2026. Upgrade to <see cref="Sol6"/> at the same input / output
+/// price with half the cached-input rate. See <see cref="Astra6"/> for the flagship
+/// and <see cref="Luna6"/> for the low-cost tier.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Model id <c>gpt-6-sol</c>. 1.05M token context window (922K max input),
-/// 128K max output, knowledge cutoff 20 April 2026.
+/// Model id <c>gpt-6.1-sol</c>. 1.05M token context window (922K max input),
+/// 128K max output, knowledge cutoff 30 April 2026.
 /// </para>
 /// <para>
-/// Standard pricing ($2 input / $0.20 cached / $10 output per 1M) applies up to
-/// 272K input tokens, beyond which the long-context rates apply ($4 / $0.40 /
-/// $15). Batch and flex run at half the applicable rate. Supports the full
-/// reasoning range none / low / medium (default) / high /
-/// <see cref="OpenAiReasonEffortExtended.Xhigh"/> / <see cref="OpenAiReasonEffortExtended.Max"/>.
-/// Custom <c>temperature</c> / <c>top_p</c> are only accepted at effort
-/// <c>none</c>.
+/// Standard pricing ($2 input / $0.10 cached / $2.50 cache write / $10 output per 1M)
+/// applies up to 272K input tokens, beyond which the long-context rates apply ($4 /
+/// $0.20 / $5 / $15). Batch and flex run at half the applicable rate.
+/// </para>
+/// <para>
+/// Reasoning effort low / medium (default) / high /
+/// <see cref="OpenAiReasonEffortAlwaysOn.Xhigh"/> / <see cref="OpenAiReasonEffortAlwaysOn.Max"/>.
+/// Unlike <see cref="Sol6"/>, <c>none</c> (and <c>minimal</c>) are rejected, hence
+/// <see cref="OpenAiReasonEffortAlwaysOn"/>. On Chat Completions the model works only
+/// without tool calling — this SDK uses the Responses API.
 /// </para>
 /// </remarks>
-[Obsolete("Superseded by Sol61 (gpt-6.1-sol) — same input / output price, half the cached-input rate. Still works — upgrade for better quality. Note gpt-6.1-sol rejects reasoning effort \"none\".")]
-public class Sol6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
+public class Sol61 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast
 {
     /// <inheritdoc />
-    public override string Name => "gpt-6-sol";
+    public override string Name => "gpt-6.1-sol";
 
     /// <inheritdoc />
     public override decimal PriceInput => 2.00m;
@@ -34,7 +36,7 @@ public class Sol6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, 
     public override decimal PriceOutput => 10.00m;
 
     /// <inheritdoc />
-    public override decimal? PriceCachedInput => 0.20m;
+    public override decimal? PriceCachedInput => 0.10m;
 
     /// <inheritdoc />
     /// <remarks>1.25× the uncached input rate; doubles with it past 272K input tokens.</remarks>
@@ -70,8 +72,7 @@ public class Sol6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, 
     public override FeaturesType SupportedFeatures =>
         FeaturesType.Streaming |
         FeaturesType.FunctionCalling |
-        FeaturesType.StructuredOutputs |
-        FeaturesType.PredictedOutputs;
+        FeaturesType.StructuredOutputs;
 
     /// <inheritdoc />
     public override EndpointsType SupportedEndpoints =>

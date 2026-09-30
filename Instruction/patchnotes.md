@@ -3,6 +3,25 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.11.0 — 2026-09-30
+
+### New models: Claude Sonnet 5.5 and GPT-6.1 Sol; Gemini 3.8 Flash pricing follows the clock
+
+- **Added Anthropic `Sonnet55`** (`claude-sonnet-5-5`, released 2026-09-28). Same price as Sonnet 5:
+  $2 input / $0.20 cache read / $2.50 cache write (5 min; 1 h is $4) / $10 output per MTok. 1M
+  context, 128K output, no fast mode. Thinking **cannot be disabled** (`thinking: disabled` is a
+  400), so there is no `ReasonType.None` and an unset `Reason` omits the `thinking` field (server
+  default effort `high`). Forced `tool_choice` is rejected, so structured output takes the `auto` +
+  instruction path. `Sonnet5` is marked obsolete.
+- **Added OpenAI `Sol61`** (`gpt-6.1-sol`, released 2026-09-29). Same rates as `Sol6` except
+  cached input, halved to $0.10 per MTok (cache write $2.50, long-context rates past 272K, fast mode
+  2×). It rejects reasoning effort `none`, so it uses `OpenAiReasonEffortAlwaysOn`. `Sol6` is marked
+  obsolete.
+- **Removed** `Gemini38Flash.PricingDate` and `Gemini38Flash.IsLaunchPricing` (added in 10.10.0). The
+  prices now read the system clock directly — launch rates through 31 December 2026, $1.50 / $0.15 /
+  $7.50 from 1 January 2027 UTC — with the switch itself in an internal, pure `RateCard(at)` function
+  that the tests exercise at fixed dates. No per-instance date override is part of the public model.
+
 ## 10.10.0 — 2026-09-28
 
 ### OpenAI cache-write billing, date-aware Gemini 3.8 Flash pricing, Astra6 effort enum

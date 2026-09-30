@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude Sonnet 4.5 - Our smart model for complex agents and coding.
 /// Best balance of intelligence, speed, and cost for most use cases.
 /// </summary>
-[Obsolete("Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet46 (adaptive thinking). Still functional, but Anthropic will retire older models.")]
+[Obsolete("Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet55 (claude-sonnet-5-5, adaptive thinking). Still functional, but Anthropic will retire older models.")]
 public class Sonnet45 : AnthropicLegacyThinkingBase, IAgentLlm
 {
     /// <inheritdoc />

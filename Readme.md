@@ -28,7 +28,7 @@ IAiProvider ai = /* injected */;
 var answer = await ai.GenerateAsync(new GPT5(), "Summarise the CAP theorem in one sentence.");
 
 // Typed, structured output (JSON Schema generated for you)
-var review = await ai.GenerateAsync(new Sonnet5(), new CodeReviewPrompt { Diff = diff });
+var review = await ai.GenerateAsync(new Sonnet55(), new CodeReviewPrompt { Diff = diff });
 Console.WriteLine(review.Value.Severity);     // strongly typed
 Console.WriteLine(review.MetaData.TotalCost); // cost, already computed
 ```
@@ -208,7 +208,7 @@ stops you from, for example, asking an embedding model to generate an image.
 | `IVideoLlm`     | Video generation |
 | `IFast`         | Opt-in fast inference tier (premium pricing) |
 
-Concrete model classes (`GPT5`, `Sonnet5`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
+Concrete model classes (`GPT5`, `Sonnet55`, `GPTImage15`, `TextEmbedding3Large`) ship inside each
 provider package and evolve with the providers. Discover them through IntelliSense or the
 package's `Llm/` folder; each class carries its own context window, pricing and supported
 endpoints. This README lists no model tables, because they go stale every release.
@@ -309,7 +309,7 @@ Console.WriteLine(reply.Value); // "4"
 
 // Structured. SentimentResponse is filled from the model's JSON.
 Result<SentimentResponse> r = await ai.GenerateAsync(
-    new Sonnet5(),
+    new Sonnet55(),
     new SentimentPrompt { Text = "I love this!" });
 
 Console.WriteLine(r.Value.Sentiment);  // "positive"
@@ -440,7 +440,7 @@ var fast = await ai.GenerateAsync(
     "Draft a release note for v10.");
 ```
 
-The same property covers Anthropic fast mode, OpenAI fast mode (`Astra6`, `Sol6`, `Luna6`,
+The same property covers Anthropic fast mode, OpenAI fast mode (`Astra6`, `Sol61`, `Luna6`,
 `Terra56`) and xAI Priority Processing (`Grok47`) — each provider's wire format is handled for you,
 and every one of them charges 2× for it. Fast mode is best-effort everywhere: when a provider
 downgrades the request to standard speed, the reported cost follows it back down.
@@ -500,7 +500,7 @@ var history = new ChatMessage[]
 };
 
 var result = await ai.ChatAsync(
-    new Sonnet5(),
+    new Sonnet55(),
     new HelpdeskPrompt { Product = "Zonit.Ai" },   // system instruction
     history);
 
@@ -765,7 +765,7 @@ no plumbing on your side.
 `.RunStreamAsync()` emits a sealed `AgentEvent` hierarchy so you can drive a live UI:
 
 ```csharp
-await foreach (var evt in ai.Agent(new Sonnet5(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
+await foreach (var evt in ai.Agent(new Sonnet55(), prompt).AddTool<SaveNoteTool>().RunStreamAsync())
 {
     switch (evt)
     {

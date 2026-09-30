@@ -3,7 +3,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <summary>
 /// O3 - OpenAI's reasoning model optimized for complex problems.
 /// </summary>
-[Obsolete("Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality.")]
+[Obsolete("Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality.")]
 public class O3 : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

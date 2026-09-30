@@ -284,6 +284,41 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithSonnet55DefaultReason_ShouldOmitThinking()
+    {
+        // Sonnet 5.5 rejects `thinking: disabled` with a 400 (unlike Sonnet 5, which
+        // gets the explicit disable), so an unset Reason must leave the field out.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Sonnet55(), new TestPrompt { Text = "Say hello" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"claude-sonnet-5-5\"");
+        capturedRequest.Should().NotContain("\"thinking\"");
+        capturedRequest.Should().NotContain("disabled");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Sonnet55StructuredOutput_DoesNotForceTheTool()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse(
+            """{"id":"msg_1","stop_reason":"tool_use","content":[{"type":"tool_use","id":"tu_1","name":"respond_json","input":{"name":"Ada","age":36,"active":true,"score":9.5,"note":"x","tag":"PIONEER"}}],"usage":{"input_tokens":1,"output_tokens":1}}""",
+            r => capturedRequest = r);
+
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Sonnet55(), new FlatPrompt(), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedRequest!);
+        doc.RootElement.GetProperty("tool_choice").GetProperty("type").GetString()
+            .Should().Be("auto", "Sonnet 5.5 answers a forced tool_choice with a 400");
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithOpus55ReasonExtra_ShouldSendAdaptiveThinkingWithXHighEffort()
     {
         string? capturedRequest = null;

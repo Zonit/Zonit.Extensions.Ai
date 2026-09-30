@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// GPT-5.2-pro - Version of GPT-5.2 that produces smarter and more precise responses.
 /// Uses more compute for higher quality outputs.
 /// </summary>
-[Obsolete("Superseded by Sol6 (gpt-6-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality.")]
+[Obsolete("Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality.")]
 public class GPT52Pro : OpenAiReasoningBase<OpenAiReasonEffort>, IAgentLlm
 {
     /// <inheritdoc />

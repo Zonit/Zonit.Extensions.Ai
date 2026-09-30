@@ -21,7 +21,7 @@ the compiler stops you from, for example, asking an embedding model to generate 
 Concrete model classes live in the provider package under its `Llm/` folder. Use IntelliSense;
 do not invent or memorise model names, because they change every release. Verified examples at
 the time of writing: OpenAI `GPT5`, `GPT52`, `O3`, `GPTImage15`, `TextEmbedding3Large`,
-`GPT4oTranscribe`; Anthropic `Sonnet5`, `Opus55`, `Haiku45`; Google `Gemini38Flash`; xAI `Grok47`. For the capability each package provides,
+`GPT4oTranscribe`; Anthropic `Sonnet55`, `Opus55`, `Haiku45`; Google `Gemini38Flash`; xAI `Grok47`. For the capability each package provides,
 see [`providers.md`](./providers.md).
 
 > 📋 For the complete, always-current list of **every** model — provider, context window,
@@ -272,10 +272,11 @@ var r = await ai.GenerateAsync(
 await ai.GenerateAsync(new O3 { Reason = OpenAiReasonEffort.High }, "Prove...", ct);
 
 // GPT-5.6+ (Sol / Terra / Luna) and GPT-6 (Astra / Sol / Luna) add two deeper effort levels: Xhigh and Max.
-await ai.GenerateAsync(new Sol6 { Reason = OpenAiReasonEffortExtended.Xhigh }, prompt, ct);
+await ai.GenerateAsync(new Luna6 { Reason = OpenAiReasonEffortExtended.Xhigh }, prompt, ct);
 
-// GPT-6 Astra always reasons: its enum has no None (the API rejects it).
+// GPT-6 Astra and GPT-6.1 Sol always reason: their enum has no None (the API rejects it).
 await ai.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortAlwaysOn.Max }, prompt, ct);
+await ai.GenerateAsync(new Sol61 { Reason = OpenAiReasonEffortAlwaysOn.Xhigh }, prompt, ct);
 ```
 
 Gemini 3.x models take a `thinkingLevel` the same way, through a model-specific `ReasonType`. Gemini
@@ -296,7 +297,7 @@ calculation switches to the fast rate automatically when it is selected.
 
 ```csharp
 await ai.GenerateAsync(new Opus55 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
-await ai.GenerateAsync(new Sol6 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
+await ai.GenerateAsync(new Sol61 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
 await ai.GenerateAsync(new Grok47 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
 ```
 
@@ -305,10 +306,10 @@ One property, three providers — each provider's own wire spelling is handled f
 | Models | On the wire | Premium | Notes |
 | :--- | :--- | :--- | :--- |
 | `Opus55`, `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). |
-| `Astra6`, `Sol6`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
+| `Astra6`, `Sol61`, `Sol6`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
 | `Grok47`, `Grok46` | `service_tier: "priority"` | 2× on every token type | xAI Priority Processing — higher scheduling priority (lower TTFT and inter-token latency) when xAI is under load. |
 
-The premium composes with long-context tiering rather than replacing it: a fast `Sol6` request
+The premium composes with long-context tiering rather than replacing it: a fast `Sol61` request
 above 272K input tokens bills at 2× the *long-context* rate ($8 / $30 per MTok), not 2× the short
 one. `Speed` defaults to `SpeedType.Standard` everywhere, so nothing changes until you opt in, and
 setting it on a model that does not implement `IFast` has no effect.

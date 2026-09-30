@@ -23,6 +23,7 @@ public class FastModePricingTests
 
     [Theory]
     [InlineData(typeof(Astra6))]
+    [InlineData(typeof(Sol61))]
     [InlineData(typeof(Sol6))]
     [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
@@ -44,6 +45,7 @@ public class FastModePricingTests
 
     [Theory]
     [InlineData(typeof(Astra6))]
+    [InlineData(typeof(Sol61))]
     [InlineData(typeof(Sol6))]
     [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
@@ -58,6 +60,7 @@ public class FastModePricingTests
     [Theory]
     // model,          fast short in, fast long in, fast short out, fast long out, fast short cached, fast long cached
     [InlineData(typeof(Astra6), 20.00, 40.00, 100.00, 150.00, 2.00, 4.00)]
+    [InlineData(typeof(Sol61), 4.00, 8.00, 20.00, 30.00, 0.20, 0.40)]
     [InlineData(typeof(Sol6), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
     [InlineData(typeof(Luna6), 0.20, 0.40, 1.00, 1.50, 0.02, 0.04)]
     [InlineData(typeof(Sol56), 8.00, 16.00, 40.00, 60.00, 0.80, 1.60)]
@@ -270,6 +273,7 @@ public class FastModePricingTests
     private static ILlm CreateFast(Type modelType) => modelType switch
     {
         _ when modelType == typeof(Astra6) => new Astra6 { Speed = SpeedType.Fast },
+        _ when modelType == typeof(Sol61) => new Sol61 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Sol6) => new Sol6 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Luna6) => new Luna6 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Sol56) => new Sol56 { Speed = SpeedType.Fast },
