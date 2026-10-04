@@ -3,6 +3,30 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.17.0 — 2026-10-04
+
+### TranslatePrompt: `Notes` from the author
+
+- **Added** `TranslatePrompt.Notes` (`string?`, default `null`): what the author knows about the text
+  — a term to keep, a part a model tends to get wrong. Any language. When set, the prompt gets a
+  "Notes from the author" block in `<author_notes>` tags right before the source text, saying the
+  notes apply together with the rules and decide where they disagree. When unset or blank, the
+  prompt carries no trace of it.
+- Measured on a market signal with a price block, EN → pl, 40 runs per row:
+
+  | model | note | half-translated rate (`USD/funt`) |
+  | :--- | :--- | :---: |
+  | GPT-6 Luna, Low | none | 19 |
+  | GPT-6 Luna, Low | "Price lists and tables are translated too: …" | 3 |
+  | GPT-6 Luna, Low | "tłumacz bloki cen" | 1 |
+  | GPT-6 Luna, Low | "The price list follows the same rules as the prose, …" | 2 |
+  | Claude Sonnet 5.5 | none / targeted | 0 / 0 |
+
+  No run echoed the notes into the translation. Identifier fields (`specNet`) were renamed in 1 or 2
+  runs of 40 with and without a note alike.
+- Tests: an unset, empty or blank note leaves no trace; a note sits between the language rules and
+  the source text, and the output contract stays last.
+
 ## 10.16.0 — 2026-10-04
 
 ### One stream stall limit: `InterEventTimeout`, default 10 minutes

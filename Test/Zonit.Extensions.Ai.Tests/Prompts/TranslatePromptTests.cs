@@ -116,6 +116,37 @@ public class TranslatePromptTests
         text.Should().Contain("(12,5%)");
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  \n ")]
+    public void Notes_WhenEmpty_LeaveNoTrace(string? notes)
+    {
+        var text = new ScribanPromptRenderer().Render(
+            new TranslatePrompt { Content = Source, Target = "pl", Notes = notes });
+
+        text.Should().NotContain("<author_notes>");
+        text.Should().NotContain("Notes from the author");
+    }
+
+    [Fact]
+    public void Notes_SitBetweenTheRulesAndTheSourceText_AndTheOutputContractStaysLast()
+    {
+        const string notes = "Price lists and tables are translated too.";
+        var text = new ScribanPromptRenderer().Render(
+            new TranslatePrompt { Content = Source, Target = "pl", Notes = notes }).TrimEnd();
+
+        text.Should().Contain("# Notes from the author");
+        text.Should().Contain("where a note and a rule disagree, the note decides");
+        text.Should().Contain("<author_notes>\n" + notes + "\n</author_notes>");
+
+        var conventions = text.IndexOf("# Polish conventions", StringComparison.Ordinal);
+        var notesAt = text.IndexOf("<author_notes>", StringComparison.Ordinal);
+        var sourceAt = text.LastIndexOf("<source_text>", StringComparison.Ordinal);
+        notesAt.Should().BeGreaterThan(conventions).And.BeLessThan(sourceAt);
+        text.Should().EndWith("Keep the structure, markup and tokens of the source.");
+    }
+
     [Fact]
     public void Turkish_PutsThePercentSignFirst()
         => Render("tr").Should().Contain("(%12,5)");

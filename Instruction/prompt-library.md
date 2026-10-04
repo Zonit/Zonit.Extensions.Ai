@@ -63,6 +63,7 @@ Properties:
 | `Content` | `string` (required) | | Text to translate |
 | `Target` | `Culture` (required) | | Target language, e.g. `"pl"`, `"de-DE"` |
 | `Source` | `Culture` | auto-detect | Leave unset to detect the source language |
+| `Notes` | `string?` | `null` | Author's notes for this translation: context, terminology, a part that needs care. Any language. Unset → no notes section in the prompt |
 
 ```csharp
 // Explicit source language (otherwise auto-detected)
@@ -73,6 +74,27 @@ new TranslatePrompt
     Target  = "de-DE",
 };
 ```
+
+### Notes from the author
+
+`Notes` passes what the author knows about the text: a term to keep, a part a model tends to get
+wrong. The prompt places them in their own block right before the source text; they apply together
+with the built-in rules, and where a note and a rule disagree, the note decides. Write each note as
+a plain statement of what the translation should do.
+
+```csharp
+new TranslatePrompt
+{
+    Content = signal,
+    Target  = "pl",
+    Notes   = "The price list follows the same rules as the prose.",
+};
+```
+
+A note helps most where a cheaper model is weakest. On a market signal with a price block
+(GPT-6 Luna, Low, 40 runs each), Luna wrote a half-translated rate such as `USD/funt` in 19 runs
+without a note and in 1 to 3 runs with one; even the two-word note `tłumacz bloki cen` worked.
+Claude Sonnet 5.5 made no such error with or without a note.
 
 Each call is independent, so a pipeline can translate the same text into many languages in
 parallel.

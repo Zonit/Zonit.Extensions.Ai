@@ -60,6 +60,22 @@ public class TranslatePrompt : PromptBase<string>
     /// </summary>
     public Culture Source { get; init; }
 
+    /// <summary>
+    /// Optional notes from the author for this translation — context, terminology, or a part of
+    /// the text that needs care (e.g. <c>"Price lists and tables are translated too."</c>,
+    /// <c>"Keep the product name Flow untranslated."</c>). Written in any language. Leave unset
+    /// (<c>null</c>) for none: the prompt then carries no notes section at all.
+    /// </summary>
+    /// <remarks>
+    /// Notes are applied together with the built-in rules; where a note and a rule disagree, the
+    /// note decides, because the author knows the text. Write a note as a plain statement of what
+    /// the translation should do; one note per line works well.
+    /// </remarks>
+    public string? Notes { get; init; }
+
+    /// <summary>Whether <see cref="Notes"/> has content; selects the notes section of the template.</summary>
+    public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
+
     /// <summary>Two-letter target code that selects the language section (e.g. <c>"pl"</c>); Norwegian variants map to <c>"no"</c>.</summary>
     public string TargetLanguage => NormalizeCode(Target);
 
@@ -316,6 +332,15 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Use the quotation marks, decimal mark, digit grouping, percent spacing, date format, currency position and per form for units that an educated native reader of {{ target_name }} expects.
 - Use the script and full diacritics of {{ target_name }}, and the punctuation {{ target_name }} uses for an aside.
 - Where a convention is uncertain, prefer faithful accuracy over creative localisation.
+{{ end }}
+{{ if has_notes }}
+# Notes from the author
+
+The author of the text added these notes for this translation. They apply together with the rules above, and where a note and a rule disagree, the note decides.
+
+<author_notes>
+{{ notes }}
+</author_notes>
 {{ end }}
 
 <source_text>
