@@ -284,6 +284,27 @@ public sealed class AiResilienceOptions
     public TimeSpan InterEventTimeout { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
+    /// Maximum gap between two stream frames while the model is <i>writing</i> — an answer or
+    /// tool-call arguments are streaming token by token. Default: 2 minutes. Zero or less falls
+    /// back to <see cref="InterEventTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Applies to the Responses API transport (OpenAI, xAI): <c>GenerateAsync</c>,
+    /// <c>ChatAsync</c> and agent turns. Writing produces a frame every few hundred
+    /// milliseconds — a long OpenAI answer measured at 24k frames over six minutes never went
+    /// more than six seconds without one — so a silence this long means the stream is dead,
+    /// not thinking. <see cref="InterEventTimeout"/> still governs the phases that may
+    /// legitimately sit silent (reasoning, server-side tools).
+    /// </para>
+    /// <para>
+    /// When either limit fires, or the connection drops mid-stream, the request is re-issued
+    /// within <see cref="MaxRetryAttempts"/>. Generation restarts from zero and is billed again.
+    /// </para>
+    /// </remarks>
+    public TimeSpan OutputStallTimeout { get; set; } = TimeSpan.FromMinutes(2);
+
+    /// <summary>
     /// Maximum number of retry attempts before failing. One knob for the whole
     /// library: it bounds both the HTTP-layer retries (connection / 429 / 5xx,
     /// before a response arrives) and the client-side stream retries (an empty

@@ -31,13 +31,13 @@ public sealed class XProvider : IModelProvider
     private readonly HttpClient _httpClient;
     private readonly ILogger<XProvider> _logger;
     private readonly XOptions _options;
-    private readonly TimeSpan _interEventTimeout;
+    private readonly AiResilienceOptions _resilience;
 
     /// <param name="httpClient">Typed client carrying the streaming resilience pipeline.</param>
     /// <param name="options">Provider options (key, base URL).</param>
     /// <param name="logger">Provider logger.</param>
     /// <param name="aiOptions">
-    /// Global AI options, for the stream watchdog. Optional so the constructor stays
+    /// Global AI options, for the stream watchdogs and stream retries. Optional so the constructor stays
     /// source-compatible; DI always supplies it (<c>AddAi()</c> registers it).
     /// </param>
     public XProvider(
@@ -50,10 +50,9 @@ public sealed class XProvider : IModelProvider
         _logger = logger;
         _options = options.Value;
 
-        // Dead-stream watchdog for the assembled (non-live) paths — the same knob the agent
-        // loop uses, so both streaming paths stall-detect identically.
-        var configured = aiOptions?.Value.Resilience.InterEventTimeout ?? TimeSpan.Zero;
-        _interEventTimeout = configured > TimeSpan.Zero ? configured : TimeSpan.FromMinutes(30);
+        // Dead-stream watchdogs and stream retries for the assembled (non-live) paths — the
+        // same knobs the agent loop uses, so both streaming paths stall-detect identically.
+        _resilience = aiOptions?.Value.Resilience ?? new AiResilienceOptions();
 
         ConfigureHttpClient();
     }
@@ -77,7 +76,7 @@ public sealed class XProvider : IModelProvider
                 request.Stream = streaming ? true : null;
                 return JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
             },
-            _interEventTimeout,
+            _resilience,
             Name,
             operation,
             _logger,

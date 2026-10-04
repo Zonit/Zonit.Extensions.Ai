@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Runtime.ExceptionServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -49,7 +50,7 @@ public static class ResponsesApiTransport
     /// <param name="operation">Calling operation, for diagnostics.</param>
     /// <param name="logger">Logger for the request payload and errors.</param>
     /// <param name="cancellationToken">Caller's token.</param>
-    public static async Task<string> SendAsync(
+    public static Task<string> SendAsync(
         HttpClient httpClient,
         string requestPath,
         Func<bool, string> payloadFactory,
@@ -58,6 +59,127 @@ public static class ResponsesApiTransport
         string operation,
         ILogger logger,
         CancellationToken cancellationToken = default)
+        => SendWithRetryAsync(
+            httpClient, requestPath, payloadFactory, interEventTimeout, TimeSpan.Zero,
+            maxRetries: 0, retryDelay: static _ => TimeSpan.Zero,
+            provider, operation, logger, cancellationToken);
+
+    /// <summary>
+    /// Sends the request and returns the terminal Response object as JSON, re-issuing it when the
+    /// stream stalls or breaks before the terminal event.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Polly's retry covers only what happens before the response headers arrive; once a
+    /// <c>200</c> has come back and the body is streaming, a stream that goes silent or drops
+    /// is invisible to it. This loop covers that window: a watchdog timeout
+    /// (<see cref="AiResilienceOptions.InterEventTimeout"/> while the model thinks,
+    /// <see cref="AiResilienceOptions.OutputStallTimeout"/> while it writes) or a connection
+    /// that ends mid-stream re-issues the identical request, on the shared schedule
+    /// (<see cref="AiResilienceOptions.MaxRetryAttempts"/> + <see cref="AiResilienceOptions.RetryDelay"/>).
+    /// </para>
+    /// <para>
+    /// A retry starts generation from zero and is billed again — the price of an answer, set
+    /// against waiting on a stream that will never finish. An <c>error</c> event, an HTTP error
+    /// status and the caller's cancellation are not retried here.
+    /// </para>
+    /// </remarks>
+    /// <param name="httpClient">Typed client, carrying the streaming resilience pipeline.</param>
+    /// <param name="requestPath">Endpoint path, e.g. <c>/v1/responses</c>.</param>
+    /// <param name="payloadFactory">Builds the request JSON for the given streaming mode.</param>
+    /// <param name="resilience">Watchdog limits and retry schedule — <c>Ai:Resilience</c>.</param>
+    /// <param name="provider">Provider name, for diagnostics and for the streaming-support flag.</param>
+    /// <param name="operation">Calling operation, for diagnostics.</param>
+    /// <param name="logger">Logger for the request payload, retries and errors.</param>
+    /// <param name="cancellationToken">Caller's token.</param>
+    public static Task<string> SendAsync(
+        HttpClient httpClient,
+        string requestPath,
+        Func<bool, string> payloadFactory,
+        AiResilienceOptions resilience,
+        string provider,
+        string operation,
+        ILogger logger,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(resilience);
+
+        return SendWithRetryAsync(
+            httpClient, requestPath, payloadFactory,
+            resilience.InterEventTimeout > TimeSpan.Zero ? resilience.InterEventTimeout : TimeSpan.FromMinutes(30),
+            resilience.OutputStallTimeout,
+            Math.Max(0, resilience.MaxRetryAttempts),
+            resilience.RetryDelay,
+            provider, operation, logger, cancellationToken);
+    }
+
+    private static async Task<string> SendWithRetryAsync(
+        HttpClient httpClient,
+        string requestPath,
+        Func<bool, string> payloadFactory,
+        TimeSpan interEventTimeout,
+        TimeSpan outputStallTimeout,
+        int maxRetries,
+        Func<int, TimeSpan> retryDelay,
+        string provider,
+        string operation,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await SendOnceAsync(
+                        httpClient, requestPath, payloadFactory, interEventTimeout, outputStallTimeout,
+                        provider, operation, logger, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (BrokenStreamException broken)
+            {
+                var cause = broken.InnerException!;
+                if (attempt >= maxRetries || cancellationToken.IsCancellationRequested)
+                    ExceptionDispatchInfo.Throw(cause);
+
+                var delay = retryDelay(attempt + 1);
+                logger.LogWarning(
+                    "{Provider} {Operation}: the stream broke before the response completed ({Error}: {Message}). "
+                    + "Re-issuing the request in {Delay} (retry {Attempt}/{Max}); generation restarts from zero.",
+                    provider, operation, cause.GetType().Name, cause.Message, delay, attempt + 1, maxRetries);
+
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// A streamed body that stopped short of its terminal event: the watchdog fired, the
+    /// connection dropped mid-body, or the body ended without <c>response.completed</c>. All three
+    /// leave no usable answer and are transient in practice. Only failures <i>while reading the
+    /// body</i> count — a failure before the headers is Polly's to retry, and retrying it here
+    /// too would multiply the attempts.
+    /// </summary>
+    internal static bool IsBrokenStream(Exception ex) => ex switch
+    {
+        TimeoutException => true,
+        HttpRequestException { HttpRequestError: HttpRequestError.ResponseEnded } => true,
+        IOException => true,
+        _ => false,
+    };
+
+    /// <summary>Marks a body-phase failure as retryable; never escapes this class.</summary>
+    private sealed class BrokenStreamException(Exception inner) : Exception(inner.Message, inner);
+
+    private static async Task<string> SendOnceAsync(
+        HttpClient httpClient,
+        string requestPath,
+        Func<bool, string> payloadFactory,
+        TimeSpan interEventTimeout,
+        TimeSpan outputStallTimeout,
+        string provider,
+        string operation,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         var streaming = !StreamingRejected.GetValueOrDefault(provider);
 
@@ -84,8 +206,8 @@ public static class ResponsesApiTransport
                     + "long generation may outlive Ai:Resilience:AttemptTimeout and be retried from zero.",
                     provider, response.StatusCode, errorJson);
 
-                return await SendAsync(
-                        httpClient, requestPath, payloadFactory, interEventTimeout,
+                return await SendOnceAsync(
+                        httpClient, requestPath, payloadFactory, interEventTimeout, outputStallTimeout,
                         provider, operation, logger, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -98,12 +220,19 @@ public static class ResponsesApiTransport
         if (!streaming)
             return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
 
-        return await ResponsesStreamAssembler
-            .ReadAsync(reader, interEventTimeout, provider, operation, cancellationToken)
-            .ConfigureAwait(false);
+            return await ResponsesStreamAssembler
+                .ReadAsync(reader, interEventTimeout, outputStallTimeout, provider, operation, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested && IsBrokenStream(ex))
+        {
+            throw new BrokenStreamException(ex);
+        }
     }
 
     /// <summary>

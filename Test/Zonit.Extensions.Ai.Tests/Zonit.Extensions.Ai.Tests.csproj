@@ -56,6 +56,7 @@
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Together\Zonit.Extensions.Ai.Together.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Fireworks\Zonit.Extensions.Ai.Fireworks.csproj" />
     <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Perplexity\Zonit.Extensions.Ai.Perplexity.csproj" />
+    <ProjectReference Include="..\..\Source\Zonit.Extensions.Ai.Prompts\Zonit.Extensions.Ai.Prompts.csproj" />
   </ItemGroup>
 
 </Project>

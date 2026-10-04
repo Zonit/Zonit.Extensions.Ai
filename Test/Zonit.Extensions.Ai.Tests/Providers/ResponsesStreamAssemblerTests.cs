@@ -84,6 +84,108 @@ public class ResponsesStreamAssemblerTests
             .WithMessage("*InterEventTimeout*");
     }
 
+    [Fact]
+    public async Task ReadAsync_WhenTheStreamFreezesMidAnswer_TimesOutOnTheOutputStallLimit()
+    {
+        // The Sol 6.1 hang: a message item is open and text is streaming, then nothing. With only
+        // the 30-minute thinking limit this sat until the caller's own deadline; while the model
+        // writes, the tighter limit applies.
+        using var stream = new ScriptedStream(stallAtEnd: true,
+            (TimeSpan.Zero, MessageItemAdded + Delta("Gold settled at ")));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var act = () => ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150), "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>().WaitAsync(TimeSpan.FromSeconds(10)))
+            .WithMessage("*OutputStallTimeout*");
+    }
+
+    [Fact]
+    public async Task ReadAsync_ToleratesALongSilenceWhileTheModelThinks()
+    {
+        // A reasoning item is open, not a message: silence there is thinking, and the output
+        // stall limit must not cut it short. Once the message is done, the limit relaxes again.
+        using var stream = new ScriptedStream(stallAtEnd: false,
+            (TimeSpan.Zero, ReasoningItemAdded),
+            (TimeSpan.FromMilliseconds(500), ReasoningItemDone + MessageItemAdded + Delta("Hello")),
+            (TimeSpan.Zero, MessageItemDone),
+            (TimeSpan.FromMilliseconds(500), Completed("Hello")));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var json = await ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150), "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        json.Should().Contain("\"text\":\"Hello\"");
+    }
+
+    [Fact]
+    public async Task SendAsync_ReissuesTheRequest_WhenTheStreamFreezesMidAnswer()
+    {
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, MessageItemAdded + Delta("half an ans"))),
+            () => new ScriptedStream(stallAtEnd: false,
+                (TimeSpan.Zero, MessageItemAdded + Delta("Hello") + MessageItemDone + Completed("Hello"))));
+
+        var json = await SendAsync(handler, maxRetries: 2);
+
+        json.Should().Contain("\"text\":\"Hello\"");
+        handler.Calls.Should().Be(2, "the frozen stream is re-issued once and the second attempt completes");
+    }
+
+    [Fact]
+    public async Task SendAsync_ReissuesTheRequest_WhenTheStreamEndsWithoutATerminalEvent()
+    {
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: false, (TimeSpan.Zero, MessageItemAdded + Delta("half"))),
+            () => new ScriptedStream(stallAtEnd: false, (TimeSpan.Zero, Completed("Hello"))));
+
+        var json = await SendAsync(handler, maxRetries: 2);
+
+        json.Should().Contain("\"text\":\"Hello\"");
+        handler.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task SendAsync_WhenRetriesRunOut_SurfacesTheOriginalStall()
+    {
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, MessageItemAdded + Delta("a"))),
+            () => new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, MessageItemAdded + Delta("a"))));
+
+        var act = () => SendAsync(handler, maxRetries: 1);
+
+        (await act.Should().ThrowAsync<TimeoutException>()).WithMessage("*OutputStallTimeout*");
+        handler.Calls.Should().Be(2, "one attempt plus one retry");
+    }
+
+    [Fact]
+    public async Task SendAsync_DoesNotRetryAnErrorEvent()
+    {
+        // An `error` frame is the server's answer, not a broken stream.
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: false,
+                (TimeSpan.Zero, "data: {\"type\":\"error\",\"code\":\"invalid_prompt\",\"message\":\"bad\"}\n\n")));
+
+        var act = () => SendAsync(handler, maxRetries: 3);
+
+        (await act.Should().ThrowAsync<HttpRequestException>()).WithMessage("*bad*");
+        handler.Calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task SendAsync_DoesNotRetryAfterTheCallerCancels()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, MessageItemAdded)));
+
+        var act = () => SendAsync(handler, maxRetries: 3, outputStall: TimeSpan.FromSeconds(30), cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        handler.Calls.Should().Be(1);
+    }
+
     [Theory]
     // The one case that must trigger the buffered fallback: an unverified organization.
     [InlineData(HttpStatusCode.BadRequest,
@@ -109,6 +211,100 @@ public class ResponsesStreamAssemblerTests
 
         return await ResponsesStreamAssembler.ReadAsync(
             reader, TimeSpan.FromSeconds(5), "OpenAI", "GenerateAsync", CancellationToken.None);
+    }
+
+    private static Task<string> SendAsync(
+        SequenceHandler handler, int maxRetries, TimeSpan? outputStall = null, CancellationToken cancellationToken = default)
+    {
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.test") };
+        var resilience = new AiResilienceOptions
+        {
+            InterEventTimeout = TimeSpan.FromSeconds(30),
+            OutputStallTimeout = outputStall ?? TimeSpan.FromMilliseconds(150),
+            MaxRetryAttempts = maxRetries,
+            RetryBaseDelay = TimeSpan.FromMilliseconds(1),
+            RetryMaxDelay = TimeSpan.FromMilliseconds(1),
+        };
+
+        return ResponsesApiTransport.SendAsync(
+            http, "/v1/responses", _ => "{}", resilience, "OpenAI", "GenerateAsync",
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
+    }
+
+    private const string ReasoningItemAdded = "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"reasoning\"}}\n\n";
+    private const string ReasoningItemDone = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"reasoning\"}}\n\n";
+    private const string MessageItemAdded = "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\"}}\n\n";
+    private const string MessageItemDone = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\n";
+
+    private static string Delta(string text)
+        => "data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + text + "\"}\n\n";
+
+    private static string Completed(string text)
+        => "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"status\":\"completed\","
+            + "\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"" + text + "\"}]}]}}\n\n";
+
+    /// <summary>Answers each request with the next scripted SSE body, counting the calls.</summary>
+    private sealed class SequenceHandler(params Func<Stream>[] bodies) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var body = bodies[Math.Min(Calls, bodies.Length - 1)]();
+            Calls++;
+            var content = new StreamContent(body);
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/event-stream");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        }
+    }
+
+    /// <summary>
+    /// Delivers SSE chunks after scripted pauses, then either ends or freezes like a server that
+    /// keeps the socket open but sends nothing more.
+    /// </summary>
+    private sealed class ScriptedStream(bool stallAtEnd, params (TimeSpan Delay, string Text)[] chunks) : Stream
+    {
+        private int _next;
+        private byte[] _pending = [];
+        private int _offset;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => 0; set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            if (_offset >= _pending.Length)
+            {
+                if (_next >= chunks.Length)
+                {
+                    if (!stallAtEnd) return 0;
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                }
+
+                var (delay, text) = chunks[_next++];
+                if (delay > TimeSpan.Zero)
+                    await Task.Delay(delay, cancellationToken);
+                _pending = Encoding.UTF8.GetBytes(text);
+                _offset = 0;
+            }
+
+            var n = Math.Min(buffer.Length, _pending.Length - _offset);
+            _pending.AsMemory(_offset, n).CopyTo(buffer);
+            _offset += n;
+            return n;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            => ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     /// <summary>A stream that never produces a byte and never ends — a frozen server.</summary>

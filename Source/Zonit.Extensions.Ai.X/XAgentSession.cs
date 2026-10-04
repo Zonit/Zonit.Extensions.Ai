@@ -103,7 +103,7 @@ internal sealed class XAgentSession : IAgentSession
                         request.Stream = streaming ? true : null;
                         return JsonSerializer.Serialize(request, XJsonContext.Default.XResponsesRequest);
                     },
-                    _resilience.InterEventTimeout,
+                    _resilience,
                     "X",
                     $"agent turn {_turnIndex}",
                     _logger,

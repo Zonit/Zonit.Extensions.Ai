@@ -815,7 +815,7 @@ dotnet add package Zonit.Extensions.Ai.Prompts
 ```
 
 `TranslatePrompt` translates text as a native writer would, applying per-language localization
-rules (quotation marks, number and date formats, dash conventions and register) for 19 languages
+rules (quotation marks, number, currency, unit and date formats, dash conventions and register) for 19 languages
 (`en, pl, de, es, fr, it, pt, nl, sv, da, no, fi, ru, uk, cs, sk, hu, tr, ar`), with a general
 fallback for any other target.
 

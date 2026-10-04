@@ -42,17 +42,56 @@ public static class ResponsesStreamAssembler
     /// <param name="cancellationToken">Caller's token.</param>
     /// <exception cref="TimeoutException">No frame arrived within <paramref name="interEventTimeout"/>.</exception>
     /// <exception cref="HttpRequestException">The stream carried an <c>error</c> event, or ended before a terminal event.</exception>
-    public static async Task<string> ReadAsync(
+    public static Task<string> ReadAsync(
         StreamReader reader,
         TimeSpan interEventTimeout,
         string provider,
         string operation,
         CancellationToken cancellationToken = default)
+        => ReadAsync(reader, interEventTimeout, TimeSpan.Zero, provider, operation, cancellationToken);
+
+    /// <summary>
+    /// Consumes the SSE stream to completion and returns the raw JSON of the terminal Response
+    /// object, with a tighter watchdog while the model is writing.
+    /// </summary>
+    /// <remarks>
+    /// Two limits, because the stream has two kinds of silence. While the model reasons (or
+    /// waits on a server-side tool) nothing may arrive for many minutes, and that is healthy —
+    /// <paramref name="interEventTimeout"/> applies. Once an output item that streams tokens is
+    /// open (a <c>message</c> or a <c>function_call</c>), a frame arrives every few hundred
+    /// milliseconds; a gap of <paramref name="outputStallTimeout"/> there is a dead stream, not
+    /// thinking. Without the second limit a stream that froze mid-answer sat for the full
+    /// <paramref name="interEventTimeout"/> (30 minutes by default) before anything noticed.
+    /// </remarks>
+    /// <param name="reader">Reader over the raw SSE body.</param>
+    /// <param name="interEventTimeout">Limit outside an open output item; see <see cref="AiSseReader"/>.</param>
+    /// <param name="outputStallTimeout">
+    /// Limit while an output item is streaming. Zero or less falls back to
+    /// <paramref name="interEventTimeout"/>.
+    /// </param>
+    /// <param name="provider">Provider name, for diagnostics.</param>
+    /// <param name="operation">Calling operation, for diagnostics.</param>
+    /// <param name="cancellationToken">Caller's token.</param>
+    /// <exception cref="TimeoutException">No frame arrived within the limit in effect.</exception>
+    /// <exception cref="HttpRequestException">The stream carried an <c>error</c> event, or ended before a terminal event.</exception>
+    public static async Task<string> ReadAsync(
+        StreamReader reader,
+        TimeSpan interEventTimeout,
+        TimeSpan outputStallTimeout,
+        string provider,
+        string operation,
+        CancellationToken cancellationToken = default)
     {
         string? finalResponse = null;
+        var openWritingItems = 0;
+
+        TimeSpan CurrentLimit() =>
+            openWritingItems > 0 && outputStallTimeout > TimeSpan.Zero
+                ? outputStallTimeout
+                : interEventTimeout;
 
         await foreach (var data in AiSseReader
-            .ReadFramesAsync(reader, interEventTimeout, provider, operation, cancellationToken)
+            .ReadFramesAsync(reader, CurrentLimit, provider, operation, cancellationToken)
             .ConfigureAwait(false))
         {
             // Terminated by a terminal response.* event; `[DONE]` is tolerated because some
@@ -75,6 +114,14 @@ public static class ResponsesStreamAssembler
                         finalResponse = respEl.GetRawText();
                     break;
 
+                case "response.output_item.added" when IsWritingItem(root):
+                    openWritingItems++;
+                    break;
+
+                case "response.output_item.done" when IsWritingItem(root):
+                    openWritingItems = Math.Max(0, openWritingItems - 1);
+                    break;
+
                 case "error":
                     throw new HttpRequestException(BuildStreamErrorMessage(root, provider, operation));
 
@@ -88,6 +135,7 @@ public static class ResponsesStreamAssembler
 
         if (finalResponse is null)
             throw new HttpRequestException(
+                HttpRequestError.ResponseEnded,
                 $"{provider} {operation} stream ended before a terminal response event — the response is "
                 + "incomplete and has been discarded rather than parsed as a partial answer.");
 
@@ -120,6 +168,16 @@ public static class ResponsesStreamAssembler
             ? deltaEl.GetString()
             : null;
     }
+
+    /// <summary>
+    /// Whether an <c>output_item</c> event concerns an item whose content streams token by token
+    /// — answer text or function-call arguments — as opposed to reasoning or a server-side tool,
+    /// which may legitimately sit silent.
+    /// </summary>
+    private static bool IsWritingItem(JsonElement root)
+        => root.TryGetProperty("item", out var item)
+            && item.TryGetProperty("type", out var type)
+            && type.GetString() is "message" or "function_call";
 
     private static string BuildStreamErrorMessage(JsonElement root, string provider, string operation)
     {

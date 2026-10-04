@@ -89,7 +89,8 @@ with `AddAi(o => o.Resilience...)`.
 | `AttemptTimeout` | 30 min | One **non-streaming** attempt. Does not apply to streaming calls — see the note below |
 | `MaxRetryAttempts` | 6 | Retry budget for both HTTP-layer and stream-layer retries |
 | `RetryBaseDelay` / `RetryMaxDelay` | 5 s / 60 s | Exponential backoff: first delay → steady cap |
-| `InterEventTimeout` | 30 min | Max gap between two stream frames before the stream is declared dead (streaming providers) |
+| `InterEventTimeout` | 30 min | Max gap between two stream frames before the stream is declared dead (streaming providers). Long on purpose: a model may think silently for minutes |
+| `OutputStallTimeout` | 2 min | Max gap while the model is *writing* (answer text or tool-call arguments streaming) on OpenAI / xAI. A writing model sends a frame every few hundred ms, so this silence means a dead stream |
 | `UseJitter` | `true` | Randomise HTTP-layer delays |
 | `CircuitBreakerFailureRatio` | 0.5 | Failure ratio that opens the circuit |
 
@@ -111,8 +112,10 @@ builder.Services.AddAi(o =>
 > `AttemptTimeout` applies only to calls that are **not** streamed. Anthropic, OpenAI and xAI text
 > calls all stream on the wire — including `GenerateAsync` / `ChatAsync` and every agent turn,
 > which reassemble the reply before returning — so on those providers the effective per-attempt cap
-> is `TotalRequestTimeout`, and stream liveness is enforced by `InterEventTimeout` plus HTTP/2
-> keep-alive pings.
+> is `TotalRequestTimeout`, and stream liveness is enforced by `InterEventTimeout` /
+> `OutputStallTimeout` plus HTTP/2 keep-alive pings. When either watchdog fires, or the connection
+> drops mid-stream, the request is re-issued within `MaxRetryAttempts` — generation restarts from
+> zero and is billed again.
 
 ### Two layers, one schedule
 

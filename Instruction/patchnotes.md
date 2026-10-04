@@ -3,6 +3,66 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.14.0 — 2026-10-04
+
+### OpenAI / xAI: a stream that freezes mid-answer is detected in minutes and re-issued
+
+Reported on `Sol61` (`Reason = Low`, `MaxTokens = 64000`): `GenerateAsync` returned HTTP 200, then
+sat silent for 25 minutes until the caller's own deadline. Reproduced the same long request through
+the library and straight against `/v1/responses`: both completed (7:04 and 6:38, 34k output tokens,
+no gap between frames above 1.2 s), and the library sent the same request body as the direct call.
+The parser and the request were fine; what failed was the handling of a server stream that freezes:
+
+- the only stall detector, `InterEventTimeout`, defaults to 30 minutes (reasoning may legitimately
+  be silent that long), so a stream that froze mid-answer outlived any reasonable caller deadline;
+- once the response headers arrived, nothing re-issued the request — Polly retries only before the
+  headers, and the Responses transport had no retry of its own.
+
+Changes:
+
+- **Added** `Ai:Resilience:OutputStallTimeout` (default 2 min). The Responses stream assembler tracks
+  whether an output item that streams token by token (`message`, `function_call`) is open; while one
+  is, a silence of `OutputStallTimeout` is a dead stream. Reasoning and server-side tools keep the
+  long `InterEventTimeout`.
+- **Added** stream retries to `ResponsesApiTransport` (OpenAI and xAI: `GenerateAsync`, `ChatAsync`,
+  agent turns). A watchdog timeout, a connection that drops mid-body, or a body that ends without
+  `response.completed` re-issues the request on the shared schedule (`MaxRetryAttempts`,
+  `RetryDelay`), with a warning in the log. The retry restarts generation and is billed again. An
+  `error` event, an HTTP error status, a failure before the headers (Polly's job) and caller
+  cancellation are not retried. When the budget runs out the original exception surfaces.
+- **Added** overloads: `ResponsesApiTransport.SendAsync(…, AiResilienceOptions, …)`,
+  `ResponsesStreamAssembler.ReadAsync(…, interEventTimeout, outputStallTimeout, …)` and
+  `AiSseReader.ReadFramesAsync(…, Func<TimeSpan>, …)` (limit re-read before every wait). The existing
+  overloads behave as before.
+- **Changed** a stream that ends before its terminal event now throws `HttpRequestException` with
+  `HttpRequestError.ResponseEnded` (same message as before).
+- Tests: deterministic stall/retry tests on scripted SSE streams (freeze mid-answer → timeout on the
+  short limit; a long silence while reasoning → no timeout; freeze → re-issued and completed;
+  truncation → re-issued; retries exhausted → original `TimeoutException`; `error` event and caller
+  cancellation → no retry). Live: OpenAI / xAI streaming and agent smoke tests, and the long Sol61
+  request re-run on the new code.
+
+### TranslatePrompt: explicit rules for currencies, units and percent signs (#29)
+
+Models localized separators correctly but filled the gaps around money and units differently:
+`USD/gal` stayed as is on one model and became the half-translated `USD/galon` on another, and
+nothing said where a currency symbol goes.
+
+- **Universal rules**: amounts stay in their source currency with their exact value and decimals
+  (never converted); foreign currencies are written with their ISO code unless the language says
+  otherwise; units take the target's names without converting values; metric symbols and domain codes
+  the culture uses as-is (`kg`, `MWh`, `EUR/MWh`, `MMBtu`) stay; a rate on an English abbreviation
+  (`USD/gal`) is written out whole in the target's form; each currency and unit has one form per text.
+  The number format explicitly covers ranges, prices, percentages and compound units.
+- **Per language** (all 19 sections): a `Currency` line (symbol/code, position, spacing), a `Units`
+  line (unit names and the "per" construction — `USD za galon`, `USD je Gallone`, `USD par gallon`,
+  `galon başına 3,40 USD`, …) and the percent spacing (`12,5%`, `12,5 %`, Turkish `%12,5`). The
+  fallback for other languages states the same rules generically.
+- Live EN → pl on market text: GPT-6 Luna and Claude Sonnet 5.5 now both write `4 327,29 USD za uncję`,
+  `3,3995 USD za galon`, `96 038`, and keep `USD/MMBtu` and `EUR/MWh`.
+- Tests: `TranslatePromptTests` renders every language section; `TranslatePromptLiveSmokeTests`
+  (opt-in) checks the Polish forms on two model families.
+
 ## 10.13.0 — 2026-09-30
 
 ### Tool-step reasoning becomes a separate switch (`ToolStepReasoning`), guarded by analyzer ZAI001

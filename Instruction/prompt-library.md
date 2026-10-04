@@ -26,6 +26,18 @@ translated text directly as a `string` (no JSON wrapper). Per-language rules cov
 languages plus Russian, Ukrainian, Turkish and Arabic; any other target falls back to general
 translation rules.
 
+Each language section states, explicitly, how that culture writes:
+
+- **Numbers:** decimal mark, digit grouping and percent spacing. The same format applies inside
+  ranges, prices and compound units (`12,5%` in Polish, `12,5 %` in German and French, `%12,5` in Turkish).
+- **Currencies:** symbol or ISO code, its position and its spacing (`$4,327.29` in English becomes
+  `4 327,29 USD` in Polish). Amounts are never converted and keep their decimals.
+- **Units:** the culture's unit names, and its form for a rate (`USD/gal` becomes `USD za galon` in
+  Polish and `USD je Gallone` in German). Values are never converted. Metric symbols and domain codes
+  the culture uses as-is (`kg`, `MWh`, `EUR/MWh`, `MMBtu`) stay unchanged.
+
+A currency or unit is written the same way every time within one text.
+
 ```csharp
 using Zonit.Extensions.Ai.Prompts;
 

@@ -25,7 +25,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
     private readonly HttpClient _httpClient;
     private readonly AgentSessionContext _context;
     private readonly ILogger _logger;
-    private readonly TimeSpan _interEventTimeout;
+    private readonly AiResilienceOptions _resilience;
 
     private string? _previousResponseId;
     private int _turnIndex;
@@ -42,12 +42,12 @@ internal sealed class OpenAiAgentSession : IAgentSession
         HttpClient httpClient,
         AgentSessionContext context,
         ILogger logger,
-        TimeSpan interEventTimeout = default)
+        AiResilienceOptions? resilience = null)
     {
         _httpClient = httpClient;
         _context = context;
         _logger = logger;
-        _interEventTimeout = interEventTimeout > TimeSpan.Zero ? interEventTimeout : TimeSpan.FromMinutes(30);
+        _resilience = resilience ?? new AiResilienceOptions();
     }
 
     // RUC/RDC are required to match IAgentSession.RunTurnAsync (annotated in the abstraction;
@@ -80,7 +80,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
                     request.Stream = streaming ? true : null;
                     return JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiResponsesRequest);
                 },
-                _interEventTimeout,
+                _resilience,
                 "OpenAI",
                 $"agent turn {_turnIndex}",
                 _logger,
