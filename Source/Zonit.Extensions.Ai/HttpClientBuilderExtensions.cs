@@ -60,9 +60,9 @@ public static class HttpClientBuilderExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Stream liveness is enforced client-side: the agent's inter-event
-    /// SSE watchdog (60 s) reads the <c>ping</c> events Anthropic emits
-    /// every ~10–15 s during extended thinking, and the HTTP/2 keepalive
+    /// Stream liveness is enforced client-side: the inter-event SSE
+    /// watchdog (<see cref="AiResilienceOptions.InterEventTimeout"/>) reads the
+    /// <c>ping</c> events Anthropic emits every 30 s while Claude thinks, and the HTTP/2 keepalive
     /// PING frame (45 s) catches dead sockets. A per-attempt Polly cap on
     /// top is redundant and actively harmful — it cancels at exactly
     /// <c>AttemptTimeout</c> while the model is still legitimately working,

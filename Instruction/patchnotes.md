@@ -3,6 +3,45 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.16.0 — 2026-10-04
+
+### One stream stall limit: `InterEventTimeout`, default 10 minutes
+
+10.14 and 10.15 added `OutputStallTimeout` and `ThinkingStallTimeout` next to the existing
+`InterEventTimeout`. All three measured the same thing — the longest silence between two stream
+frames — split by phase on the assumption that a model may think silently for many minutes.
+Measured on the live APIs, it does not:
+
+| model, effort | run | longest gap between frames |
+| :--- | ---: | ---: |
+| `gpt-6.1-sol`, xhigh | 121 s | 15 s (reasoning arrives as separate items) |
+| `gpt-6.1-sol`, high | 82 s | 12.5 s |
+| `gpt-6-luna`, xhigh | 47 s | 4.4 s |
+| `gpt-6.1-sol`, low, long answer | 6 to 7 min | 6 s |
+| `claude-opus-5-5`, max | 4.7 min | 30 s (`ping` every 30 s while thinking) |
+| `claude-sonnet-5-5`, max | 3 min | 30 s |
+
+What can legitimately delay a frame — an overloaded server, a very long prompt being read — does not
+depend on the phase, the model or the reasoning effort. So the phases are gone and one setting covers
+every streaming provider and every phase:
+
+- **Changed** `Ai:Resilience:InterEventTimeout` default 30 → **10 minutes**: 20× the longest healthy
+  gap measured, and a dead stream is re-issued long before a typical caller deadline. Applies to
+  Anthropic, OpenAI and xAI streams, single-shot and agent alike.
+- **Obsolete** `OutputStallTimeout` and `ThinkingStallTimeout`: ignored, with a compiler warning
+  pointing to `InterEventTimeout`. A configuration file that still sets them keeps loading.
+- **Removed** the phase tracking and its infrastructure overloads added in 10.14 / 10.15
+  (`ResponsesStreamAssembler.ReadAsync` with extra limits, `AiSseReader.ReadFramesAsync` with a
+  `Func<TimeSpan>`). The single-limit signatures are unchanged.
+- **Kept** from 10.14 / 10.15: re-issuing a stream that stalls, drops or ends early (within
+  `MaxRetryAttempts`), and the diagnostic message, which names the last event and when it arrived,
+  e.g. `no event for 600 s after response.output_item.added (reasoning) at 7.5 s`.
+- **Docs** `AiProviderOptions.Timeout` described a global `HttpClientTimeout` fallback that does not
+  exist (`HttpClientTimeout` is obsolete and ignored); it now says what it is — the run timeout of the
+  Anthropic CLI transport, ignored by HTTP providers.
+- Tests: the stall tests now cover one limit in every phase (mid-answer, before output, after the
+  answer), a gap shorter than the limit, and the re-issue paths.
+
 ## 10.15.0 — 2026-10-04
 
 ### OpenAI / xAI: every phase of a Responses stream has a limit that fits it (#30)

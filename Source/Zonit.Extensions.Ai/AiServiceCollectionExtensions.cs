@@ -45,7 +45,7 @@ public static class AiServiceCollectionExtensions
     /// services.AddAi(options =>
     /// {
     ///     options.Resilience.MaxRetryAttempts = 5;
-    ///     options.Resilience.HttpClientTimeout = TimeSpan.FromMinutes(10);
+    ///     options.Resilience.InterEventTimeout = TimeSpan.FromMinutes(5);
     /// });
     /// </code>
     /// </example>

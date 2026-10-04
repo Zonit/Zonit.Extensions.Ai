@@ -35,50 +35,21 @@ public static class AiSseReader
     /// <param name="operation">Calling operation, for diagnostics (e.g. <c>"GenerateAsync"</c>).</param>
     /// <param name="cancellationToken">Caller's token.</param>
     /// <exception cref="TimeoutException">No frame arrived within <paramref name="interEventTimeout"/>.</exception>
-    public static IAsyncEnumerable<string> ReadFramesAsync(
+    public static async IAsyncEnumerable<string> ReadFramesAsync(
         StreamReader reader,
         TimeSpan interEventTimeout,
         string provider,
         string operation,
-        CancellationToken cancellationToken = default)
-        => ReadFramesAsync(reader, () => interEventTimeout, provider, operation, cancellationToken);
-
-    /// <summary>
-    /// Yields each <c>data:</c> payload in order until the stream ends, with a watchdog whose
-    /// limit may change as the stream progresses.
-    /// </summary>
-    /// <remarks>
-    /// <paramref name="interEventTimeout"/> is read before every wait, i.e. after the caller has
-    /// processed the previous frame — so a caller that tracks the stream's phase (thinking vs.
-    /// writing) can tighten or relax the limit frame by frame. A silent reasoning phase may
-    /// legitimately last many minutes; a model that is emitting text sends a frame every few
-    /// hundred milliseconds, so the same silence there means the stream is dead.
-    /// </remarks>
-    /// <param name="reader">Reader over the raw SSE body.</param>
-    /// <param name="interEventTimeout">
-    /// Current maximum gap between two frames. Values of zero or less disable the watchdog for
-    /// that wait.
-    /// </param>
-    /// <param name="provider">Provider name, for diagnostics (e.g. <c>"OpenAI"</c>).</param>
-    /// <param name="operation">Calling operation, for diagnostics (e.g. <c>"GenerateAsync"</c>).</param>
-    /// <param name="cancellationToken">Caller's token.</param>
-    /// <exception cref="TimeoutException">No frame arrived within the limit in effect.</exception>
-    public static async IAsyncEnumerable<string> ReadFramesAsync(
-        StreamReader reader,
-        Func<TimeSpan> interEventTimeout,
-        string provider,
-        string operation,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        var limit = interEventTimeout > TimeSpan.Zero ? interEventTimeout : Timeout.InfiniteTimeSpan;
         using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         while (true)
         {
-            // Re-armed before every wait rather than after every frame, so the limit reflects the
-            // state the caller reached after the previous frame. `event:` headers, comments and
-            // blank frame separators each count as a frame: they are equally proof of a live server.
-            var limit = interEventTimeout();
-            watchdog.CancelAfter(limit > TimeSpan.Zero ? limit : Timeout.InfiniteTimeSpan);
+            // Re-armed before every wait. `event:` headers, comments and blank frame separators
+            // each count as a frame: they are equally proof of a live server.
+            watchdog.CancelAfter(limit);
 
             string? line;
             try
@@ -88,8 +59,8 @@ public static class AiSseReader
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException(
-                    $"{provider} {operation} stream produced no event for {limit.TotalSeconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s — "
-                    + "server-side stall. Configurable via Ai:Resilience InterEventTimeout / OutputStallTimeout.");
+                    $"{provider} {operation} stream produced no event for {interEventTimeout.TotalSeconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s — "
+                    + "server-side stall. Configurable via Ai:Resilience InterEventTimeout.");
             }
 
             if (line is null) yield break;

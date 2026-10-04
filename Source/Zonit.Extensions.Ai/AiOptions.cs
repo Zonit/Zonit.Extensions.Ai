@@ -1,3 +1,5 @@
+using System.ComponentModel;
+
 namespace Zonit.Extensions;
 
 /// <summary>
@@ -268,65 +270,48 @@ public sealed class AiResilienceOptions
         StreamingAttemptTimeout ?? TotalRequestTimeout;
 
     /// <summary>
-    /// Maximum gap between two consecutive stream frames before the stream is
-    /// declared dead and retried (streaming providers only; non-streaming
-    /// providers ignore it). Default: 30 minutes — high-effort reasoning
-    /// legitimately pauses for many minutes between frames, so a lower value
-    /// trips the watchdog on healthy long thinking.
+    /// Maximum gap between two consecutive stream frames before the stream is declared dead and
+    /// re-issued. The one stall limit for every streaming provider (Anthropic, OpenAI, xAI) and
+    /// every phase of a stream — thinking, writing, waiting for the final event. Default: 10 minutes.
     /// </summary>
     /// <remarks>
-    /// Complements the transport-layer HTTP/2 keepalive PING: this catches
-    /// "server alive but application frozen" (SSE goes silent while the socket
-    /// stays open), the keepalive catches a dead socket. When it fires, the
-    /// retry loop re-issues the request within the <see cref="MaxRetryAttempts"/>
-    /// budget, so a single stall never kills the agent run.
+    /// <para>
+    /// A healthy stream is never silent for long. Measured on the live APIs: GPT-6 emits a new
+    /// reasoning item every few seconds even at <c>xhigh</c> (longest gap 15 s on
+    /// <c>gpt-6.1-sol</c>), streams text with gaps of a few seconds at most (6 s over a 24k-frame,
+    /// six-minute answer), and Anthropic sends a <c>ping</c> event every 30 s while Claude thinks
+    /// (Opus 5.5 and Sonnet 5.5 at <c>max</c> effort, 3 to 5 minutes of thinking: longest gap 30 s). What can legitimately delay a frame — an overloaded server, a very long prompt
+    /// being read before the first token — does not depend on the model or the reasoning effort,
+    /// so one generous limit covers every case; 10 minutes is a wide margin over the longest healthy
+    /// gap and still re-issues a dead stream long before a typical caller deadline.
+    /// </para>
+    /// <para>
+    /// Complements the transport-layer HTTP/2 keepalive PING: this catches "server alive but
+    /// application frozen" (SSE goes silent while the socket stays open), the keepalive catches a
+    /// dead socket. When it fires, or the connection drops mid-stream, the request is re-issued
+    /// within <see cref="MaxRetryAttempts"/>; generation restarts from zero and is billed again.
+    /// The timeout message names the last event and when it arrived.
+    /// </para>
     /// </remarks>
-    public TimeSpan InterEventTimeout { get; set; } = TimeSpan.FromMinutes(30);
+    public TimeSpan InterEventTimeout { get; set; } = TimeSpan.FromMinutes(10);
 
-    /// <summary>
-    /// Maximum gap between two stream frames while the model is <i>writing</i> — an answer or
-    /// tool-call arguments are streaming token by token. Default: 2 minutes. Zero or less falls
-    /// back to <see cref="InterEventTimeout"/>.
-    /// </summary>
+    /// <summary>Replaced by <see cref="InterEventTimeout"/>; this setting has no effect.</summary>
     /// <remarks>
-    /// <para>
-    /// Applies to the Responses API transport (OpenAI, xAI): <c>GenerateAsync</c>,
-    /// <c>ChatAsync</c> and agent turns. Writing produces a frame every few hundred
-    /// milliseconds — a long OpenAI answer measured at 24k frames over six minutes never went
-    /// more than six seconds without one — so a silence this long means the stream is dead,
-    /// not thinking. <see cref="InterEventTimeout"/> still governs the phases that may
-    /// legitimately sit silent (reasoning, server-side tools).
-    /// </para>
-    /// <para>
-    /// When either limit fires, or the connection drops mid-stream, the request is re-issued
-    /// within <see cref="MaxRetryAttempts"/>. Generation restarts from zero and is billed again.
-    /// </para>
+    /// 10.14 added a separate limit for the writing phase of a Responses stream. Measured gaps are
+    /// short in every phase, so one limit does the job; see <see cref="InterEventTimeout"/>.
     /// </remarks>
-    public TimeSpan OutputStallTimeout { get; set; } = TimeSpan.FromMinutes(2);
+    [Obsolete("Merged into InterEventTimeout (one stall limit for every phase and provider). This property is ignored.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TimeSpan OutputStallTimeout { get; set; }
 
-    /// <summary>
-    /// Maximum gap between two stream frames while the model is <i>thinking</i> — before its
-    /// first output item, inside a reasoning item, or around a server-side tool. Default:
-    /// 10 minutes. Zero or less falls back to <see cref="InterEventTimeout"/>.
-    /// </summary>
+    /// <summary>Replaced by <see cref="InterEventTimeout"/>; this setting has no effect.</summary>
     /// <remarks>
-    /// <para>
-    /// Applies to the Responses API transport (OpenAI, xAI). One value for every model and
-    /// reasoning effort, on purpose: reasoning is not one long silence — GPT-6 emits a new
-    /// reasoning item every few seconds, and the longest gap measured on <c>gpt-6.1-sol</c> at
-    /// <c>xhigh</c> was 15 s — while a slow or overloaded server, or a very long prompt being read,
-    /// delays the first frame regardless of effort. Scaling the limit by effort would cut a slow
-    /// but live low-effort request and still wait too long on a dead high-effort one. The default
-    /// leaves a wide margin for a slow server and still re-issues a dead stream in minutes instead
-    /// of the half hour of <see cref="InterEventTimeout"/>.
-    /// </para>
-    /// <para>
-    /// Once a writing item has closed and nothing else is open, the stream is only waiting for
-    /// <c>response.completed</c>, which follows within a second: that gap uses
-    /// <see cref="OutputStallTimeout"/>.
-    /// </para>
+    /// 10.15 added a separate limit for the thinking phase of a Responses stream. It measured the
+    /// same thing as <see cref="InterEventTimeout"/>, so the two are one setting again.
     /// </remarks>
-    public TimeSpan ThinkingStallTimeout { get; set; } = TimeSpan.FromMinutes(10);
+    [Obsolete("Merged into InterEventTimeout (one stall limit for every phase and provider). This property is ignored.")]
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public TimeSpan ThinkingStallTimeout { get; set; }
 
     /// <summary>
     /// Maximum number of retry attempts before failing. One knob for the whole
@@ -471,10 +456,12 @@ public abstract class AiProviderOptions
     public string? BaseUrl { get; set; }
 
     /// <summary>
-    /// HTTP request timeout override for this specific provider.
+    /// Run timeout for a provider that executes a local process instead of an HTTP call (the
+    /// Anthropic Claude Code CLI transport). HTTP providers ignore it: their limits are the global
+    /// <see cref="AiResilienceOptions"/> (<c>Ai:Resilience</c>).
     /// </summary>
     /// <remarks>
-    /// If not set, uses the global <see cref="AiResilienceOptions.HttpClientTimeout"/>.
+    /// If not set, the CLI transport uses <see cref="AiResilienceOptions.TotalRequestTimeout"/>.
     /// </remarks>
     public TimeSpan? Timeout { get; set; }
 

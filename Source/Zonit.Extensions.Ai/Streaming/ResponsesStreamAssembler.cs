@@ -36,6 +36,12 @@ public static class ResponsesStreamAssembler
     /// Consumes the SSE stream to completion and returns the raw JSON of the terminal Response
     /// object — byte-for-byte what the non-streaming endpoint would have returned.
     /// </summary>
+    /// <remarks>
+    /// One watchdog limit for the whole stream (<c>Ai:Resilience:InterEventTimeout</c>): a healthy
+    /// Responses stream sends a frame every few seconds in every phase — reasoning arrives as
+    /// separate items, text as deltas — so no phase needs a limit of its own. A timeout names the
+    /// last event and when it arrived, which places a stall without a stream trace.
+    /// </remarks>
     /// <param name="reader">Reader over the raw SSE body.</param>
     /// <param name="interEventTimeout">Dead-stream watchdog; see <see cref="AiSseReader"/>.</param>
     /// <param name="provider">Provider name, for diagnostics.</param>
@@ -43,110 +49,23 @@ public static class ResponsesStreamAssembler
     /// <param name="cancellationToken">Caller's token.</param>
     /// <exception cref="TimeoutException">No frame arrived within <paramref name="interEventTimeout"/>.</exception>
     /// <exception cref="HttpRequestException">The stream carried an <c>error</c> event, or ended before a terminal event.</exception>
-    public static Task<string> ReadAsync(
-        StreamReader reader,
-        TimeSpan interEventTimeout,
-        string provider,
-        string operation,
-        CancellationToken cancellationToken = default)
-        => ReadAsync(reader, interEventTimeout, TimeSpan.Zero, provider, operation, cancellationToken);
-
-    /// <summary>
-    /// Consumes the SSE stream to completion and returns the raw JSON of the terminal Response
-    /// object, with a tighter watchdog while the model is writing.
-    /// </summary>
-    /// <remarks>
-    /// Equivalent to the phase-aware overload with the thinking limit left at
-    /// <paramref name="interEventTimeout"/>.
-    /// </remarks>
-    /// <param name="reader">Reader over the raw SSE body.</param>
-    /// <param name="interEventTimeout">Limit while the model thinks; see <see cref="AiSseReader"/>.</param>
-    /// <param name="outputStallTimeout">
-    /// Limit while an output item is streaming and after it closes. Zero or less falls back to
-    /// <paramref name="interEventTimeout"/>.
-    /// </param>
-    /// <param name="provider">Provider name, for diagnostics.</param>
-    /// <param name="operation">Calling operation, for diagnostics.</param>
-    /// <param name="cancellationToken">Caller's token.</param>
-    public static Task<string> ReadAsync(
-        StreamReader reader,
-        TimeSpan interEventTimeout,
-        TimeSpan outputStallTimeout,
-        string provider,
-        string operation,
-        CancellationToken cancellationToken = default)
-        => ReadAsync(reader, interEventTimeout, TimeSpan.Zero, outputStallTimeout, provider, operation, cancellationToken);
-
-    /// <summary>
-    /// Consumes the SSE stream to completion and returns the raw JSON of the terminal Response
-    /// object, with a watchdog whose limit follows the phase the stream is in.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A Responses stream goes through three kinds of silence, and each gets its own limit:
-    /// </para>
-    /// <list type="bullet">
-    ///   <item><b>Thinking</b> — before the first output item, inside a reasoning item, around a
-    ///   server-side tool: <paramref name="thinkingStallTimeout"/>. Reasoning arrives in items a
-    ///   few seconds apart even at the highest effort, but a slow server or a very long prompt can
-    ///   delay the first one, so this limit is generous.</item>
-    ///   <item><b>Writing</b> — a <c>message</c> or <c>function_call</c> item is open and streams
-    ///   tokens: <paramref name="outputStallTimeout"/>. A frame arrives every few hundred
-    ///   milliseconds, so this silence is a dead stream.</item>
-    ///   <item><b>Finishing</b> — a writing item has closed and nothing else is open: only
-    ///   <c>response.completed</c> is left, which follows within a second, so
-    ///   <paramref name="outputStallTimeout"/> applies again. A reasoning item opened after an
-    ///   answer (a model that searches again) returns the stream to thinking.</item>
-    /// </list>
-    /// <para>
-    /// A timeout names the last event, when it arrived and the phase, so a stall can be placed
-    /// without a stream trace.
-    /// </para>
-    /// </remarks>
-    /// <param name="reader">Reader over the raw SSE body.</param>
-    /// <param name="interEventTimeout">Fallback for a phase whose own limit is zero or less.</param>
-    /// <param name="thinkingStallTimeout">Limit while the model thinks. Zero or less: <paramref name="interEventTimeout"/>.</param>
-    /// <param name="outputStallTimeout">Limit while it writes or finishes. Zero or less: <paramref name="interEventTimeout"/>.</param>
-    /// <param name="provider">Provider name, for diagnostics.</param>
-    /// <param name="operation">Calling operation, for diagnostics.</param>
-    /// <param name="cancellationToken">Caller's token.</param>
-    /// <exception cref="TimeoutException">No frame arrived within the limit of the current phase.</exception>
-    /// <exception cref="HttpRequestException">The stream carried an <c>error</c> event, or ended before a terminal event.</exception>
     public static async Task<string> ReadAsync(
         StreamReader reader,
         TimeSpan interEventTimeout,
-        TimeSpan thinkingStallTimeout,
-        TimeSpan outputStallTimeout,
         string provider,
         string operation,
         CancellationToken cancellationToken = default)
     {
         string? finalResponse = null;
-        var openWritingItems = 0;
-        var openOtherItems = 0;
-        var lastClosedWasWriting = false;
 
         var clock = Stopwatch.StartNew();
         var lastEvent = "the response headers";
         var lastEventAt = TimeSpan.Zero;
 
-        (TimeSpan Limit, string Knob, string Phase) CurrentPhase()
-        {
-            var (configured, knob, phase) =
-                openWritingItems > 0 ? (outputStallTimeout, "OutputStallTimeout", "writing")
-                : openOtherItems > 0 ? (thinkingStallTimeout, "ThinkingStallTimeout", "thinking")
-                : lastClosedWasWriting ? (outputStallTimeout, "OutputStallTimeout", "finishing, waiting for response.completed")
-                : (thinkingStallTimeout, "ThinkingStallTimeout", "thinking, before any output");
-
-            return configured > TimeSpan.Zero
-                ? (configured, knob, phase)
-                : (interEventTimeout, "InterEventTimeout", phase);
-        }
-
         try
         {
             await foreach (var data in AiSseReader
-                .ReadFramesAsync(reader, () => CurrentPhase().Limit, provider, operation, cancellationToken)
+                .ReadFramesAsync(reader, interEventTimeout, provider, operation, cancellationToken)
                 .ConfigureAwait(false))
             {
                 // Terminated by a terminal response.* event; `[DONE]` is tolerated because some
@@ -173,29 +92,12 @@ public static class ResponsesStreamAssembler
                             finalResponse = respEl.GetRawText();
                         break;
 
-                    case "response.output_item.added":
-                        if (IsWritingItem(root)) openWritingItems++;
-                        else openOtherItems++;
-                        break;
-
-                    case "response.output_item.done":
-                        if (IsWritingItem(root))
-                        {
-                            openWritingItems = Math.Max(0, openWritingItems - 1);
-                            lastClosedWasWriting = true;
-                        }
-                        else
-                        {
-                            openOtherItems = Math.Max(0, openOtherItems - 1);
-                            lastClosedWasWriting = false;
-                        }
-                        break;
-
                     case "error":
                         throw new HttpRequestException(BuildStreamErrorMessage(root, provider, operation));
 
-                        // Everything else (response.created, response.output_text.delta, …) is
-                        // liveness only — the terminal event repeats all of it in assembled form.
+                        // Everything else (response.created, response.output_item.*,
+                        // response.output_text.delta, …) is liveness only — the terminal event
+                        // repeats all of it in assembled form.
                 }
 
                 if (finalResponse is not null) break;
@@ -203,11 +105,9 @@ public static class ResponsesStreamAssembler
         }
         catch (TimeoutException ex) when (!cancellationToken.IsCancellationRequested)
         {
-            var (limit, knob, phase) = CurrentPhase();
             throw new TimeoutException(
-                $"{provider} {operation} stream produced no event for {Seconds(limit)} after {lastEvent} "
-                + $"at {Seconds(lastEventAt)} ({phase}) — server-side stall. "
-                + $"Configurable via Ai:Resilience {knob}.",
+                $"{provider} {operation} stream produced no event for {Seconds(interEventTimeout)} after {lastEvent} "
+                + $"at {Seconds(lastEventAt)} — server-side stall. Configurable via Ai:Resilience InterEventTimeout.",
                 ex);
         }
 
@@ -258,14 +158,6 @@ public static class ResponsesStreamAssembler
             ? deltaEl.GetString()
             : null;
     }
-
-    /// <summary>
-    /// Whether an <c>output_item</c> event concerns an item whose content streams token by token
-    /// — answer text or function-call arguments — as opposed to reasoning or a server-side tool,
-    /// which may legitimately sit silent.
-    /// </summary>
-    private static bool IsWritingItem(JsonElement root)
-        => ItemType(root) is "message" or "function_call";
 
     private static string BuildStreamErrorMessage(JsonElement root, string provider, string operation)
     {

@@ -30,7 +30,7 @@ internal sealed class AnthropicApiTransport : IAnthropicTransport
         // Dead-stream watchdog for the assembled (non-live) path — same knob the
         // agent loop uses, so both streaming paths stall-detect identically.
         var configured = aiOptions.Value.Resilience.InterEventTimeout;
-        _interEventTimeout = configured > TimeSpan.Zero ? configured : TimeSpan.FromMinutes(30);
+        _interEventTimeout = configured > TimeSpan.Zero ? configured : new AiResilienceOptions().InterEventTimeout;
 
         ConfigureHttpClient(options.Value);
     }

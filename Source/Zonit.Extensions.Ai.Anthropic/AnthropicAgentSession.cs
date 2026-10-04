@@ -405,12 +405,9 @@ internal sealed class AnthropicAgentSession : IAgentSession
         // the resilience handler is no longer in scope (SendAsync already
         // returned), so a server-side application freeze that still answers
         // HTTP/2 PING keep-alives at the transport layer would leave
-        // ReadLineAsync blocked indefinitely. Anthropic <i>documents</i>
-        // `ping` SSE events every ~10–15 s, but on Sonnet 4.6 / Opus 4.7
-        // high-effort thinking the API has been observed to emit no frames
-        // for several minutes — see AiResilienceOptions.InterEventTimeout
-        // docs for community references. Going that timeout without ANY
-        // frame is the dead-stream signal.
+        // ReadLineAsync blocked indefinitely. Anthropic sends `ping` SSE
+        // events every 30 s, also while Claude thinks, so going
+        // InterEventTimeout without ANY frame is the dead-stream signal.
         //
         // The TimeoutException thrown below is caught and retried by
         // SendStreamingWithRetriesAsync — the SSE stall is the most common
@@ -418,7 +415,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         // kill an entire agent run.
         var interEventTimeout = _resilience.InterEventTimeout > TimeSpan.Zero
             ? _resilience.InterEventTimeout
-            : TimeSpan.FromMinutes(30);
+            : new AiResilienceOptions().InterEventTimeout;
         using var watchdog = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         watchdog.CancelAfter(interEventTimeout);
 
