@@ -305,6 +305,30 @@ public sealed class AiResilienceOptions
     public TimeSpan OutputStallTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>
+    /// Maximum gap between two stream frames while the model is <i>thinking</i> — before its
+    /// first output item, inside a reasoning item, or around a server-side tool. Default:
+    /// 10 minutes. Zero or less falls back to <see cref="InterEventTimeout"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Applies to the Responses API transport (OpenAI, xAI). One value for every model and
+    /// reasoning effort, on purpose: reasoning is not one long silence — GPT-6 emits a new
+    /// reasoning item every few seconds, and the longest gap measured on <c>gpt-6.1-sol</c> at
+    /// <c>xhigh</c> was 15 s — while a slow or overloaded server, or a very long prompt being read,
+    /// delays the first frame regardless of effort. Scaling the limit by effort would cut a slow
+    /// but live low-effort request and still wait too long on a dead high-effort one. The default
+    /// leaves a wide margin for a slow server and still re-issues a dead stream in minutes instead
+    /// of the half hour of <see cref="InterEventTimeout"/>.
+    /// </para>
+    /// <para>
+    /// Once a writing item has closed and nothing else is open, the stream is only waiting for
+    /// <c>response.completed</c>, which follows within a second: that gap uses
+    /// <see cref="OutputStallTimeout"/>.
+    /// </para>
+    /// </remarks>
+    public TimeSpan ThinkingStallTimeout { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// Maximum number of retry attempts before failing. One knob for the whole
     /// library: it bounds both the HTTP-layer retries (connection / 429 / 5xx,
     /// before a response arrives) and the client-side stream retries (an empty

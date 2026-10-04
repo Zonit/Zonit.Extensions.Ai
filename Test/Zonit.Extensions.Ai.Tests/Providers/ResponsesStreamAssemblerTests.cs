@@ -105,18 +105,132 @@ public class ResponsesStreamAssemblerTests
     public async Task ReadAsync_ToleratesALongSilenceWhileTheModelThinks()
     {
         // A reasoning item is open, not a message: silence there is thinking, and the output
-        // stall limit must not cut it short. Once the message is done, the limit relaxes again.
+        // stall limit must not cut it short.
         using var stream = new ScriptedStream(stallAtEnd: false,
             (TimeSpan.Zero, ReasoningItemAdded),
             (TimeSpan.FromMilliseconds(500), ReasoningItemDone + MessageItemAdded + Delta("Hello")),
-            (TimeSpan.Zero, MessageItemDone),
-            (TimeSpan.FromMilliseconds(500), Completed("Hello")));
+            (TimeSpan.Zero, MessageItemDone + Completed("Hello")));
         using var reader = new StreamReader(stream, Encoding.UTF8);
 
         var json = await ResponsesStreamAssembler.ReadAsync(
             reader, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150), "OpenAI", "GenerateAsync", CancellationToken.None);
 
         json.Should().Contain("\"text\":\"Hello\"");
+    }
+
+    [Fact]
+    public async Task ReadAsync_WhenNothingArrivesBeforeTheFirstOutput_TimesOutOnTheThinkingLimit()
+    {
+        // Issue #30: a stream that goes silent before any output item. The thinking limit applies
+        // instead of the 30-minute InterEventTimeout.
+        using var stream = new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, Created));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var act = () => ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(30),
+            "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>().WaitAsync(TimeSpan.FromSeconds(10)))
+            .WithMessage("*after response.created at *(thinking, before any output)*ThinkingStallTimeout*");
+    }
+
+    [Fact]
+    public async Task ReadAsync_WhenCompletedNeverFollowsTheAnswer_TimesOutOnTheOutputStallLimit()
+    {
+        // Issue #30: the message is done and only response.completed is left, which follows within
+        // a second. A silence there is never reasoning.
+        using var stream = new ScriptedStream(stallAtEnd: true,
+            (TimeSpan.Zero, MessageItemAdded + Delta("Hello") + MessageItemDone));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var act = () => ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150),
+            "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>().WaitAsync(TimeSpan.FromSeconds(10)))
+            .WithMessage("*after response.output_item.done (message)*(finishing, waiting for response.completed)*OutputStallTimeout*");
+    }
+
+    [Fact]
+    public async Task ReadAsync_ReasoningAfterAnAnswer_ReturnsToTheThinkingLimit()
+    {
+        // A model that writes a preamble, then searches and reasons again: the finishing limit
+        // must not cut the second reasoning phase short.
+        using var stream = new ScriptedStream(stallAtEnd: false,
+            (TimeSpan.Zero, MessageItemAdded + Delta("Let me check.") + MessageItemDone + ReasoningItemAdded),
+            (TimeSpan.FromMilliseconds(500), ReasoningItemDone + MessageItemAdded + Delta("Hello") + MessageItemDone + Completed("Hello")));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var json = await ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150),
+            "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        json.Should().Contain("\"text\":\"Hello\"");
+    }
+
+    [Fact]
+    public async Task ReadAsync_TimeoutNamesTheLastEventAndThePhase()
+    {
+        using var stream = new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, Created + ReasoningItemAdded));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var act = () => ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromSeconds(30), TimeSpan.FromMilliseconds(150), TimeSpan.FromSeconds(30),
+            "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>())
+            .WithMessage("OpenAI GenerateAsync stream produced no event for 0.2 s after response.output_item.added (reasoning) at * s (thinking)*");
+    }
+
+    [Fact]
+    public async Task SendAsync_ReissuesARequestThatNeverStartsAnswering()
+    {
+        var handler = new SequenceHandler(
+            () => new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, Created)),
+            () => new ScriptedStream(stallAtEnd: false, (TimeSpan.Zero, Created + Completed("Hello"))));
+
+        var http = new HttpClient(handler) { BaseAddress = new Uri("https://api.test") };
+        var resilience = new AiResilienceOptions
+        {
+            ThinkingStallTimeout = TimeSpan.FromMilliseconds(150),
+            MaxRetryAttempts = 2,
+            RetryBaseDelay = TimeSpan.FromMilliseconds(1),
+            RetryMaxDelay = TimeSpan.FromMilliseconds(1),
+        };
+
+        var json = await ResponsesApiTransport.SendAsync(
+            http, "/v1/responses", _ => "{}", resilience, "OpenAI", "GenerateAsync",
+            Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance).WaitAsync(TimeSpan.FromSeconds(10));
+
+        json.Should().Contain("\"text\":\"Hello\"");
+        handler.Calls.Should().Be(2);
+    }
+
+    [Fact]
+    public void StallLimits_Defaults()
+    {
+        // One thinking limit for every model and effort: reasoning arrives in items seconds apart
+        // (15 s was the longest gap measured on gpt-6.1-sol at xhigh), while a slow server delays
+        // the first frame regardless of effort.
+        var options = new AiResilienceOptions();
+
+        options.ThinkingStallTimeout.Should().Be(TimeSpan.FromMinutes(10));
+        options.OutputStallTimeout.Should().Be(TimeSpan.FromMinutes(2));
+        options.InterEventTimeout.Should().Be(TimeSpan.FromMinutes(30));
+    }
+
+    [Fact]
+    public async Task ReadAsync_ThinkingLimitOfZero_FallsBackToInterEventTimeout()
+    {
+        using var stream = new ScriptedStream(stallAtEnd: true, (TimeSpan.Zero, Created));
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+
+        var act = () => ResponsesStreamAssembler.ReadAsync(
+            reader, TimeSpan.FromMilliseconds(150), TimeSpan.Zero, TimeSpan.FromSeconds(30),
+            "OpenAI", "GenerateAsync", CancellationToken.None);
+
+        (await act.Should().ThrowAsync<TimeoutException>().WaitAsync(TimeSpan.FromSeconds(10)))
+            .WithMessage("*InterEventTimeout*");
     }
 
     [Fact]
@@ -231,7 +345,8 @@ public class ResponsesStreamAssemblerTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, cancellationToken);
     }
 
-    private const string ReasoningItemAdded = "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"reasoning\"}}\n\n";
+    private const string Created = "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"status\":\"in_progress\"}}\n\n";
+    private const string ReasoningItemAdded ="data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"reasoning\"}}\n\n";
     private const string ReasoningItemDone = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"reasoning\"}}\n\n";
     private const string MessageItemAdded = "data: {\"type\":\"response.output_item.added\",\"item\":{\"type\":\"message\"}}\n\n";
     private const string MessageItemDone = "data: {\"type\":\"response.output_item.done\",\"item\":{\"type\":\"message\"}}\n\n";

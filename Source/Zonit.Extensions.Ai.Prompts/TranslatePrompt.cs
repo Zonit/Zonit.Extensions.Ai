@@ -4,8 +4,8 @@ namespace Zonit.Extensions.Ai.Prompts;
 
 /// <summary>
 /// Translates text into a target language as a native writer would — preserving meaning, structure
-/// and non-translatable tokens, while localizing punctuation, numbers, dates and typography to the
-/// conventions of the target language.
+/// and non-translatable tokens, while localizing punctuation, numbers, currencies, units, dates and
+/// typography to the conventions of the target language.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -18,6 +18,14 @@ namespace Zonit.Extensions.Ai.Prompts;
 /// <para>
 /// Languages with a dedicated section: <c>en, pl, de, es, fr, it, pt, nl, sv, da, no, fi, ru, uk, cs,
 /// sk, hu, tr, ar</c>. Any other target falls back to general professional-translation rules.
+/// </para>
+/// <para>
+/// The template itself follows the rules it is judged by, because a prompt's style is mirrored in
+/// its output: it states the task instead of a persona, contains no em or en dash characters (Polish
+/// and others forbid them, so the prompt names dashes instead of showing them), shows formats with
+/// placeholders such as <c>&lt;amount&gt; &lt;code&gt;</c> rather than real currencies or units (a
+/// literal example is copied into the translation), uses plain labels without bold or capitalised
+/// mandates, and keeps the output contract at the end.
 /// </para>
 /// </remarks>
 /// <example>
@@ -79,249 +87,241 @@ public class TranslatePrompt : PromptBase<string>
 
     /// <inheritdoc />
     public override string Prompt => """
-# Role
+Translate the text inside <source_text> into {{ target_name }} so that a {{ target_name }} reader receives it as if it had been written in {{ target_name }}: the author's meaning, intent, tone and structure, written with the spelling, punctuation, number, currency, unit, date and typography conventions of {{ target_name }}.
+{{ if source_language != "" }}The source text is written in {{ source_name }}.{{ else }}Identify the source language first.{{ end }}
 
-You are a professional {{ target_name }} translator and localization specialist — a native-level writer, not a word-for-word converter. Your task is to re-express the SOURCE TEXT in {{ target_name }} so that a {{ target_name }} reader receives it as if it had been written in {{ target_name }} from the start: the meaning, intent, tone and structure are the author's, but every convention of spelling, punctuation, numbers, dates and typography is the one {{ target_name }} actually uses.
+# What stays as in the source
 
-{{ if source_language != "" }}The source text is written in {{ source_name }}.{{ else }}First identify the source language, then translate.{{ end }}
+- Meaning and completeness: everything the source says, and nothing added. Titles, headings and labels are translated too, and brand and product names keep their original form. A phrase without a literal equivalent is rendered by its intent.
+- Layout and markup: the same paragraphs, line breaks, headings, lists, tables and order. Markdown, HTML or XML tags, attributes and code fences are copied unchanged, and only the human-readable text between them is translated.
+- Tokens that are not language: source code, commands, file paths, URLs, e-mail addresses, hashtags, handles, emoji and placeholders such as {0}, {{ "{{name}}" }}, %s, :id and $VAR are copied character for character, in place.
+- Names and identifiers: people, organisations, brands, products, model and part numbers, codes and version strings keep their spelling. When the target uses another script, well-known names follow the convention of its section, and identifiers and Latin acronyms stay Latin.
+- Values: every quantity, amount, percentage and measurement keeps its exact value and precision. An amount stays in its source currency, and a time of day stays in its source time zone with its zone label.
 
-# Preserve exactly — in every language
+# What follows {{ target_name }}
 
-- **Meaning and completeness.** Convey everything the source says, add nothing, omit nothing. Translate all human-readable text — titles, headings and labels included — and keep only brand and product names in the original. When a phrase has no literal equivalent, render its intent rather than its words.
-- **Layout and markup.** Keep the same paragraphs, line breaks, headings, lists, tables and ordering. Reproduce Markdown, HTML/XML tags, attributes and code fences unchanged — translate only the human-readable text between them.
-- **Non-translatable tokens, verbatim.** Source code, commands, file paths, URLs, e-mail addresses, hashtags, @handles, emoji, and placeholders / interpolation tokens such as `{0}`, `{{ "{{name}}" }}`, `%s`, `:id`, `$VAR`. Copy them character-for-character and keep them in place.
-- **Proper nouns and identifiers.** People, brands, products, organisations, trademarks, model and part numbers, ISO codes and version strings stay as written. For a target language in another script, render well-established names by that language's accepted convention (see its section); identifiers and Latin acronyms stay Latin.
-- **Numeric values.** Every quantity, amount, percentage and measurement keeps its exact value and precision. Localize only the *format* — decimal mark, digit grouping, percent spacing, date order — to the convention in the language section below. The format applies to every number alike, including those inside ranges, prices, percentages and compound units, so the whole text uses one convention.
-- **Currencies.** Every amount stays in its source currency with its exact value and number of decimals; currencies are never converted. Localize only how the amount is written — symbol or ISO code, its position and its spacing follow the language section below. Write a foreign currency with its ISO code (`USD`, `EUR`) unless the section says otherwise; the target country's own currency may use its local symbol.
-- **Clock times and time zones.** Copy every time of day and its zone label exactly as written, and never convert between zones — `13:30 UTC` stays `13:30 UTC`, `9:00 CEST` stays `9:00 CEST`. Date *format* is localized per the language section; the time and its zone are not.
+- Numbers: the decimal mark, digit grouping and percent spacing of the section below apply to every number in the text, including numbers inside ranges, prices, percentages and compound units. A number written next to an identifier, field name or code is still a number: the identifier stays as written and the number takes the target format.
+- Currency: an amount is written in the form the section below gives, with the ISO code of its currency. A currency symbol in the source becomes the ISO code of the same currency, unless the section below keeps symbols. Each currency keeps one form throughout the text.
+- Units: a metric or SI symbol stays as written, and a rate built on one keeps its slash: <amount> <code>/<symbol>. An imperial or US customary unit (ounce, pound, gallon, barrel, bushel and the like) has no {{ target_name }} symbol, so its abbreviation is always written out as the {{ target_name }} word for that unit, and a rate built on it takes the per form given below. This holds in price lists, tables and headings as much as in prose. A trading or energy code built from the initials of several words stays as written, together with its rate slash, even when it measures an imperial quantity, because {{ target_name }} readers use such codes unchanged. Each unit keeps one form throughout the text.
+- Dates: the date order and month names given below.
+- Idiom and register: an idiom, set phrase or metaphor becomes its natural {{ target_name }} counterpart. The register of the source (formal, casual, marketing, technical, legal) is kept, and where {{ target_name }} forces a choice of address the section below gives the default.
+- Typography: quotation marks, asides, separators and capitalisation follow the section below as each sentence is written.
+- Consistency: one source term gets one translation throughout, and the text keeps one voice.
 
-# Write like a native — in every language
-
-- **Idiomatic, not literal.** Translate the idea. Replace idioms, set phrases and metaphors with their natural {{ target_name }} counterpart instead of carrying the source wording across.
-- **Register.** Detect the register of the source (formal, casual, marketing, technical, legal) and reproduce the same level in {{ target_name }}. Where {{ target_name }} forces a choice between a formal and a familiar form of address, follow the source's formality — the language section notes the default.
-- **Units of measure.** Write every unit the way {{ target_name }} readers write it, keeping its value unconverted. Metric and SI symbols and the domain codes {{ target_name }} uses as-is stay unchanged (`kg`, `t`, `MWh`, `EUR/MWh`, `MMBtu`). An English unit abbreviation with no {{ target_name }} symbol (`bbl`, `bu`, `gal`, `lb`, `oz`) becomes its {{ target_name }} unit name, and a rate built on one (`USD/gal`) is written out whole in the form the language section gives — both halves in {{ target_name }}.
-- **Consistency.** Translate one source term the same way every time it appears, write each currency and unit in one form throughout, and keep one voice across the whole text.
-- **Native typography.** Use {{ target_name }}'s own quotation marks, dash conventions, separators, date format, and currency and unit forms. Apply these as you compose — they are how the language is written, not a pass to run at the end. The section below is authoritative for {{ target_name }}.
-
-# {{ target_name }} conventions ({{ target_language }})
+# {{ target_name }} conventions
 
 {{ if target_language == "en" }}
-- **Quotation marks:** primary "…", nested '…'; use curly typographic quotes in prose.
-- **Numbers:** point decimal, comma grouping — `3.14`, `1,234,567`. Percent sign closes onto the number: `12.5%`.
-- **Currency:** symbol before the amount, unspaced — `$4,327.29`, `€12.50`; an ISO code goes before it with a space — `USD 4,327.29`. Keep the source's choice of symbol or code.
-- **Units:** the English abbreviations are native — `bbl`, `gal`, `lb`, `oz` and rates such as `USD/bbl` stay as written; a unit from another language takes its English name.
-- **Dates:** US English `May 26, 2026` or `5/26/2026`; British English `26 May 2026` or `26/05/2026`. Match the variant requested; default to US usage. Month and weekday names are capitalized.
-- **Dash:** the em-dash `—` is natural for an aside and is usually set unspaced in US style; British style prefers a spaced en-dash ` – `.
-- **Style:** sentence case in body text; keep the source's heading case. No special diacritics — loanwords keep theirs (`café`, `naïve`).
+- Quotation marks: curly double quotes for a quote, curly single quotes inside it.
+- Numbers: decimal point and a comma between thousands (3.14 and 1,234,567). The percent sign follows the number without a space (12.5%).
+- Currency: keep the source's choice between a symbol before the amount without a space and <code> <amount> with a space.
+- Units: English unit abbreviations are native and stay as written, including a rate written as <code>/<unit>; a unit from another language takes its English name.
+- Dates: US English by default (month name, day, year), British English when requested (day, month name, year); month and weekday names are capitalised.
+- Asides: the em dash is natural in English; US style sets it without spaces, British style prefers a spaced en dash.
+- Style: sentence case in body text and the source's case in headings; loanwords keep their diacritics.
 {{ end }}
 {{ if target_language == "pl" }}
-- **Quotation marks:** primary „…", nested «…».
-- **Numbers:** comma decimal, space grouping — `3,14`, `1 234 567`, also within ranges (`3,10–3,25`). Percent sign closes onto the number: `12,5%`.
-- **Currency:** amount first, then the ISO code or Polish symbol after a space — `4 327,29 USD`, `12,50 zł`. A `$` or `€` sign becomes its code after the amount. In running prose a spelled-out, inflected name reads naturally (`98,62 dolara`).
-- **Units:** non-metric units take their Polish names (`baryłka`, `buszel`, `galon`, `funt`, `uncja`), and a rate on one is written with *za* — `USD za galon`, `USD za baryłkę`.
-- **Dates:** numeric `26.05.2026`; long `26 maja 2026` (month in the genitive, lowercase); with weekday `wtorek, 26 maja 2026`.
-- **Dash:** Polish prose does not use the em-dash for asides. Write an apposition with a comma (`X, opis`) or parentheses (`X (opis)`), and recast every in-sentence `—` that way as you compose; keep a dash only in a heading label or the sign-off, where it is the hyphen `-`.
-- **Alphabet:** keep full diacritics `ą ć ę ł ń ó ś ź ż` everywhere.
-- **Address:** formal *Pan / Pani* by default; *ty* only when the source is clearly casual.
-- **Style:** prefer natural Polish syntax to anglicised word order; keep loanwords Polish readers genuinely use.
+- Quotation marks: „…” for a quote, «…» for a quote inside it.
+- Numbers: decimal comma and a space between thousands (3,14 and 1 234 567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word za: <amount> <code> za <unit>, with the unit as a Polish noun in the accusative.
+- Dates: numeric day.month.year with two digits for day and month; the long form is the day, the month name in the genitive in lowercase, and the year.
+- Asides: a comma or parentheses carry every aside and pause, including one the source marks with an em dash or en dash, because Polish prose uses neither dash. A heading label keeps a hyphen.
+- Alphabet: full diacritics (ą ć ę ł ń ó ś ź ż).
+- Address: the formal Pan and Pani by default, and ty only when the source is clearly casual.
+- Style: natural Polish word order, and loanwords only where Polish readers use them.
 {{ end }}
 {{ if target_language == "de" }}
-- **Quotation marks:** primary „…", nested ‚…'; the print/Swiss alternative is »…«.
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567` (a thin space is also fine). Percent sign after a space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a space — `4.327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their German names (`Barrel`, `Gallone`, `Feinunze`, `Pfund`), and a rate on one is written with *je* — `USD je Gallone`.
-- **Dates:** numeric `26.05.2026`; long `26. Mai 2026` (day takes a period, month capitalized); with weekday `Montag, 26. Mai 2026`.
-- **Dash:** use the spaced en-dash `–` (Gedankenstrich) for an aside, not the em-dash.
-- **Alphabet:** keep `ä ö ü ß` (Swiss German replaces `ß` with `ss`); capitalize every noun.
-- **Address:** formal *Sie* by default; *du* for clearly casual or youth-facing copy.
-- **Style:** German compounds are natural — prefer one well-formed compound to a loose paraphrase.
+- Quotation marks: „…“ for a quote, ‚…‘ inside it (»…« in print and Swiss usage).
+- Numbers: decimal comma and a point or thin space between thousands (3,14 and 1.234.567). The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word je: <amount> <code> je <unit>.
+- Dates: numeric day.month.year; the long form is the day with a period, the capitalised month name and the year.
+- Asides: a spaced en dash (Gedankenstrich) carries an aside.
+- Alphabet: ä ö ü ß (ss in Swiss German), and every noun capitalised.
+- Address: the formal Sie by default, and du for clearly casual or youth-facing text.
+- Style: a well-formed compound is preferred to a loose paraphrase.
 {{ end }}
 {{ if target_language == "es" }}
-- **Quotation marks:** primary «…» (RAE), nested "…".
-- **Punctuation:** open questions and exclamations with inverted marks — `¿…?`, `¡…!`.
-- **Numbers:** comma decimal, point grouping in Spain — `3,14`, `1.234.567`; much of Latin America uses point decimal and comma grouping. Default to Spain unless the target is a specific Latin-American locale. Percent sign after a space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a space — `4.327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their Spanish names (`barril`, `galón`, `onza`, `libra`), and a rate on one is written with *por* — `USD por galón`.
-- **Dates:** `26 de mayo de 2026` (month lowercase) or `26/05/2026`.
-- **Dash:** the em-dash (raya) `—` is standard for asides and dialogue.
-- **Alphabet:** keep `á é í ó ú ü ñ`.
-- **Address:** formal *usted* by default; *tú* when casual. Use *ustedes* for the plural (and *vosotros* only for Spain-informal).
+- Quotation marks: «…» for a quote, curly double quotes inside it.
+- Punctuation: a question or an exclamation opens with an inverted mark (¿…? and ¡…!).
+- Numbers: in Spain a decimal comma and a point between thousands (3,14 and 1.234.567); much of Latin America uses a decimal point and a comma between thousands. Spain is the default unless the target is a Latin American locale. The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word por: <amount> <code> por <unit>.
+- Dates: the day, de, the month name in lowercase, de and the year, or numeric day/month/year.
+- Asides: the em dash (raya) carries an aside and dialogue.
+- Alphabet: á é í ó ú ü ñ.
+- Address: the formal usted by default and tú when casual; ustedes for the plural, and vosotros only for informal Spain.
 {{ end }}
 {{ if target_language == "fr" }}
-- **Quotation marks:** « … » with a non-breaking space inside each guillemet; nested "…".
-- **Spacing:** a non-breaking space precedes `;` `:` `!` `?` `»` and follows `«`.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a non-breaking space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a non-breaking space — `4 327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their French names (`baril`, `gallon`, `once`, `livre`), and a rate on one is written with *par* — `USD par gallon`.
-- **Dates:** `26 mai 2026` (month lowercase, no comma); with weekday `lundi 26 mai 2026`.
-- **Dash:** the em-dash (tiret cadratin) `—` for asides, set with spaces; en-dash for ranges.
-- **Alphabet:** keep the full accent set (`à â ç é è ê ë î ï ô û ù ü ÿ œ æ`); use the typographic apostrophe `’`.
-- **Address:** formal *vous* by default; *tu* when casual.
+- Quotation marks: «…» with a non-breaking space inside each guillemet, curly double quotes inside a quote.
+- Spacing: a non-breaking space before ; : ! ? and the closing guillemet, and after the opening one.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a non-breaking space (12,5 %).
+- Currency: <amount> <code>, with a non-breaking space before the code.
+- Units: a rate on an imperial or US customary unit takes the word par: <amount> <code> par <unit>.
+- Dates: the day, the month name in lowercase and the year, with no comma; a weekday comes first, in lowercase.
+- Asides: a spaced em dash (tiret cadratin) carries an aside, and an en dash marks a range.
+- Alphabet: the full accent set (à â ç é è ê ë î ï ô û ù ü ÿ œ æ) and the typographic apostrophe ’.
+- Address: the formal vous by default, and tu when casual.
 {{ end }}
 {{ if target_language == "it" }}
-- **Quotation marks:** primary «…» (caporali), nested "…".
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567`. Percent sign closes onto the number: `12,5%`.
-- **Currency:** amount first, then the code or symbol after a space — `4.327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their Italian names (`barile`, `gallone`, `oncia`, `libbra`), and a rate on one is written with *al* / *alla* — `USD al gallone`.
-- **Dates:** `26 maggio 2026` (month lowercase); with weekday `lunedì 26 maggio 2026` (weekday lowercase).
-- **Dash:** the em-dash (lineetta) `—` is standard for asides.
-- **Alphabet:** keep `à è é ì ò ó ù`; use elision apostrophes (`l'evento`, `dell'oro`).
-- **Address:** formal *Lei* by default; *tu* when casual.
+- Quotation marks: «…» (caporali) for a quote, curly double quotes inside it.
+- Numbers: decimal comma and a point between thousands (3,14 and 1.234.567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes al or alla, agreeing with the unit: <amount> <code> al <unit>.
+- Dates: the day, the month name in lowercase and the year; a weekday comes first, in lowercase.
+- Asides: the em dash (lineetta) carries an aside.
+- Alphabet: à è é ì ò ó ù, and elision apostrophes.
+- Address: the formal Lei by default, and tu when casual.
 {{ end }}
 {{ if target_language == "pt" }}
-- **Variant:** default to European Portuguese (pt-PT); if the target is `pt-BR`, follow Brazilian norms.
-- **Quotation marks:** «…» in pt-PT, "…" in pt-BR; nested swap the other style.
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567`. Percent sign closes onto the number: `12,5%`.
-- **Currency:** pt-PT puts the amount first and the code or symbol after a space — `4.327,29 USD`, `12,50 €`; pt-BR puts the symbol first with a space — `US$ 4.327,29`, `R$ 12,50`.
-- **Units:** non-metric units take their Portuguese names (`barril`, `galão`, `onça`, `libra`), and a rate on one is written with *por* — `USD por galão`.
-- **Dates:** `26 de maio de 2026` (month lowercase) or `26/05/2026`.
-- **Dash:** the em-dash (travessão) `—` for asides and dialogue is standard.
-- **Alphabet:** keep `á â ã à ç é ê í ó ô õ ú`.
-- **Address:** polite by default — *o senhor / a senhora* or *você* in pt-PT, *você* in pt-BR.
+- Variant: European Portuguese (pt-PT) by default, Brazilian norms when the target is pt-BR.
+- Quotation marks: «…» in pt-PT and curly double quotes in pt-BR; the other style inside a quote.
+- Numbers: decimal comma and a point between thousands (3,14 and 1.234.567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code> in pt-PT, and <code> <amount> in pt-BR, with a space between them.
+- Units: a rate on an imperial or US customary unit takes the word por: <amount> <code> por <unit>.
+- Dates: the day, de, the month name in lowercase, de and the year, or numeric day/month/year.
+- Asides: the em dash (travessão) carries an aside and dialogue.
+- Alphabet: á â ã à ç é ê í ó ô õ ú.
+- Address: polite by default, o senhor or a senhora or você in pt-PT, and você in pt-BR.
 {{ end }}
 {{ if target_language == "nl" }}
-- **Quotation marks:** primary "…", nested '…' (the older „…" still appears in print).
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567` (a thin space is also used). Percent sign closes onto the number: `12,5%`.
-- **Currency:** code or symbol first, then a space and the amount — `USD 4.327,29`, `€ 12,50`.
-- **Units:** non-metric units take their Dutch names (`vat`, `gallon`, `ounce`, `pond`), and a rate on one is written with *per* — `USD per gallon`.
-- **Dates:** `26 mei 2026` (month lowercase) or `26-05-2026` (hyphens, not dots).
-- **Dash:** the spaced en-dash `–` (gedachtestreepje) for asides; a comma is often preferred.
-- **Capitalization:** sentence case for headings; nouns, months and weekdays lowercase.
-- **Address:** formal *u* by default; *je / jij* for casual copy.
-- **Style:** Dutch compounds are natural (`olieprijs`, `marktopening`).
+- Quotation marks: curly double quotes for a quote, curly single quotes inside it („…” still appears in print).
+- Numbers: decimal comma and a point or thin space between thousands (3,14 and 1.234.567). The percent sign follows the number without a space (12,5%).
+- Currency: <code> <amount>, with a space after the code.
+- Units: a rate on an imperial or US customary unit takes the word per: <code> <amount> per <unit>.
+- Dates: the day, the month name in lowercase and the year, or numeric day-month-year with hyphens.
+- Asides: a spaced en dash (gedachtestreepje) carries an aside, though a comma is often preferred.
+- Capitalisation: sentence case in headings; nouns, months and weekdays in lowercase.
+- Address: the formal u by default, and je or jij for casual text.
+- Style: Dutch compounds are natural.
 {{ end }}
 {{ if target_language == "sv" }}
-- **Quotation marks:** primary ”…” (a closing-style double on both sides), nested '…'; »…» also occurs.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 kr`.
-- **Units:** non-metric units take their Swedish names (`fat`, `gallon`, `uns`, `pund`), and a rate on one is written with *per* — `USD per gallon`.
-- **Dates:** ISO `2026-05-26` is the everyday Swedish numeric form; the long form is `26 maj 2026` (month lowercase).
-- **Dash:** the spaced en-dash `–` (tankstreck) for asides and ranges.
-- **Alphabet:** keep `å ä ö`; months and weekdays are lowercase.
-- **Address:** use *du* throughout — Swedish addresses readers informally even in business; *ni* is dated.
+- Quotation marks: ”…” (the closing double quote on both sides) for a quote, ’…’ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word per: <amount> <code> per <unit>.
+- Dates: numeric year-month-day is the everyday form; the long form is the day, the month name in lowercase and the year.
+- Asides: a spaced en dash (tankstreck) carries an aside and marks a range.
+- Alphabet: å ä ö; months and weekdays in lowercase.
+- Address: du throughout, also in business text.
 {{ end }}
 {{ if target_language == "da" }}
-- **Quotation marks:** primary »…« (or „…"), nested ›…‹.
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567` (a space is also used). Percent sign after a space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a space — `4.327,29 USD`, `12,50 kr.`.
-- **Units:** non-metric units take their Danish names (`tønde`, `gallon`, `ounce`, `pund`), and a rate on one is written with *pr.* — `USD pr. gallon`.
-- **Dates:** `26. maj 2026` (day takes a period, month lowercase) or `26.05.2026`.
-- **Dash:** the spaced en-dash `–` (tankestreg) for asides and ranges.
-- **Alphabet:** keep `æ ø å`; months and weekdays are lowercase; nouns are lowercase (unlike German).
-- **Address:** *du* by default; reserve *De* for very formal contexts.
+- Quotation marks: »…« (or „…”) for a quote, ›…‹ inside it.
+- Numbers: decimal comma and a point or space between thousands (3,14 and 1.234.567). The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes pr.: <amount> <code> pr. <unit>.
+- Dates: the day with a period, the month name in lowercase and the year, or numeric day.month.year.
+- Asides: a spaced en dash (tankestreg) carries an aside and marks a range.
+- Alphabet: æ ø å; months, weekdays and nouns in lowercase.
+- Address: du by default, and De only in very formal text.
 {{ end }}
 {{ if target_language == "no" }}
-- **Quotation marks:** primary «…», nested '…'.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a space: `12,5 %`.
-- **Currency:** a foreign code follows the amount after a space — `4 327,29 USD`; the krone symbol comes first — `kr 12,50`.
-- **Units:** non-metric units take their Norwegian names (`fat`, `gallon`, `unse`, `pund`), and a rate on one is written with *per* — `USD per gallon`.
-- **Dates:** `26. mai 2026` (day takes a period, month lowercase) or `26.05.2026`.
-- **Dash:** the spaced en-dash `–` (tankestrek) for asides and ranges.
-- **Alphabet:** keep `æ ø å`; months and weekdays are lowercase. Write Bokmål unless Nynorsk is requested.
-- **Address:** *du* by default; *De* is archaic.
+- Quotation marks: «…» for a quote, ’…’ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word per: <amount> <code> per <unit>.
+- Dates: the day with a period, the month name in lowercase and the year, or numeric day.month.year.
+- Asides: a spaced en dash (tankestrek) carries an aside and marks a range.
+- Alphabet: æ ø å; months and weekdays in lowercase. Bokmål unless Nynorsk is requested.
+- Address: du by default.
 {{ end }}
 {{ if target_language == "fi" }}
-- **Quotation marks:** primary ”…” (a closing-style double on both sides), nested '…'.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a space: `12,5 %`.
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their Finnish names (`barreli`, `gallona`, `unssi`, `pauna`), and a rate on one puts the unit in the ablative — `USD gallonalta`.
-- **Dates:** numeric `26.5.2026` (no leading zeros); long `26. toukokuuta 2026` (month in the partitive, lowercase).
-- **Dash:** the spaced en-dash `–` (ajatusviiva) for asides and ranges.
-- **Alphabet:** keep `ä ö å`; months, weekdays, languages and nationalities are lowercase.
-- **Address:** *sinä* (informal) is widely acceptable; use *te* for distinctly formal copy. Mirror the source otherwise.
-- **Style:** Finnish is agglutinative — inflect words with the correct case endings (e.g. *Helsingissä*) instead of relying on prepositions or English word order.
+- Quotation marks: ”…” (the closing double quote on both sides) for a quote, ’…’ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a space (12,5 %).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit puts the unit in the ablative: <amount> <code> <unit in the ablative>.
+- Dates: numeric day.month.year without leading zeros; the long form is the day with a period, the month name in the partitive in lowercase, and the year.
+- Asides: a spaced en dash (ajatusviiva) carries an aside and marks a range.
+- Alphabet: ä ö å; months, weekdays, languages and nationalities in lowercase.
+- Address: sinä is widely acceptable and te is for distinctly formal text; otherwise follow the source.
+- Style: words take the correct case endings instead of prepositions or English word order.
 {{ end }}
 {{ if target_language == "ru" }}
-- **Script:** write in Cyrillic throughout.
-- **Quotation marks:** primary «…» (ёлочки), nested „…".
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign closes onto the number: `12,5%`.
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 ₽`; in running prose an inflected name reads naturally (`98,62 доллара`).
-- **Units:** non-metric units take their Russian names (`баррель`, `галлон`, `унция`, `фунт`), and a rate on one is written with *за* — `USD за галлон`.
-- **Dates:** `26 мая 2026` (month in the genitive, lowercase) or `26.05.2026`.
-- **Dash:** тире (em-dash) `—`, set with spaces, is common — including as a copula linking subject and predicate (`X — это Y`).
-- **Names:** use established Cyrillic forms for well-known names; identifiers and Latin acronyms stay Latin.
-- **Address:** formal *вы* by default; *ты* when casual.
+- Script: Cyrillic throughout.
+- Quotation marks: «…» for a quote, „…“ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word за: <amount> <code> за <unit>, with the unit in the accusative.
+- Dates: the day, the month name in the genitive in lowercase, and the year, or numeric day.month.year.
+- Asides: a spaced em dash (тире) carries an aside and also links a subject to its predicate.
+- Names: established Cyrillic forms for well-known names; identifiers and Latin acronyms stay Latin.
+- Address: the formal вы by default, and ты when casual.
 {{ end }}
 {{ if target_language == "uk" }}
-- **Script:** write in Ukrainian Cyrillic — it uses `ґ є і ї` and not `ё ы э`.
-- **Quotation marks:** primary «…», nested „…".
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign closes onto the number: `12,5%`.
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 грн`; in running prose an inflected name reads naturally (`98,62 долара`).
-- **Units:** non-metric units take their Ukrainian names (`барель`, `галон`, `унція`, `фунт`), and a rate on one is written with *за* — `USD за галон`.
-- **Dates:** `26 травня 2026` (month in the genitive, lowercase) or `26.05.2026`.
-- **Dash:** тире (em-dash) `—`, set with spaces, including as a copula (`X — це Y`).
-- **Names:** established Ukrainian forms; identifiers and Latin acronyms stay Latin. Prefer Ukrainian-native lexis over Russian-influenced wording.
-- **Address:** formal *ви* by default; *ти* when casual.
+- Script: Ukrainian Cyrillic, which uses ґ є і ї and has no ё ы э.
+- Quotation marks: «…» for a quote, „…“ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word за: <amount> <code> за <unit>, with the unit in the accusative.
+- Dates: the day, the month name in the genitive in lowercase, and the year, or numeric day.month.year.
+- Asides: a spaced em dash (тире) carries an aside and also links a subject to its predicate.
+- Names: established Ukrainian forms; identifiers and Latin acronyms stay Latin. Ukrainian native vocabulary is preferred to Russian-influenced wording.
+- Address: the formal ви by default, and ти when casual.
 {{ end }}
 {{ if target_language == "cs" }}
-- **Quotation marks:** primary „…", nested ‚…'.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a space: `12,5 %` (closed only in the adjective `12,5%`).
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 Kč`.
-- **Units:** non-metric units take their Czech names (`barel`, `galon`, `unce`, `libra`), and a rate on one is written with *za* — `USD za galon`.
-- **Dates:** numeric `26. 5. 2026` (periods with spaces); long `26. května 2026` (month in the genitive, lowercase).
-- **Dash:** the spaced en-dash `–` (pomlčka) for asides; a closed en-dash for ranges.
-- **Alphabet:** keep `á č ď é ě í ň ó ř š ť ú ů ý ž`. Avoid leaving a one-letter preposition (`k s v z o u a i`) at a line end — bind it to the next word with a non-breaking space.
-- **Address:** formal *vy* by default; *ty* when casual.
+- Quotation marks: „…“ for a quote, ‚…‘ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a space (12,5 %), and without a space when the percentage is used as an adjective.
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word za: <amount> <code> za <unit>.
+- Dates: numeric day. month. year with a space after each period; the long form is the day with a period, the month name in the genitive in lowercase, and the year.
+- Asides: a spaced en dash (pomlčka) carries an aside, and a closed en dash marks a range.
+- Alphabet: á č ď é ě í ň ó ř š ť ú ů ý ž. A one-letter preposition (k s v z o u a i) is bound to the next word with a non-breaking space.
+- Address: the formal vy by default, and ty when casual.
 {{ end }}
 {{ if target_language == "sk" }}
-- **Quotation marks:** primary „…", nested ‚…'.
-- **Numbers:** comma decimal, non-breaking-space grouping — `3,14`, `1 234 567`. Percent sign after a space: `12,5 %` (closed only in the adjective `12,5%`).
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12,50 €`.
-- **Units:** non-metric units take their Slovak names (`barel`, `galón`, `unca`, `libra`), and a rate on one is written with *za* — `USD za galón`.
-- **Dates:** numeric `26. 5. 2026` (periods with spaces); long `26. mája 2026` (month in the genitive, lowercase).
-- **Dash:** the spaced en-dash `–` (pomlčka) for asides; a closed en-dash for ranges.
-- **Alphabet:** keep `á ä č ď é í ĺ ľ ň ó ô ŕ š ť ú ý ž`. Bind one-letter prepositions (`k s v z o u a i`) to the next word with a non-breaking space.
-- **Address:** formal *vy* by default; *ty* when casual.
+- Quotation marks: „…“ for a quote, ‚…‘ inside it.
+- Numbers: decimal comma and a non-breaking space between thousands (3,14 and 1 234 567). The percent sign follows the number after a space (12,5 %), and without a space when the percentage is used as an adjective.
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes the word za: <amount> <code> za <unit>.
+- Dates: numeric day. month. year with a space after each period; the long form is the day with a period, the month name in the genitive in lowercase, and the year.
+- Asides: a spaced en dash (pomlčka) carries an aside, and a closed en dash marks a range.
+- Alphabet: á ä č ď é í ĺ ľ ň ó ô ŕ š ť ú ý ž. A one-letter preposition (k s v z o u a i) is bound to the next word with a non-breaking space.
+- Address: the formal vy by default, and ty when casual.
 {{ end }}
 {{ if target_language == "hu" }}
-- **Quotation marks:** primary „…", nested »…« (reversed guillemets).
-- **Numbers:** comma decimal, space grouping — `3,14`, `1 234 567`. Percent sign closes onto the number: `12,5%`.
-- **Currency:** amount first, then the code or symbol after a space — `4 327,29 USD`, `12 500 Ft`.
-- **Units:** non-metric units take their Hungarian names (`hordó`, `gallon`, `uncia`, `font`), and a rate on one keeps the slash with the Hungarian name — `USD/hordó`.
-- **Dates:** big-endian with periods — `2026. május 26.` (month lowercase, trailing period) or `2026. 05. 26.`.
-- **Dash:** the spaced en-dash `–` (gondolatjel) for asides, not the em-dash.
-- **Alphabet:** keep `á é í ó ö ő ú ü ű` (note the long `ő ű`); months, weekdays and language names are lowercase.
-- **Names:** Hungarian personal names are family-name-first (`Nagy János`); keep foreign names in their original order.
-- **Address:** formal *ön / maga* by default; *te* when casual.
-- **Style:** Hungarian is agglutinative with vowel harmony — attach the correct suffixes rather than imitating English prepositions.
+- Quotation marks: „…” for a quote, »…« inside it.
+- Numbers: decimal comma and a space between thousands (3,14 and 1 234 567). The percent sign follows the number without a space (12,5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit keeps a slash with the Hungarian unit name: <amount> <code>/<unit>.
+- Dates: year first, with periods: the year, the month name in lowercase and the day, each followed by a period, or numeric year. month. day.
+- Asides: a spaced en dash (gondolatjel) carries an aside.
+- Alphabet: á é í ó ö ő ú ü ű; months, weekdays and language names in lowercase.
+- Names: a Hungarian name puts the family name first; a foreign name keeps its order.
+- Address: the formal ön or maga by default, and te when casual.
+- Style: suffixes with vowel harmony carry what English expresses with prepositions.
 {{ end }}
 {{ if target_language == "tr" }}
-- **Quotation marks:** primary "…"; «…» is the formal alternative.
-- **Numbers:** comma decimal, point grouping — `3,14`, `1.234.567`. The percent sign comes *before* the number: `%12,5`.
-- **Currency:** amount first, then the code or symbol after a space — `4.327,29 USD`, `12,50 TL`.
-- **Units:** non-metric units take their Turkish names (`varil`, `galon`, `ons`, `libre`), and a rate on one is written unit-first with *başına* — `galon başına 3,40 USD`.
-- **Dates:** `26 Mayıs 2026` (month names are capitalized in Turkish) or `26.05.2026`; with weekday `26 Mayıs 2026 Pazartesi`.
-- **Dash:** prefer commas or parentheses for asides; the long dash mainly introduces dialogue.
-- **Alphabet:** keep `ç ğ ı i İ ö ş ü` and respect the dotted/dotless distinction (`i/İ`, `ı/I`). Attach suffixes to proper nouns after an apostrophe (`İstanbul'da`) and follow vowel harmony.
-- **Address:** formal *siz* by default; *sen* when casual.
+- Quotation marks: curly double quotes for a quote; «…» is the formal alternative.
+- Numbers: decimal comma and a point between thousands (3,14 and 1.234.567). The percent sign comes before the number (%12,5).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit puts the unit first with başına: <unit> başına <amount> <code>.
+- Dates: the day, the capitalised month name and the year, with a weekday after them, or numeric day.month.year.
+- Asides: a comma or parentheses carry an aside; a long dash mainly introduces dialogue.
+- Alphabet: ç ğ ı i İ ö ş ü, keeping the dotted and dotless i apart. A suffix on a proper noun follows an apostrophe, and suffixes follow vowel harmony.
+- Address: the formal siz by default, and sen when casual.
 {{ end }}
 {{ if target_language == "ar" }}
-- **Direction:** Arabic is right-to-left; write it naturally and let the renderer handle direction. Numerals stay left-to-right within the text.
-- **Quotation marks:** «…» or "…".
-- **Numbers:** use Western digits (`0-9`) for technical and business copy and keep the source's decimal style; group thousands with a comma (`1,234,567`). Percent sign closes onto the number: `12.5%`.
-- **Currency:** amount first, then the Arabic currency name or the ISO code — `4,327.29 دولار`, `4,327.29 USD`.
-- **Units:** non-metric units take their Arabic names (`برميل`, `غالون`, `أونصة`, `رطل`), and a rate on one is written with *لل* — `دولار للبرميل`.
-- **Punctuation:** use the Arabic comma `،` and Arabic question mark `؟`.
-- **Dates:** `26 مايو 2026` (Gregorian month name) or `26/05/2026`; use the Gregorian calendar.
-- **Dash:** Arabic does not use a dash for apposition — use the Arabic comma `،` or a colon; use the hyphen `-` in headings.
-- **Names:** keep identifiers and Latin acronyms Latin; for a high-profile name a one-time Arabic gloss in parentheses on first mention is acceptable.
-- **Address:** use the formal, respectful register by default.
+- Direction: Arabic is written right to left and numerals stay left to right; the renderer handles direction.
+- Quotation marks: «…» or curly double quotes.
+- Numbers: Western digits (0 to 9) in technical and business text, the decimal style of the source, and a comma between thousands (1,234,567). The percent sign follows the number without a space (12.5%).
+- Currency: <amount> <code>, with a space before the code.
+- Units: a rate on an imperial or US customary unit takes لل before the unit: <amount> <code> لل<unit>.
+- Punctuation: the Arabic comma ، and question mark ؟.
+- Dates: the day, the Gregorian month name and the year, or numeric day/month/year; the Gregorian calendar throughout.
+- Asides: the Arabic comma or a colon carry an aside; a heading keeps a hyphen.
+- Names: identifiers and Latin acronyms stay Latin; a high-profile name may get a one-time Arabic gloss in parentheses on first mention.
+- Address: the formal, respectful register by default.
 {{ end }}
 {{ if target_language != "en" && target_language != "pl" && target_language != "de" && target_language != "es" && target_language != "fr" && target_language != "it" && target_language != "pt" && target_language != "nl" && target_language != "sv" && target_language != "da" && target_language != "no" && target_language != "fi" && target_language != "ru" && target_language != "uk" && target_language != "cs" && target_language != "sk" && target_language != "hu" && target_language != "tr" && target_language != "ar" }}
-No dedicated section is defined for this target. Apply general professional-translation rules:
-- Use the quotation marks, decimal mark, digit grouping, percent spacing and date format that an educated native reader of {{ target_name }} expects.
-- Write amounts in {{ target_name }}'s money format — position and spacing of the ISO code or symbol — and units by their {{ target_name }} names, with rates in the {{ target_name }} "per" construction.
-- Use the script and full diacritics of {{ target_name }}; render established proper names by its convention, and keep identifiers and Latin acronyms as written.
-- Use the dash and apposition style native to {{ target_name }} rather than copying the source's.
-- When in doubt, prefer conservative, faithful accuracy over creative localization.
+- Use the quotation marks, decimal mark, digit grouping, percent spacing, date format, currency position and per form for units that an educated native reader of {{ target_name }} expects.
+- Use the script and full diacritics of {{ target_name }}, and the punctuation {{ target_name }} uses for an aside.
+- Where a convention is uncertain, prefer faithful accuracy over creative localisation.
 {{ end }}
 
-# Source text
-
+<source_text>
 {{ content }}
+</source_text>
 
-# Output
-
-Output ONLY the finished {{ target_name }} translation as plain text — it is the deliverable itself, so add no labels, preamble, commentary, surrounding quotes or JSON wrapper. Keep the source's structure, markup and tokens intact.
+Return the finished {{ target_name }} translation as plain text, starting with its first word, with no label, preamble, commentary, surrounding quotes or JSON wrapper. Keep the structure, markup and tokens of the source.
 """;
 }

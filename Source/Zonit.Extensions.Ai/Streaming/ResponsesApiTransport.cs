@@ -60,7 +60,7 @@ public static class ResponsesApiTransport
         ILogger logger,
         CancellationToken cancellationToken = default)
         => SendWithRetryAsync(
-            httpClient, requestPath, payloadFactory, interEventTimeout, TimeSpan.Zero,
+            httpClient, requestPath, payloadFactory, interEventTimeout, TimeSpan.Zero, TimeSpan.Zero,
             maxRetries: 0, retryDelay: static _ => TimeSpan.Zero,
             provider, operation, logger, cancellationToken);
 
@@ -73,7 +73,7 @@ public static class ResponsesApiTransport
     /// Polly's retry covers only what happens before the response headers arrive; once a
     /// <c>200</c> has come back and the body is streaming, a stream that goes silent or drops
     /// is invisible to it. This loop covers that window: a watchdog timeout
-    /// (<see cref="AiResilienceOptions.InterEventTimeout"/> while the model thinks,
+    /// (<see cref="AiResilienceOptions.ThinkingStallTimeout"/> while the model thinks,
     /// <see cref="AiResilienceOptions.OutputStallTimeout"/> while it writes) or a connection
     /// that ends mid-stream re-issues the identical request, on the shared schedule
     /// (<see cref="AiResilienceOptions.MaxRetryAttempts"/> + <see cref="AiResilienceOptions.RetryDelay"/>).
@@ -107,6 +107,7 @@ public static class ResponsesApiTransport
         return SendWithRetryAsync(
             httpClient, requestPath, payloadFactory,
             resilience.InterEventTimeout > TimeSpan.Zero ? resilience.InterEventTimeout : TimeSpan.FromMinutes(30),
+            resilience.ThinkingStallTimeout,
             resilience.OutputStallTimeout,
             Math.Max(0, resilience.MaxRetryAttempts),
             resilience.RetryDelay,
@@ -118,6 +119,7 @@ public static class ResponsesApiTransport
         string requestPath,
         Func<bool, string> payloadFactory,
         TimeSpan interEventTimeout,
+        TimeSpan thinkingStallTimeout,
         TimeSpan outputStallTimeout,
         int maxRetries,
         Func<int, TimeSpan> retryDelay,
@@ -131,7 +133,7 @@ public static class ResponsesApiTransport
             try
             {
                 return await SendOnceAsync(
-                        httpClient, requestPath, payloadFactory, interEventTimeout, outputStallTimeout,
+                        httpClient, requestPath, payloadFactory, interEventTimeout, thinkingStallTimeout, outputStallTimeout,
                         provider, operation, logger, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -175,6 +177,7 @@ public static class ResponsesApiTransport
         string requestPath,
         Func<bool, string> payloadFactory,
         TimeSpan interEventTimeout,
+        TimeSpan thinkingStallTimeout,
         TimeSpan outputStallTimeout,
         string provider,
         string operation,
@@ -207,7 +210,7 @@ public static class ResponsesApiTransport
                     provider, response.StatusCode, errorJson);
 
                 return await SendOnceAsync(
-                        httpClient, requestPath, payloadFactory, interEventTimeout, outputStallTimeout,
+                        httpClient, requestPath, payloadFactory, interEventTimeout, thinkingStallTimeout, outputStallTimeout,
                         provider, operation, logger, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -226,7 +229,7 @@ public static class ResponsesApiTransport
             using var reader = new StreamReader(stream, Encoding.UTF8);
 
             return await ResponsesStreamAssembler
-                .ReadAsync(reader, interEventTimeout, outputStallTimeout, provider, operation, cancellationToken)
+                .ReadAsync(reader, interEventTimeout, thinkingStallTimeout, outputStallTimeout, provider, operation, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested && IsBrokenStream(ex))

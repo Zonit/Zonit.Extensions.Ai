@@ -3,6 +3,72 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.15.0 — 2026-10-04
+
+### OpenAI / xAI: every phase of a Responses stream has a limit that fits it (#30)
+
+10.14 tightened the watchdog only while a `message` / `function_call` item was open. A stream that
+went silent *before* the first output item, or between the answer and `response.completed`, still
+waited the full 30-minute `InterEventTimeout`, so the 10.14 stream retry never ran. Reported on
+`Sol61 { Reason = Low }`: three hangs in four runs, one HTTP request each, no stall warning.
+
+- **Added** `Ai:Resilience:ThinkingStallTimeout` (default 10 min): the limit while the model
+  thinks — before its first output item, inside a reasoning item, around a server-side tool.
+  One value for every model and reasoning effort. Measured on the live API, reasoning is not one long
+  silence: GPT-6 emits a new reasoning item every few seconds, and the longest gap was 15 s
+  (`gpt-6.1-sol`, `xhigh`, 121 s run; 12.5 s at `high`, 4.4 s on `gpt-6-luna` at `xhigh`). What does
+  delay the first frame — an overloaded server, a very long prompt being read — is independent of
+  effort, so a limit scaled by effort would cut a slow but live low-effort request and still wait too
+  long on a dead high-effort one. 10 min leaves a wide margin for a slow server and still re-issues a
+  dead stream long before the 30-minute `InterEventTimeout`. (Polling the server instead is not
+  available: `GET /v1/responses/{id}` returns 404 while a non-background response is streaming.)
+- **Changed** after a writing item closes with nothing else open, the stream only waits for
+  `response.completed`, which follows within a second, so `OutputStallTimeout` applies there too. A
+  reasoning item opened after an answer (a model that searches again) returns to the thinking limit.
+- **Added** diagnostics: the `TimeoutException` names the last event, when it arrived and the phase,
+  e.g. `no event for 300 s after response.output_item.done (reasoning) at 7.5 s (thinking)`, and
+  the setting to tune. A stream that ends without its terminal event names its last event too.
+- **Added** a `ResponsesStreamAssembler.ReadAsync` overload that takes the thinking limit;
+  `ResponsesApiTransport.SendAsync(…, AiResilienceOptions, …)` now applies all three limits. Existing
+  signatures are unchanged.
+- Tests: deterministic streams for a silence before any output (thinking limit), after the answer
+  (output limit), reasoning after an answer (no false stall), the diagnostic message, a zero thinking
+  limit falling back to `InterEventTimeout`, and a request that never starts answering being
+  re-issued. Live: OpenAI / xAI streaming and agent smoke tests, and the long Sol61 `Low` request.
+
+### TranslatePrompt: rewritten without prompt anti-patterns (#29, review)
+
+A review of the 10.14 template found patterns that leak into output or weaken rules. The template is
+rewritten across all 19 languages and the fallback:
+
+- the first sentence states the task instead of a persona with a "not a word-for-word converter"
+  contrast;
+- no em or en dash characters anywhere in the prompt (it had 17 in the Polish render, whose own
+  section forbids them); dashes are named where a language uses them;
+- formats are shown with placeholders (`<amount> <code>`, `<amount> <code> za <unit>`) instead of
+  real currencies, units and values, which models copy into the text at hand;
+- one currency rule: an amount takes the ISO code of its currency in the form the language section
+  gives (no spelled-out alternative);
+- a number next to an identifier, field name or code is still a number and takes the target format;
+- plain labels, no bold and no "ONLY"; the source sits in `<source_text>` tags and the output
+  contract comes last.
+
+Placeholders alone lost the distinction the old examples carried: the first draft let GPT-6 Luna (Low)
+keep `USD/oz`, `USD/bbl` in 8 of 10 runs and made Sonnet 5.5 write the metric rate as a "za" form. The
+unit rule now says it in words: a metric or SI symbol keeps its slash, an imperial or US customary
+unit is always written out (also in price lists and tables), and a code built from initials stays.
+
+Measured on market text EN → pl (identifier fields, a price block, imperial and metric rates), 10.14
+→ new template. The identifier rule and the Polish aside rule were the same in the last three rounds
+(52 runs per cell); the final unit rule ran in the last round (20 runs per cell):
+
+| model | numbers next to identifiers left in source format (52) | imperial rates left in English (20) | `MMBtu` rewritten (20) | dashes (52) |
+| :--- | :---: | :---: | :---: | :---: |
+| GPT-6 Luna, Low | 1 → 2 | 0 → 0 | 0 → 0 | 0 → 0 |
+| Claude Sonnet 5.5 | 7 → 0 | 0 → 0 | 0 → 0 | 0 → 0 |
+
+The live smoke test (prose with a `USD/MMBtu` rate) then passed 27 of 28 runs across both models.
+
 ## 10.14.0 — 2026-10-04
 
 ### OpenAI / xAI: a stream that freezes mid-answer is detected in minutes and re-issued

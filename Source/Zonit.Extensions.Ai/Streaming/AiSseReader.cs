@@ -88,7 +88,7 @@ public static class AiSseReader
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 throw new TimeoutException(
-                    $"{provider} {operation} stream produced no event for {limit.TotalSeconds:N0}s — "
+                    $"{provider} {operation} stream produced no event for {limit.TotalSeconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)} s — "
                     + "server-side stall. Configurable via Ai:Resilience InterEventTimeout / OutputStallTimeout.");
             }
 

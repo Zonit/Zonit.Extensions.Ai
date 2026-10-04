@@ -91,6 +91,7 @@ with `AddAi(o => o.Resilience...)`.
 | `RetryBaseDelay` / `RetryMaxDelay` | 5 s / 60 s | Exponential backoff: first delay → steady cap |
 | `InterEventTimeout` | 30 min | Max gap between two stream frames before the stream is declared dead (streaming providers). Long on purpose: a model may think silently for minutes |
 | `OutputStallTimeout` | 2 min | Max gap while the model is *writing* (answer text or tool-call arguments streaming) on OpenAI / xAI. A writing model sends a frame every few hundred ms, so this silence means a dead stream |
+| `ThinkingStallTimeout` | 10 min | Max gap while the model is *thinking* on OpenAI / xAI (before its first output, in a reasoning item, around a server-side tool). One value for every model and effort: reasoning arrives in items seconds apart, while a slow server delays the first frame regardless of effort |
 | `UseJitter` | `true` | Randomise HTTP-layer delays |
 | `CircuitBreakerFailureRatio` | 0.5 | Failure ratio that opens the circuit |
 
@@ -113,7 +114,7 @@ builder.Services.AddAi(o =>
 > calls all stream on the wire — including `GenerateAsync` / `ChatAsync` and every agent turn,
 > which reassemble the reply before returning — so on those providers the effective per-attempt cap
 > is `TotalRequestTimeout`, and stream liveness is enforced by `InterEventTimeout` /
-> `OutputStallTimeout` plus HTTP/2 keep-alive pings. When either watchdog fires, or the connection
+> `ThinkingStallTimeout` / `OutputStallTimeout` plus HTTP/2 keep-alive pings. When a watchdog fires, or the connection
 > drops mid-stream, the request is re-issued within `MaxRetryAttempts` — generation restarts from
 > zero and is billed again.
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 
 namespace Zonit.Extensions.Ai;
@@ -55,28 +56,66 @@ public static class ResponsesStreamAssembler
     /// object, with a tighter watchdog while the model is writing.
     /// </summary>
     /// <remarks>
-    /// Two limits, because the stream has two kinds of silence. While the model reasons (or
-    /// waits on a server-side tool) nothing may arrive for many minutes, and that is healthy —
-    /// <paramref name="interEventTimeout"/> applies. Once an output item that streams tokens is
-    /// open (a <c>message</c> or a <c>function_call</c>), a frame arrives every few hundred
-    /// milliseconds; a gap of <paramref name="outputStallTimeout"/> there is a dead stream, not
-    /// thinking. Without the second limit a stream that froze mid-answer sat for the full
-    /// <paramref name="interEventTimeout"/> (30 minutes by default) before anything noticed.
+    /// Equivalent to the phase-aware overload with the thinking limit left at
+    /// <paramref name="interEventTimeout"/>.
     /// </remarks>
     /// <param name="reader">Reader over the raw SSE body.</param>
-    /// <param name="interEventTimeout">Limit outside an open output item; see <see cref="AiSseReader"/>.</param>
+    /// <param name="interEventTimeout">Limit while the model thinks; see <see cref="AiSseReader"/>.</param>
     /// <param name="outputStallTimeout">
-    /// Limit while an output item is streaming. Zero or less falls back to
+    /// Limit while an output item is streaming and after it closes. Zero or less falls back to
     /// <paramref name="interEventTimeout"/>.
     /// </param>
     /// <param name="provider">Provider name, for diagnostics.</param>
     /// <param name="operation">Calling operation, for diagnostics.</param>
     /// <param name="cancellationToken">Caller's token.</param>
-    /// <exception cref="TimeoutException">No frame arrived within the limit in effect.</exception>
+    public static Task<string> ReadAsync(
+        StreamReader reader,
+        TimeSpan interEventTimeout,
+        TimeSpan outputStallTimeout,
+        string provider,
+        string operation,
+        CancellationToken cancellationToken = default)
+        => ReadAsync(reader, interEventTimeout, TimeSpan.Zero, outputStallTimeout, provider, operation, cancellationToken);
+
+    /// <summary>
+    /// Consumes the SSE stream to completion and returns the raw JSON of the terminal Response
+    /// object, with a watchdog whose limit follows the phase the stream is in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A Responses stream goes through three kinds of silence, and each gets its own limit:
+    /// </para>
+    /// <list type="bullet">
+    ///   <item><b>Thinking</b> — before the first output item, inside a reasoning item, around a
+    ///   server-side tool: <paramref name="thinkingStallTimeout"/>. Reasoning arrives in items a
+    ///   few seconds apart even at the highest effort, but a slow server or a very long prompt can
+    ///   delay the first one, so this limit is generous.</item>
+    ///   <item><b>Writing</b> — a <c>message</c> or <c>function_call</c> item is open and streams
+    ///   tokens: <paramref name="outputStallTimeout"/>. A frame arrives every few hundred
+    ///   milliseconds, so this silence is a dead stream.</item>
+    ///   <item><b>Finishing</b> — a writing item has closed and nothing else is open: only
+    ///   <c>response.completed</c> is left, which follows within a second, so
+    ///   <paramref name="outputStallTimeout"/> applies again. A reasoning item opened after an
+    ///   answer (a model that searches again) returns the stream to thinking.</item>
+    /// </list>
+    /// <para>
+    /// A timeout names the last event, when it arrived and the phase, so a stall can be placed
+    /// without a stream trace.
+    /// </para>
+    /// </remarks>
+    /// <param name="reader">Reader over the raw SSE body.</param>
+    /// <param name="interEventTimeout">Fallback for a phase whose own limit is zero or less.</param>
+    /// <param name="thinkingStallTimeout">Limit while the model thinks. Zero or less: <paramref name="interEventTimeout"/>.</param>
+    /// <param name="outputStallTimeout">Limit while it writes or finishes. Zero or less: <paramref name="interEventTimeout"/>.</param>
+    /// <param name="provider">Provider name, for diagnostics.</param>
+    /// <param name="operation">Calling operation, for diagnostics.</param>
+    /// <param name="cancellationToken">Caller's token.</param>
+    /// <exception cref="TimeoutException">No frame arrived within the limit of the current phase.</exception>
     /// <exception cref="HttpRequestException">The stream carried an <c>error</c> event, or ended before a terminal event.</exception>
     public static async Task<string> ReadAsync(
         StreamReader reader,
         TimeSpan interEventTimeout,
+        TimeSpan thinkingStallTimeout,
         TimeSpan outputStallTimeout,
         string provider,
         string operation,
@@ -84,63 +123,114 @@ public static class ResponsesStreamAssembler
     {
         string? finalResponse = null;
         var openWritingItems = 0;
+        var openOtherItems = 0;
+        var lastClosedWasWriting = false;
 
-        TimeSpan CurrentLimit() =>
-            openWritingItems > 0 && outputStallTimeout > TimeSpan.Zero
-                ? outputStallTimeout
-                : interEventTimeout;
+        var clock = Stopwatch.StartNew();
+        var lastEvent = "the response headers";
+        var lastEventAt = TimeSpan.Zero;
 
-        await foreach (var data in AiSseReader
-            .ReadFramesAsync(reader, CurrentLimit, provider, operation, cancellationToken)
-            .ConfigureAwait(false))
+        (TimeSpan Limit, string Knob, string Phase) CurrentPhase()
         {
-            // Terminated by a terminal response.* event; `[DONE]` is tolerated because some
-            // gateways synthesize it.
-            if (data == "[DONE]") break;
+            var (configured, knob, phase) =
+                openWritingItems > 0 ? (outputStallTimeout, "OutputStallTimeout", "writing")
+                : openOtherItems > 0 ? (thinkingStallTimeout, "ThinkingStallTimeout", "thinking")
+                : lastClosedWasWriting ? (outputStallTimeout, "OutputStallTimeout", "finishing, waiting for response.completed")
+                : (thinkingStallTimeout, "ThinkingStallTimeout", "thinking, before any output");
 
-            using var doc = JsonDocument.Parse(data);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("type", out var typeEl)) continue;
+            return configured > TimeSpan.Zero
+                ? (configured, knob, phase)
+                : (interEventTimeout, "InterEventTimeout", phase);
+        }
 
-            switch (typeEl.GetString())
+        try
+        {
+            await foreach (var data in AiSseReader
+                .ReadFramesAsync(reader, () => CurrentPhase().Limit, provider, operation, cancellationToken)
+                .ConfigureAwait(false))
             {
-                case "response.completed":
-                case "response.incomplete":
-                case "response.failed":
-                    // `incomplete` and `failed` are returned rather than thrown here so the
-                    // caller reports them through the same status/error path it uses for the
-                    // buffered form (status + incomplete_details.reason + error).
-                    if (root.TryGetProperty("response", out var respEl))
-                        finalResponse = respEl.GetRawText();
-                    break;
+                // Terminated by a terminal response.* event; `[DONE]` is tolerated because some
+                // gateways synthesize it.
+                if (data == "[DONE]") break;
 
-                case "response.output_item.added" when IsWritingItem(root):
-                    openWritingItems++;
-                    break;
+                using var doc = JsonDocument.Parse(data);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("type", out var typeEl)) continue;
 
-                case "response.output_item.done" when IsWritingItem(root):
-                    openWritingItems = Math.Max(0, openWritingItems - 1);
-                    break;
+                var type = typeEl.GetString();
+                lastEventAt = clock.Elapsed;
+                lastEvent = ItemType(root) is { } itemType ? $"{type} ({itemType})" : type ?? "(untyped event)";
 
-                case "error":
-                    throw new HttpRequestException(BuildStreamErrorMessage(root, provider, operation));
+                switch (type)
+                {
+                    case "response.completed":
+                    case "response.incomplete":
+                    case "response.failed":
+                        // `incomplete` and `failed` are returned rather than thrown here so the
+                        // caller reports them through the same status/error path it uses for the
+                        // buffered form (status + incomplete_details.reason + error).
+                        if (root.TryGetProperty("response", out var respEl))
+                            finalResponse = respEl.GetRawText();
+                        break;
 
-                    // Everything else (response.created, response.output_item.*,
-                    // response.output_text.delta, …) is liveness only — the terminal event
-                    // repeats all of it in assembled form.
+                    case "response.output_item.added":
+                        if (IsWritingItem(root)) openWritingItems++;
+                        else openOtherItems++;
+                        break;
+
+                    case "response.output_item.done":
+                        if (IsWritingItem(root))
+                        {
+                            openWritingItems = Math.Max(0, openWritingItems - 1);
+                            lastClosedWasWriting = true;
+                        }
+                        else
+                        {
+                            openOtherItems = Math.Max(0, openOtherItems - 1);
+                            lastClosedWasWriting = false;
+                        }
+                        break;
+
+                    case "error":
+                        throw new HttpRequestException(BuildStreamErrorMessage(root, provider, operation));
+
+                        // Everything else (response.created, response.output_text.delta, …) is
+                        // liveness only — the terminal event repeats all of it in assembled form.
+                }
+
+                if (finalResponse is not null) break;
             }
-
-            if (finalResponse is not null) break;
+        }
+        catch (TimeoutException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            var (limit, knob, phase) = CurrentPhase();
+            throw new TimeoutException(
+                $"{provider} {operation} stream produced no event for {Seconds(limit)} after {lastEvent} "
+                + $"at {Seconds(lastEventAt)} ({phase}) — server-side stall. "
+                + $"Configurable via Ai:Resilience {knob}.",
+                ex);
         }
 
         if (finalResponse is null)
             throw new HttpRequestException(
                 HttpRequestError.ResponseEnded,
-                $"{provider} {operation} stream ended before a terminal response event — the response is "
-                + "incomplete and has been discarded rather than parsed as a partial answer.");
+                $"{provider} {operation} stream ended before a terminal response event (last: {lastEvent} at "
+                + $"{Seconds(lastEventAt)}) — the response is incomplete and has been discarded rather "
+                + "than parsed as a partial answer.");
 
         return finalResponse;
     }
+
+    private static string Seconds(TimeSpan value)
+        => value.TotalSeconds.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " s";
+
+    /// <summary>The <c>item.type</c> of an <c>output_item</c> event, or <c>null</c> for any other event.</summary>
+    private static string? ItemType(JsonElement root)
+        => root.TryGetProperty("item", out var item)
+            && item.ValueKind == JsonValueKind.Object
+            && item.TryGetProperty("type", out var type)
+            ? type.GetString()
+            : null;
 
     /// <summary>
     /// Extracts the text fragment from one SSE payload, or <c>null</c> when the frame is not an
@@ -175,9 +265,7 @@ public static class ResponsesStreamAssembler
     /// which may legitimately sit silent.
     /// </summary>
     private static bool IsWritingItem(JsonElement root)
-        => root.TryGetProperty("item", out var item)
-            && item.TryGetProperty("type", out var type)
-            && type.GetString() is "message" or "function_call";
+        => ItemType(root) is "message" or "function_call";
 
     private static string BuildStreamErrorMessage(JsonElement root, string provider, string operation)
     {

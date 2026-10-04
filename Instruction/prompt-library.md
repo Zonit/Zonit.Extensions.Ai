@@ -29,14 +29,21 @@ translation rules.
 Each language section states, explicitly, how that culture writes:
 
 - **Numbers:** decimal mark, digit grouping and percent spacing. The same format applies inside
-  ranges, prices and compound units (`12,5%` in Polish, `12,5 %` in German and French, `%12,5` in Turkish).
-- **Currencies:** symbol or ISO code, its position and its spacing (`$4,327.29` in English becomes
-  `4 327,29 USD` in Polish). Amounts are never converted and keep their decimals.
-- **Units:** the culture's unit names, and its form for a rate (`USD/gal` becomes `USD za galon` in
-  Polish and `USD je Gallone` in German). Values are never converted. Metric symbols and domain codes
-  the culture uses as-is (`kg`, `MWh`, `EUR/MWh`, `MMBtu`) stay unchanged.
+  ranges, prices and compound units (`12,5%` in Polish, `12,5 %` in German and French, `%12,5` in
+  Turkish), and to a number written next to an identifier or field name (the identifier stays).
+- **Currencies:** an amount takes the ISO code of its currency, placed as the culture writes it
+  (`$4,327.29` in English becomes `4 327,29 USD` in Polish). Amounts are never converted and keep
+  their decimals.
+- **Units:** an imperial or US customary unit is written out in the target language, with the
+  culture's form for a rate (`USD/gal` becomes `USD za galon` in Polish and `USD je Gallone` in
+  German). Metric and SI symbols keep their slash (`EUR/MWh`), and codes built from initials
+  (`MMBtu`) stay unchanged. Values are never converted.
 
 A currency or unit is written the same way every time within one text.
+
+The template is written to avoid prompt patterns that leak into output: it states the task instead
+of a persona, contains no em or en dash characters, shows formats with placeholders
+(`<amount> <code>`) rather than real currencies or units, and uses plain labels.
 
 ```csharp
 using Zonit.Extensions.Ai.Prompts;
