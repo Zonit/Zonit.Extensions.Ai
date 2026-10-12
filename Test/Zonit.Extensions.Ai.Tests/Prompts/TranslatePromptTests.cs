@@ -147,6 +147,26 @@ public class TranslatePromptTests
         text.Should().EndWith("Keep the structure, markup and tokens of the source.");
     }
 
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Register_FollowsTheKindOfText_ForEveryLanguage(string target)
+    {
+        // Issue #31: the generic rule ties connectives and everyday words to the kind of text, so a
+        // spoken form appears only in an equally casual source.
+        var text = Render(target);
+
+        text.Should().Contain("- Register: the translation is written in the layer of ");
+        text.Should().Contain("appears only when the source is equally casual");
+    }
+
+    [Fact]
+    public void Polish_NamesBoAsSpoken()
+    {
+        // Measured (#31): the generic rule alone left `bo` in articles; naming it removed it.
+        Section("pl").Should().Contain(
+            "- Register: written Polish joins a cause with ponieważ, gdyż or dlatego że; bo belongs to speech and appears only when the source is clearly casual.");
+    }
+
     [Fact]
     public void Turkish_PutsThePercentSignFirst()
         => Render("tr").Should().Contain("(%12,5)");

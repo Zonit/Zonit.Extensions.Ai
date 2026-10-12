@@ -18,9 +18,8 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <see cref="AnthropicBase.SupportsForcedToolChoice"/>.
 /// </para>
 /// <para>
-/// Cache reads are billed at the Mythos 5 rate of $1.00/1M here. Fable 5.1
-/// dropped to $0.25/1M; Anthropic has not confirmed whether Mythos 5.1 shares
-/// that rate, so the higher figure is used rather than under-reporting cost.
+/// Cache reads are $0.25/1M (0.025× input) — the same rate as Fable 5.1, a
+/// quarter of the Mythos 5 rate.
 /// </para>
 /// </remarks>
 public class Mythos51 : AnthropicFixedSamplingBase<Mythos51.ReasonType>, IAgentLlm
@@ -59,7 +58,7 @@ public class Mythos51 : AnthropicFixedSamplingBase<Mythos51.ReasonType>, IAgentL
     public override decimal PriceCachedWrite => 12.50m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedRead => 1.00m;
+    public override decimal PriceCachedRead => 0.25m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_000_000;

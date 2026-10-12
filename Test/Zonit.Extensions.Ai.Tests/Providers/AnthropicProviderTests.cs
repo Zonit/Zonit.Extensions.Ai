@@ -265,6 +265,39 @@ public class AnthropicProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithHaiku55DefaultReason_ShouldSendExplicitThinkingDisabled()
+    {
+        // Haiku 5.5 thinks by default when `thinking` is omitted, and accepts the
+        // explicit disable at effort high or below — an unset Reason sends no effort
+        // (server default = medium), so the disable is legal.
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        await CreateProvider().GenerateAsync(new Haiku55(), new TestPrompt { Text = "Say hello" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"claude-haiku-5-5\"");
+        capturedRequest.Should().Contain("\"disabled\"");
+        capturedRequest.Should().NotContain("adaptive");
+        capturedRequest.Should().NotContain("effort");
+        capturedRequest.Should().NotContain("temperature");
+    }
+
+    [Fact]
+    public async Task GenerateAsync_WithHaiku55Reason_ShouldSendAdaptiveThinkingWithEffort()
+    {
+        string? capturedRequest = null;
+        SetupMockResponse("""{"id":"msg_123","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":10,"output_tokens":5}}""",
+            request => capturedRequest = request);
+
+        await CreateProvider().GenerateAsync(new Haiku55 { Reason = Haiku55.ReasonType.Low }, new TestPrompt { Text = "Say hello" }, CancellationToken.None);
+
+        capturedRequest.Should().Contain("\"adaptive\"");
+        capturedRequest.Should().Contain("\"effort\":\"low\"");
+        capturedRequest.Should().NotContain("disabled");
+    }
+
+    [Fact]
     public async Task GenerateAsync_WithOpus55DefaultReason_ShouldOmitThinking()
     {
         // Opus 5.5 always thinks and rejects `thinking: disabled` with a 400, so an

@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 156 models across 17 providers.
+Total: 157 models across 17 providers.
 
 ## Alibaba
 
@@ -39,7 +39,8 @@ Total: 156 models across 17 providers.
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
 | `Fable5` | `claude-fable-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Fable51` | `claude-fable-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
-| `Haiku45` | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
+| `Haiku45` ⚠️ | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
+| `Haiku55` | `claude-haiku-5-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Mythos5` | `claude-mythos-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Mythos51` | `claude-mythos-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
@@ -60,8 +61,9 @@ Total: 156 models across 17 providers.
 | `Fable5` | $10 | $1 | $12.5 | $50 |
 | `Fable51` | $10 | $0.25 | $12.5 | $50 |
 | `Haiku45` | $1 | $0.1 | $1.25 | $5 |
+| `Haiku55` | $0.1 | $0.01 | $0.125 | $0.5 |
 | `Mythos5` | $10 | $1 | $12.5 | $50 |
-| `Mythos51` | $10 | $1 | $12.5 | $50 |
+| `Mythos51` | $10 | $0.25 | $12.5 | $50 |
 | `Opus45` | $5 | $0.5 | $6.25 | $25 |
 | `Opus46` | $5 | $0.5 | $6.25 | $25 |
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
@@ -71,7 +73,7 @@ Total: 156 models across 17 providers.
 | `Sonnet45` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet46` | $3 | $0.3 | $3.75 | $15 |
 | `Sonnet5` | $2 | $0.2 | $2.5 | $10 |
-| `Sonnet55` | $2 | $0.2 | $2.5 | $10 |
+| `Sonnet55` | $2 | $0.1 | $2.5 | $10 |
 
 ## Baidu
 
@@ -531,6 +533,7 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 
 | Provider | Class | Model name | Reason |
 | :--- | :--- | :--- | :--- |
+| Anthropic | `Haiku45` | `claude-haiku-4-5-20251001` | Claude Haiku 4.5 is superseded by Haiku55 (claude-haiku-5-5), about 10× cheaper up to 100K prompt tokens ($0.10 / $0.50 per MTok). Still functional, but Anthropic will retire older models. Note Haiku 5.5 rejects temperature / top_p and thinks by default (this SDK disables it while Reason is unset). |
 | Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |

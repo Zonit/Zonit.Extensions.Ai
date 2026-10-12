@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Xunit;
+using Zonit.Extensions.Ai.Anthropic;
 using Zonit.Extensions.Ai.Google;
 using Zonit.Extensions.Ai.OpenAi;
 using Zonit.Extensions.Ai.X;
@@ -56,6 +57,56 @@ public class LongContextPricingTests
         // virtually rather than being shadowed by the base-class default.
         model.GetCachedInputPrice(Short).Should().Be((decimal)shortCached);
         model.GetCachedInputPrice(Long).Should().Be((decimal)longCached);
+    }
+
+    // ---- Anthropic Haiku 5.5: every rate ×5 past 100K prompt tokens ----
+
+    [Fact]
+    public void Haiku55_TiersEveryRateOnThePromptSize()
+    {
+        ILlm model = new Haiku55();
+        const int AtThreshold = 100_000;   // "100,000 tokens or fewer" stays on the base card
+        const int Over = 100_001;
+
+        model.GetInputPrice(AtThreshold).Should().Be(0.10m);
+        model.GetInputPrice(Over).Should().Be(0.50m);
+        model.GetOutputPrice(AtThreshold, outputTokens: 1_000).Should().Be(0.50m);
+        model.GetOutputPrice(Over, outputTokens: 1_000).Should().Be(2.50m);
+        model.GetCachedInputPrice(AtThreshold).Should().Be(0.01m);
+        model.GetCachedInputPrice(Over).Should().Be(0.05m);
+        model.GetCachedInputWritePrice(AtThreshold).Should().Be(0.125m);
+        model.GetCachedInputWritePrice(Over).Should().Be(0.625m);
+        model.GetBatchInputPrice(Over).Should().Be(0.25m);
+        model.GetBatchOutputPrice(Over, outputTokens: 1_000).Should().Be(1.25m);
+    }
+
+    [Fact]
+    public void Haiku55_OneHourCacheWrite_IsTwiceInput_AndTiers()
+    {
+        ILlm model = new Haiku55 { Cache = Cache.OneHour };
+
+        model.GetCachedInputWritePrice(Short).Should().Be(0.20m);
+        model.GetCachedInputWritePrice(Long).Should().Be(1.00m);
+    }
+
+    [Fact]
+    public void Haiku55_CacheReadsCountTowardThePromptSize()
+    {
+        // Anthropic counts cache reads and writes in the prompt length: 40K uncached +
+        // 70K cache reads is a 110K prompt, billed on the higher card.
+        var usage = new TokenUsage
+        {
+            InputTokens = 110_000,
+            CachedTokens = 70_000,
+            OutputTokens = 10_000,
+        };
+
+        var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(new Haiku55(), usage);
+
+        // input : 40_000/1M × $0.50 + 70_000/1M × $0.05 = 0.02 + 0.0035
+        inputCost.Value.Should().BeApproximately(0.0235m, 1e-9m);
+        // output: 10_000/1M × $2.50 = 0.025
+        outputCost.Value.Should().BeApproximately(0.025m, 1e-9m);
     }
 
     // ---- OpenAI GPT-5.6+: cache writes cost 1.25× input and tier with it ----

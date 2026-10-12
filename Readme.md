@@ -641,7 +641,7 @@ Expose sub-agents on any run with `.AddAgent<T>()`. A common shape is a cheap ro
 that delegates to specialists and re-voices the reply — so the persona and language stay in one place:
 
 ```csharp
-var reply = await ai.Chat(new Haiku45(), routerPrompt, history)
+var reply = await ai.Chat(new Haiku55(), routerPrompt, history)
     .AddAgent<ConversionAgent>()       // each specialist: own model + own tools/MCP + own prompt
     .AddAgent<SupportAgent>()
     .AddAgent<AnalysisAgent>()

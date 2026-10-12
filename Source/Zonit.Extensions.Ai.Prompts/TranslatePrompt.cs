@@ -120,7 +120,8 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Currency: an amount is written in the form the section below gives, with the ISO code of its currency. A currency symbol in the source becomes the ISO code of the same currency, unless the section below keeps symbols. Each currency keeps one form throughout the text.
 - Units: a metric or SI symbol stays as written, and a rate built on one keeps its slash: <amount> <code>/<symbol>. An imperial or US customary unit (ounce, pound, gallon, barrel, bushel and the like) has no {{ target_name }} symbol, so its abbreviation is always written out as the {{ target_name }} word for that unit, and a rate built on it takes the per form given below. This holds in price lists, tables and headings as much as in prose. A trading or energy code built from the initials of several words stays as written, together with its rate slash, even when it measures an imperial quantity, because {{ target_name }} readers use such codes unchanged. Each unit keeps one form throughout the text.
 - Dates: the date order and month names given below.
-- Idiom and register: an idiom, set phrase or metaphor becomes its natural {{ target_name }} counterpart. The register of the source (formal, casual, marketing, technical, legal) is kept, and where {{ target_name }} forces a choice of address the section below gives the default.
+- Idiom: an idiom, set phrase or metaphor becomes its natural {{ target_name }} counterpart.
+- Register: the translation is written in the layer of {{ target_name }} that matches the kind of text the source is, whether a chat message or casual post, an article or newsletter, a letter or report, or a legal or official document. Connectives, contractions, particles and everyday words come from that layer, so a form {{ target_name }} readers hear as spoken appears only when the source is equally casual. Plain wording and short sentences still make written text. Where {{ target_name }} forces a choice of address, the section below gives the default.
 - Typography: quotation marks, asides, separators and capitalisation follow the section below as each sentence is written.
 - Consistency: one source term gets one translation throughout, and the text keeps one voice.
 
@@ -134,6 +135,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Dates: US English by default (month name, day, year), British English when requested (day, month name, year); month and weekday names are capitalised.
 - Asides: the em dash is natural in English; US style sets it without spaces, British style prefers a spaced en dash.
 - Style: sentence case in body text and the source's case in headings; loanwords keep their diacritics.
+- Register: contractions belong to conversational text; a formal document or report spells them out.
 {{ end }}
 {{ if target_language == "pl" }}
 - Quotation marks: „…” for a quote, «…» for a quote inside it.
@@ -144,6 +146,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: a comma or parentheses carry every aside and pause, including one the source marks with an em dash or en dash, because Polish prose uses neither dash. A heading label keeps a hyphen.
 - Alphabet: full diacritics (ą ć ę ł ń ó ś ź ż).
 - Address: the formal Pan and Pani by default, and ty only when the source is clearly casual.
+- Register: written Polish joins a cause with ponieważ, gdyż or dlatego że; bo belongs to speech and appears only when the source is clearly casual.
 - Style: natural Polish word order, and loanwords only where Polish readers use them.
 {{ end }}
 {{ if target_language == "de" }}
@@ -155,6 +158,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: a spaced en dash (Gedankenstrich) carries an aside.
 - Alphabet: ä ö ü ß (ss in Swiss German), and every noun capitalised.
 - Address: the formal Sie by default, and du for clearly casual or youth-facing text.
+- Register: in written German a weil clause puts the verb last; weil followed by main-clause word order belongs to speech.
 - Style: a well-formed compound is preferred to a loose paraphrase.
 {{ end }}
 {{ if target_language == "es" }}
@@ -178,6 +182,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: a spaced em dash (tiret cadratin) carries an aside, and an en dash marks a range.
 - Alphabet: the full accent set (à â ç é è ê ë î ï ô û ù ü ÿ œ æ) and the typographic apostrophe ’.
 - Address: the formal vous by default, and tu when casual.
+- Register: written French keeps ne in every negation and prefers cela to ça; dropping ne belongs to speech.
 {{ end }}
 {{ if target_language == "it" }}
 - Quotation marks: «…» (caporali) for a quote, curly double quotes inside it.
@@ -199,6 +204,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: the em dash (travessão) carries an aside and dialogue.
 - Alphabet: á â ã à ç é ê í ó ô õ ú.
 - Address: polite by default, o senhor or a senhora or você in pt-PT, and você in pt-BR.
+- Register: written Portuguese uses para and nós; pra and a gente belong to speech.
 {{ end }}
 {{ if target_language == "nl" }}
 - Quotation marks: curly double quotes for a quote, curly single quotes inside it („…” still appears in print).
@@ -250,6 +256,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: a spaced en dash (ajatusviiva) carries an aside and marks a range.
 - Alphabet: ä ö å; months, weekdays, languages and nationalities in lowercase.
 - Address: sinä is widely acceptable and te is for distinctly formal text; otherwise follow the source.
+- Register: written Finnish is kirjakieli (minä, sinä, me menemme); puhekieli forms such as mä, sä and me mennään belong to speech.
 - Style: words take the correct case endings instead of prepositions or English word order.
 {{ end }}
 {{ if target_language == "ru" }}
@@ -283,6 +290,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: a spaced en dash (pomlčka) carries an aside, and a closed en dash marks a range.
 - Alphabet: á č ď é ě í ň ó ř š ť ú ů ý ž. A one-letter preposition (k s v z o u a i) is bound to the next word with a non-breaking space.
 - Address: the formal vy by default, and ty when casual.
+- Register: written Czech uses the standard forms of spisovná čeština; the endings of obecná čeština belong to speech.
 {{ end }}
 {{ if target_language == "sk" }}
 - Quotation marks: „…“ for a quote, ‚…‘ inside it.
@@ -327,6 +335,7 @@ Translate the text inside <source_text> into {{ target_name }} so that a {{ targ
 - Asides: the Arabic comma or a colon carry an aside; a heading keeps a hyphen.
 - Names: identifiers and Latin acronyms stay Latin; a high-profile name may get a one-time Arabic gloss in parentheses on first mention.
 - Address: the formal, respectful register by default.
+- Register: written Arabic is Modern Standard Arabic; dialect forms belong to speech and casual chat.
 {{ end }}
 {{ if target_language != "en" && target_language != "pl" && target_language != "de" && target_language != "es" && target_language != "fr" && target_language != "it" && target_language != "pt" && target_language != "nl" && target_language != "sv" && target_language != "da" && target_language != "no" && target_language != "fi" && target_language != "ru" && target_language != "uk" && target_language != "cs" && target_language != "sk" && target_language != "hu" && target_language != "tr" && target_language != "ar" }}
 - Use the quotation marks, decimal mark, digit grouping, percent spacing, date format, currency position and per form for units that an educated native reader of {{ target_name }} expects.

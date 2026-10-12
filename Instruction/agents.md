@@ -149,7 +149,7 @@ forwarded down; the sub-agent's own tools and MCP servers are **not** inherited 
 guide: [`subagents.md`](./subagents.md).
 
 ```csharp
-await ai.Chat(new Haiku45(), routerPrompt, history)
+await ai.Chat(new Haiku55(), routerPrompt, history)
     .AddAgent<ConversionAgent>()      // each: own model + own tools/MCP + own prompt
     .AddAgent<SupportAgent>()
     .WithContext(customer)            // forwarded to the sub-agents' scoped tools

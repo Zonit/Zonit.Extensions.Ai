@@ -185,7 +185,7 @@ A cheap model reads the conversation, delegates to the right specialist, and re-
 the customer's language. Trusted context (the customer) is forwarded to every specialist's tools.
 
 ```csharp
-var reply = await ai.Chat(new Haiku45(), routerSystemPrompt, history)
+var reply = await ai.Chat(new Haiku55(), routerSystemPrompt, history)
     .AddAgent<ConversionAgent>()       // each specialist: own model, own prompt, own tools
     .AddAgent<SupportAgent>()
     .AddAgent<AnalysisAgent>()

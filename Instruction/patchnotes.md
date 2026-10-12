@@ -3,6 +3,63 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.18.0 — 2026-10-12
+
+### TranslatePrompt: register follows the kind of text; spoken forms stay out of written text (#31)
+
+In longer plain-language articles the translation drifted into spoken connectives of the target
+language. In Polish: `bo` (speech) where a written article uses `ponieważ` or `gdyż`, most of all
+when an author note asked for plain, short sentences.
+
+- **Changed** the generic rule (split from the idiom rule): the translation is written in the layer
+  of the target language that matches the kind of text the source is — a chat message or casual
+  post, an article or newsletter, a letter or report, a legal or official document. Connectives,
+  contractions, particles and everyday words come from that layer, so a spoken form appears only when
+  the source is equally casual; plain wording and short sentences still make written text. Stated as
+  a rule applied while writing, not as an analysis step the model might print.
+- **Added** a `Register` line to the sections where a spoken form commonly slips into written text,
+  naming the form (the vocabulary exception to the no-literal-examples rule):
+  - pl: a cause takes `ponieważ`, `gdyż` or `dlatego że`; `bo` belongs to speech;
+  - de: a `weil` clause puts the verb last; main-clause order after `weil` belongs to speech;
+  - fr: `ne` stays in every negation, `cela` over `ça`;
+  - pt: `para` and `nós`; `pra` and `a gente` belong to speech;
+  - cs: spisovná čeština; obecná čeština endings belong to speech;
+  - fi: kirjakieli; puhekieli forms belong to speech;
+  - ar: Modern Standard Arabic; dialect forms belong to speech;
+  - en: contractions belong to conversational text; a formal document spells them out.
+
+  Other languages rely on the generic rule.
+- Measured EN → pl on three plain-language market articles, 4 translations each (12 texts per row),
+  plus a casual chat as a control:
+
+  | model, note | `bo` in 12 articles, 10.17 → 10.18 | chat keeps `bo` |
+  | :--- | :---: | :---: |
+  | Claude Sonnet 5.5, note "Short sentences for ordinary readers." | 39 (12 texts) → 5 (4 texts) | 4/4 → 4/4 |
+  | Claude Sonnet 5.5, no note | 18 (12 texts) → 2 (2 texts) | 4/4 → 4/4 |
+  | GPT-6 Luna, Low, same note | 28 (11 texts) → 1 (1 text) | 4/4 → 4/4 |
+
+  A spot check in de, fr, fi, pt and cs kept written forms in the article and casual forms in the
+  chat (German `weil` with verb-second order and Finnish puhekieli in the chat only). Currency and unit
+  handling is unchanged (live smoke test passes).
+- Tests: the generic rule renders for every language; the Polish section names `bo`.
+
+### New model: Claude Haiku 5.5; Sonnet 5.5 and Mythos 5.1 cache-read prices
+
+- **Added Anthropic `Haiku55`** (`claude-haiku-5-5`, released 2026-10-07). 1M context, 128K output,
+  no fast mode. The first Claude model priced by **prompt length**: $0.10 input / $0.01 cache read /
+  $0.125 cache write (5 min; 1 h is $0.20) / $0.50 output per MTok when the prompt is 100K tokens or
+  fewer, and 5× every rate above that ($0.50 / $0.05 / $0.625 / $2.50). The prompt length counts
+  cache reads and writes, as Anthropic bills it; batch is half of whichever card applies.
+- `Haiku55` is the first Haiku with adaptive thinking and five effort levels (`ReasonType.None` …
+  `Max`, server default `medium`). The API thinks by default, so an unset `Reason` sends an explicit
+  `thinking: disabled` — same opt-out as `Opus5`, legal because no effort is sent. Non-default
+  `temperature` / `top_p` are a 400, so they no longer compile on this model. Forced `tool_choice` is
+  accepted. `Haiku45` is marked obsolete; doc examples of a cheap router model now use `Haiku55`.
+- **Fixed** `Sonnet55` cache reads: $0.20 → **$0.10** per MTok (0.05× input), Anthropic's price
+  since 2026-10-07.
+- **Fixed** `Mythos51` cache reads: $1.00 → **$0.25** per MTok. Anthropic now publishes the same rate
+  as Fable 5.1; the class had kept the Mythos 5 rate until it was confirmed.
+
 ## 10.17.0 — 2026-10-04
 
 ### TranslatePrompt: `Notes` from the author

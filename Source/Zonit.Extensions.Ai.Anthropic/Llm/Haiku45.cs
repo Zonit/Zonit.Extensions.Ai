@@ -3,6 +3,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// <summary>
 /// Claude 4.5 Haiku - Fast and cost-effective.
 /// </summary>
+[Obsolete("Claude Haiku 4.5 is superseded by Haiku55 (claude-haiku-5-5), about 10× cheaper up to 100K prompt tokens ($0.10 / $0.50 per MTok). Still functional, but Anthropic will retire older models. Note Haiku 5.5 rejects temperature / top_p and thinks by default (this SDK disables it while Reason is unset).")]
 public class Haiku45 : AnthropicLegacyThinkingBase, IAgentLlm
 {
     /// <inheritdoc />

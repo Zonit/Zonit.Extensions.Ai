@@ -80,7 +80,8 @@ public class Sonnet55 : AnthropicToolStepReasoningBase<Sonnet55.ReasonType>, IAg
     public override decimal PriceCachedWrite => 2.50m;
 
     /// <inheritdoc />
-    public override decimal PriceCachedRead => 0.20m;
+    /// <remarks>0.05× input — Anthropic halved it from $0.20 on 7 October 2026.</remarks>
+    public override decimal PriceCachedRead => 0.10m;
 
     /// <inheritdoc />
     public override int MaxInputTokens => 1_000_000;

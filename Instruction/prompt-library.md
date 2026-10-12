@@ -41,6 +41,14 @@ Each language section states, explicitly, how that culture writes:
 
 A currency or unit is written the same way every time within one text.
 
+**Register** follows the kind of text the source is (a chat message, an article, a letter or
+report, a legal document): connectives, contractions and everyday words come from the matching
+layer of the target language, so a spoken form appears only when the source is equally casual.
+Languages where a spoken form commonly slips into written text name it in their section, e.g.
+Polish `bo` (written: `ponieważ`, `gdyż`, `dlatego że`), German `weil` with main-clause order,
+French dropped `ne`, Portuguese `pra` / `a gente`, Finnish puhekieli, Czech obecná čeština, Arabic
+dialect forms, and English contractions in formal documents.
+
 The template is written to avoid prompt patterns that leak into output: it states the task instead
 of a persona, contains no em or en dash characters, shows formats with placeholders
 (`<amount> <code>`) rather than real currencies or units, and uses plain labels.

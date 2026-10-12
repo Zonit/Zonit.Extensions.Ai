@@ -61,6 +61,7 @@ public class ModelGuardrailTests
     [InlineData(typeof(Sonnet55))]
     [InlineData(typeof(Fable51))]
     [InlineData(typeof(Mythos51))]
+    [InlineData(typeof(Haiku55))]
 #pragma warning disable CS0618
     [InlineData(typeof(Opus5))]
     [InlineData(typeof(Sonnet5))]
@@ -88,8 +89,8 @@ public class ModelGuardrailTests
     [Theory]
 #pragma warning disable CS0618
     [InlineData(typeof(Sonnet46))]
-#pragma warning restore CS0618
     [InlineData(typeof(Haiku45))]
+#pragma warning restore CS0618
     public void ModelsThatAcceptSampling_KeepTemperatureUsable(Type modelType)
         => modelType.GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.Name == "Temperature")

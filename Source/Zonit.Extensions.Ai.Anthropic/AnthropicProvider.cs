@@ -148,7 +148,7 @@ public sealed class AnthropicProvider : IModelProvider
         }
 
         // Opt-out path: models whose API enables thinking by default when
-        // `thinking` is omitted (currently Sonnet 5). Send an explicit
+        // `thinking` is omitted (Sonnet 5, Opus 5, Haiku 5.5). Send an explicit
         // disable so an unset `Reason` still means "no thinking" here too.
         if (llm is AnthropicAdaptiveBase adaptiveBase && adaptiveBase.ThinkingEnabledByDefault)
         {
@@ -185,7 +185,7 @@ public sealed class AnthropicProvider : IModelProvider
     /// </para>
     /// <para>
     /// Anthropic silently ignores breakpoints under the per-model token minimum
-    /// (Sonnet 4.5 / Opus 4.x = 1 024; Sonnet 4.6 = 2 048; Haiku 4.5 / Opus 4.5+ = 4 096),
+    /// (Sonnet 4.5 / Opus 4.x = 1 024; Sonnet 4.6 = 2 048; Haiku 4.5 / Opus 4.5+ = 4 096; Haiku 5.5 = 512),
     /// so it is safe to apply them liberally even when the prefix is short.
     /// Cache TTL is 5 min by default or 1 h via <see cref="Cache.OneHour"/>.
     /// </para>
@@ -307,7 +307,7 @@ public sealed class AnthropicProvider : IModelProvider
             body.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase))
         {
             message += $" - the prompt exceeded model '{llm.Name}'s {llm.MaxInputTokens}-token context window. "
-                     + "Route this step to a 1M-context model (Opus55, Sonnet55, Opus5, Sonnet5, Opus46/Opus47/Opus48 or Sonnet46) or reduce the input.";
+                     + "Route this step to a 1M-context model (Opus55, Sonnet55, Haiku55, Opus5, Sonnet5, Opus46/Opus47/Opus48 or Sonnet46) or reduce the input.";
         }
 
         return message;
