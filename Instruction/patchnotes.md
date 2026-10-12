@@ -3,7 +3,11 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
-## 10.19.0 — 2026-10-12
+## 10.19.1 — 2026-10-12
+
+The 10.19.0 publish timed out on NuGet after `Zonit.Extensions.Ai` and
+`Zonit.Extensions.Ai.Abstractions`, so the provider packages never shipped as 10.19.0. 10.19.1 is the
+same code, published as a complete set. The changes below are what 10.19.x adds over 10.18.0.
 
 ### xAI voice (speech-to-text and text-to-speech), Grok Imagine Video 1.5 Lite, ElevenLabs v4, OpenAI ultrafast
 
