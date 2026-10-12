@@ -24,7 +24,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// without tool calling — this SDK uses the Responses API.
 /// </para>
 /// </remarks>
-public class Sol61 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast
+public class Sol61 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast, IUltraFast
 {
     /// <inheritdoc />
     public override string Name => "gpt-6.1-sol";
@@ -83,7 +83,9 @@ public class Sol61 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm,
     /// <summary>
     /// Inference speed. Set to <see cref="SpeedType.Fast"/> to opt this request into OpenAI fast
     /// mode (<c>service_tier: "fast"</c>) — up to ~2.5× faster output and steadier latency, at
-    /// double the standard rate on input, cached input and output. Defaults to
+    /// double the standard rate on input, cached input and output. Set to
+    /// <see cref="SpeedType.UltraFast"/> for the ultrafast tier (<c>service_tier: "ultrafast"</c>,
+    /// separate capacity and rate limits) at 6× the standard rate — $12 / $0.60 cached / $15 cache write / $60 output per 1M (long context $24 / $1.20 / $30 / $90), since 8 October 2026. Defaults to
     /// <see cref="SpeedType.Standard"/>.
     /// </summary>
     /// <remarks>

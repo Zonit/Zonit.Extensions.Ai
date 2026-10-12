@@ -187,25 +187,34 @@ foreach (var w in r.Value.ToWords())                              // word-level 
 // r.Value.Characters gives the raw per-character alignment if you need finer control.
 ```
 
-Only providers that return alignment (ElevenLabs) support this; others throw `NotSupportedException`.
+Only providers that return alignment (ElevenLabs, xAI) support this; others throw `NotSupportedException`.
 
 ### Model capability matrix (ElevenLabs)
 
 | Model | Audio tags (`[excited]`…) | Request stitching (prev/next) | Max chars |
 | :--- | :---: | :---: | ---: |
+| `ElevenV4` / `ElevenV4Turbo` | ✅ | ❌ (not documented for v4) | 10 000 |
 | `ElevenV3` | ✅ | ❌ (v3 doesn't support it) | ~5 000 |
 | `ElevenMultilingualV2` | ❌ | ✅ | 10 000 |
 | `ElevenTurboV2_5` / `ElevenFlashV2_5` | ❌ | ✅ | 40 000 |
 | `ElevenTurboV2` / `ElevenFlashV2` | ❌ | ✅ | 30 000 |
 
-The provider enforces this: on v3 it **omits** `previous_text`/`next_text` automatically (they'd be
-ignored), so the same `SpeechPrompt` / script code works on any model — v3 just expresses through tags
-instead of stitching. `SupportsAudioTags` / `SupportsRequestStitching` on the model expose these flags.
+The provider enforces this: on v3 and v4 it **omits** `previous_text`/`next_text` automatically, so
+the same `SpeechPrompt` / script code works on any model — they express through tags instead of
+stitching. v4 also takes only stability and similarity, so `Style` and `Speed` are left out of its
+requests. `SupportsAudioTags` / `SupportsRequestStitching` / `SupportsStyleAndSpeed` on the model
+expose these flags. (`ElevenTurboV2` / `ElevenTurboV2_5` are deprecated by ElevenLabs — use the Flash
+models.)
 
 **Choosing a model.** Concrete `Eleven*` classes live under the package's `Llm/` folder and appear
-in [`llms.md`](./llms.md). Rough guide: `ElevenV3` (most expressive, 70+ languages),
-`ElevenMultilingualV2` (quality, 29 languages), `ElevenTurboV2_5` (balanced), `ElevenFlashV2_5`
-(lowest latency). Pick with IntelliSense.
+in [`llms.md`](./llms.md). Rough guide: `ElevenV4` (flagship, most natural, 90+ languages),
+`ElevenV4Turbo` (v4 at ~100 ms latency, for agents), `ElevenV3` (previous generation),
+`ElevenMultilingualV2` (quality, 29 languages), `ElevenFlashV2_5` (lowest latency, cheapest). Pick
+with IntelliSense.
+
+**xAI voices.** `Zonit.Extensions.Ai.X` also synthesizes speech: `new GrokTts { Voice =
+GrokVoices.Ara, Language = "pl" }` ($15 per 1M characters, up to 60 000 per request, timed synthesis
+supported, no request stitching).
 
 **Voice.** A voice is a string id, because providers expose thousands of premade voices plus your
 own cloned/designed ones — too many to enumerate. `ElevenVoices` is a small catalog of premade ids
@@ -350,22 +359,30 @@ One property, three providers — each provider's own wire spelling is handled f
 | `Opus55`, `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). |
 | `Astra6`, `Sol61`, `Sol6`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
 | `Grok47`, `Grok46` | `service_tier: "priority"` | 2× on every token type | xAI Priority Processing — higher scheduling priority (lower TTFT and inter-token latency) when xAI is under load. |
+| `Sol61`, `Astra6` with `SpeedType.UltraFast` | `service_tier: "ultrafast"` | 6× on every token type | OpenAI ultrafast (`IUltraFast`) — a tier above fast mode with its own capacity and rate limits. |
 
 The premium composes with long-context tiering rather than replacing it: a fast `Sol61` request
 above 272K input tokens bills at 2× the *long-context* rate ($8 / $30 per MTok), not 2× the short
 one. `Speed` defaults to `SpeedType.Standard` everywhere, so nothing changes until you opt in, and
-setting it on a model that does not implement `IFast` has no effect.
+setting it on a model that does not implement `IFast` has no effect. `SpeedType.UltraFast` on a
+model without `IUltraFast` (e.g. `new Opus55 { Speed = SpeedType.UltraFast }`) is rejected with
+`NotSupportedException` before the request is sent, rather than silently run at another tier.
+
+```csharp
+await ai.GenerateAsync(new Sol61 { Speed = SpeedType.UltraFast }, "Draft a release note.", ct);  // $12 / $60 per MTok
+```
 
 ### How the premium is applied
 
-A model publishes **two rate cards** — its standard prices on `ILlm` and its fast ones on `IFast` —
-and never chooses between them itself. The choice happens where the cost is computed:
+A model publishes its **rate cards** — standard prices on `ILlm`, fast ones on `IFast`, ultrafast
+ones on `IUltraFast` — and never chooses between them itself. The choice happens where the cost is
+computed:
 
 ```csharp
 // standard card
 AiCostCalculator.CalculateCosts(llm, usage);
-// fast card, or standard when the provider says it downgraded the request
-AiCostCalculator.CalculateCosts(llm, usage, fastGranted: AiFastTier.WasGranted(llm, echoedTier, …));
+// the card of the tier the provider says it served (downgrades included)
+AiCostCalculator.CalculateCosts(llm, usage, AiFastTier.Served(llm, echoedTier, …));
 ```
 
 `model.GetInputPrice(...)` therefore always returns the *standard* rate, whatever `Speed` says.

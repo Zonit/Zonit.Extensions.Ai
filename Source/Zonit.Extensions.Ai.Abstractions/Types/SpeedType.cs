@@ -18,4 +18,12 @@ public enum SpeedType
     /// does not implement <see cref="IFast"/> has no effect.
     /// </summary>
     Fast = 1,
+
+    /// <summary>
+    /// Ultrafast mode — a tier above <see cref="Fast"/>, with its own capacity and rate limits, at
+    /// a much higher premium (OpenAI <c>service_tier: "ultrafast"</c>, 6× the standard rate). Only
+    /// models that implement <see cref="IUltraFast"/> offer it; selecting it on any other model is
+    /// rejected with <see cref="NotSupportedException"/> before the request is sent.
+    /// </summary>
+    UltraFast = 2,
 }

@@ -22,7 +22,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <c>top_p</c> are not accepted.
 /// </para>
 /// </remarks>
-public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast
+public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast, IUltraFast
 {
     /// <inheritdoc />
     public override string Name => "gpt-6-astra";
@@ -82,7 +82,9 @@ public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm
     /// <summary>
     /// Inference speed. Set to <see cref="SpeedType.Fast"/> to opt this request into OpenAI fast
     /// mode (<c>service_tier: "fast"</c>) — up to ~2.5× faster output and steadier latency, at
-    /// double the standard rate on input, cached input and output. Defaults to
+    /// double the standard rate on input, cached input and output. Set to
+    /// <see cref="SpeedType.UltraFast"/> for the ultrafast tier (<c>service_tier: "ultrafast"</c>,
+    /// separate capacity and rate limits) at 6× the standard rate — $60 / $6 cached / $75 cache write / $300 output per 1M (long context $120 / $12 / $150 / $450), since 29 September 2026. Defaults to
     /// <see cref="SpeedType.Standard"/>.
     /// </summary>
     /// <remarks>

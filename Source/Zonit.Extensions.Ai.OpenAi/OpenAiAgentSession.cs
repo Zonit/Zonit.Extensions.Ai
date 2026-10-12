@@ -229,8 +229,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
 
         // Fast mode is a per-request tier, and the Responses API carries nothing across
         // previous_response_id — so it is re-sent on every turn like the rest of this config.
-        if (llm is IFast { Speed: SpeedType.Fast })
-            request.ServiceTier = "fast";
+        request.ServiceTier = OpenAiProvider.ServiceTierFor(llm);
 
         var tools = BuildToolsList();
         if (tools.Count > 0)
@@ -459,8 +458,8 @@ internal sealed class OpenAiAgentSession : IAgentSession
             && outDetails.TryGetProperty("reasoning_tokens", out var rt))
             reasoning = rt.GetInt32();
 
-        // Fast mode is per-request and best-effort — bill the tier this turn was served on.
-        var fastGranted = AiFastTier.WasGranted(
+        // Fast / ultrafast are per-request and best-effort — bill the tier this turn was served on.
+        var servedSpeed = AiFastTier.Served(
             _context.Llm,
             root.TryGetProperty("service_tier", out var tierEl) ? tierEl.GetString() : null,
             _logger,
@@ -473,7 +472,7 @@ internal sealed class OpenAiAgentSession : IAgentSession
             OutputTokens = outputTokens,
             CachedTokens = cached,
             CacheWriteTokens = cacheWrites,
-        }, fastGranted);
+        }, servedSpeed);
 
         return new TokenUsage
         {

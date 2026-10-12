@@ -270,7 +270,7 @@ internal sealed class XAgentSession : IAgentSession
 
         // Priority Processing is a per-request tier, so it is set on every turn of the
         // loop, not just the first (see XProvider.ApplyServiceTier).
-        if (llm is IFast { Speed: SpeedType.Fast })
+        if (AiFastTier.Requested(llm) == SpeedType.Fast)
             request.ServiceTier = "priority";
 
         if (_context.ResponseType is { } responseType)

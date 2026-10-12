@@ -181,6 +181,7 @@ public sealed class ElevenLabsProvider : IModelProvider
 
         var settings = llm as ElevenLabsSpeechBase;
         var stitching = settings?.SupportsRequestStitching ?? true;
+        var styleAndSpeed = settings?.SupportsStyleAndSpeed ?? true;
 
         if (settings?.Seed is { } seed && (seed < 0 || seed > ElevenLabsSpeechBase.MaxSeed))
             throw new ArgumentException(
@@ -208,9 +209,10 @@ public sealed class ElevenLabsProvider : IModelProvider
             {
                 Stability = settings?.Stability ?? 0.5,
                 SimilarityBoost = settings?.SimilarityBoost ?? 0.75,
-                Style = settings?.Style ?? 0.0,
+                // v4 takes only stability and similarity; Style / Speed stay off its requests.
+                Style = styleAndSpeed ? settings?.Style ?? 0.0 : null,
                 UseSpeakerBoost = settings?.UseSpeakerBoost ?? true,
-                Speed = settings?.Speed ?? 1.0,
+                Speed = styleAndSpeed ? settings?.Speed ?? 1.0 : null,
             }
         };
 
@@ -300,9 +302,9 @@ internal sealed class ElevenVoiceSettings
 {
     public double Stability { get; set; }
     public double SimilarityBoost { get; set; }
-    public double Style { get; set; }
+    public double? Style { get; set; }
     public bool UseSpeakerBoost { get; set; }
-    public double Speed { get; set; }
+    public double? Speed { get; set; }
 }
 
 // Response DTOs for the /with-timestamps endpoint.

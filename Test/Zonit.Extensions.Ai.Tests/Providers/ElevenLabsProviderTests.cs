@@ -249,6 +249,44 @@ public class ElevenLabsProviderTests
         words[1].End.Should().Be(TimeSpan.FromSeconds(0.6));
     }
 
+    [Theory]
+    [InlineData("v4")]
+    [InlineData("v4-turbo")]
+    public async Task GenerateSpeech_OnV4_OmitsStyleSpeedAndStitching(string variant)
+    {
+        string? captured = null;
+        SetupAudioResponse(req => captured = req);
+
+        ElevenLabsSpeechBase model = variant == "v4"
+            ? new ElevenV4 { Voice = ElevenVoices.Rachel, Style = 0.4, Speed = 1.1 }
+            : new ElevenV4Turbo { Voice = ElevenVoices.Rachel, Style = 0.4, Speed = 1.1 };
+        var prompt = new SpeechPrompt { Text = "Line two.", PreviousText = "Line one.", NextText = "Line three." };
+
+        await CreateProvider().GenerateSpeechAsync((ISpeechLlm)model, prompt, CancellationToken.None);
+
+        captured.Should().Contain($"\"model_id\":\"{model.Name}\"");
+        captured.Should().Contain("\"stability\"");
+        captured.Should().Contain("\"similarity_boost\"");
+        captured.Should().NotContain("\"style\"");
+        captured.Should().NotContain("\"speed\"");
+        captured.Should().NotContain("previous_text");
+        captured.Should().NotContain("next_text");
+    }
+
+    [Fact]
+    public async Task GenerateSpeech_OnV2_StillSendsStyleAndSpeed()
+    {
+        string? captured = null;
+        SetupAudioResponse(req => captured = req);
+
+        await CreateProvider().GenerateSpeechAsync(
+            new ElevenMultilingualV2 { Voice = ElevenVoices.Rachel, Style = 0.4, Speed = 1.1 },
+            new SpeechPrompt { Text = "Hello." }, CancellationToken.None);
+
+        captured.Should().Contain("\"style\":0.4");
+        captured.Should().Contain("\"speed\":1.1");
+    }
+
     private ElevenLabsProvider CreateProvider()
     {
         var httpClient = new HttpClient(_httpHandlerMock.Object)

@@ -839,7 +839,7 @@ internal sealed class AnthropicAgentSession : IAgentSession
         if (request.MaxTokens < requiredMinTokens)
             request.MaxTokens = requiredMinTokens;
 
-        if (llm is IFast { Speed: SpeedType.Fast })
+        if (AiFastTier.Requested(llm) == SpeedType.Fast)
             request.Speed = "fast";
 
         // When the agent run was seeded from chat[], prompt.Text becomes the system

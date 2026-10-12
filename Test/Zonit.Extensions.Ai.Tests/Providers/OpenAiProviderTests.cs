@@ -359,6 +359,46 @@ public class OpenAiProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_WithUltraFastModel_SendsServiceTierUltrafast_AndBillsSixTimes()
+    {
+        _testHandler.ResponseJson = """
+            {"status":"completed","service_tier":"ultrafast","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],
+             "usage":{"input_tokens":200000,"output_tokens":0}}
+            """;
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(new Sol61 { Speed = SpeedType.UltraFast }, new TestPrompt { Text = "Quick" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("service_tier").GetString().Should().Be("ultrafast");
+        result.MetaData.Usage!.InputCost.Value.Should().Be(2.40m);   // 200K × $12
+    }
+
+    [Fact]
+    public async Task GenerateAsync_UltraFastDowngradedToFast_BillsTheFastRate()
+    {
+        _testHandler.ResponseJson = """
+            {"status":"completed","service_tier":"fast","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],
+             "usage":{"input_tokens":200000,"output_tokens":0}}
+            """;
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(new Sol61 { Speed = SpeedType.UltraFast }, new TestPrompt { Text = "Quick" }, CancellationToken.None);
+
+        result.MetaData.Usage!.InputCost.Value.Should().Be(0.80m);   // 200K × $4
+    }
+
+    [Fact]
+    public async Task GenerateAsync_UltraFastOnAModelWithoutIt_ThrowsBeforeSending()
+    {
+        var provider = CreateProvider();
+
+        await FluentActions.Awaiting(() => provider.GenerateAsync(new Luna6 { Speed = SpeedType.UltraFast }, new TestPrompt { Text = "Quick" }, CancellationToken.None))
+            .Should().ThrowAsync<NotSupportedException>();
+        _testHandler.CapturedRequest.Should().BeNull();
+    }
+
+    [Fact]
     public async Task GenerateAsync_CacheWrites_AreBilledAtTheirOwnRate()
     {
         // OpenAI's own example: 15K input = 12K cache reads + 3K cache writes. On

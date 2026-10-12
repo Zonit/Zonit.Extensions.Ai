@@ -98,7 +98,7 @@ public abstract class ElevenLabsSpeechBase : LlmBase, ISpeechLlm
 
     /// <summary>
     /// Whether inline <b>audio tags</b> (<c>[excited]</c>, <c>[whispers]</c>, …) direct the delivery
-    /// on this model. Only <see cref="Zonit.Extensions.Ai.ElevenLabs.ElevenV3"/> interprets them;
+    /// on this model. v3 and v4 (<see cref="Zonit.Extensions.Ai.ElevenLabs.ElevenV3"/>, <see cref="Zonit.Extensions.Ai.ElevenLabs.ElevenV4"/>) interpret them;
     /// other models read the brackets literally. Informational — tags live in the text. Default: false.
     /// </summary>
     public virtual bool SupportsAudioTags => false;
@@ -110,6 +110,13 @@ public abstract class ElevenLabsSpeechBase : LlmBase, ISpeechLlm
     /// instead). Default: true.
     /// </summary>
     public virtual bool SupportsRequestStitching => true;
+
+    /// <summary>
+    /// Whether the model accepts the <see cref="Style"/> and <see cref="Speed"/> voice settings.
+    /// True for v2/Turbo/Flash/v3; <b>false for v4</b>, which takes only stability and
+    /// similarity. When false, the provider leaves both out of the request. Default: true.
+    /// </summary>
+    public virtual bool SupportsStyleAndSpeed => true;
 
     /// <summary>
     /// Price in dollars per 1 000 input characters. Default 0 — override per model with the

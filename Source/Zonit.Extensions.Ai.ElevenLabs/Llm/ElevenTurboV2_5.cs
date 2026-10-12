@@ -4,6 +4,7 @@ namespace Zonit.Extensions.Ai.ElevenLabs;
 /// Eleven Turbo v2.5 — balances quality and latency across 32 languages. A good middle ground
 /// between <see cref="ElevenMultilingualV2"/> (quality) and <see cref="ElevenFlashV2_5"/> (speed).
 /// </summary>
+[Obsolete("ElevenLabs has deprecated eleven_turbo_v2_5 in favour of ElevenFlashV2_5 (eleven_flash_v2_5), which is faster and cheaper per character. Still functional for now.")]
 public sealed class ElevenTurboV2_5 : ElevenLabsSpeechBase
 {
     /// <inheritdoc />

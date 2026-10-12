@@ -3,6 +3,39 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.19.0 — 2026-10-12
+
+### xAI voice (speech-to-text and text-to-speech), Grok Imagine Video 1.5 Lite, ElevenLabs v4, OpenAI ultrafast
+
+- **Added xAI `GrokVoiceTranscribe20`** (`grok-voice-transcribe-2.0`, released 2026-09-18) — the
+  xAI provider now transcribes (`POST /v1/stt`, multipart, the file sent last as xAI requires). $0.10
+  per hour of audio; the cost is filled in from the duration xAI reports. Before this release the xAI
+  provider threw `NotSupportedException` for transcription.
+- **Added xAI `GrokTts`** — text-to-speech on `POST /v1/tts`, including timed synthesis
+  (`GenerateWithTimestampsAsync`, from xAI's `graph_chars` / `graph_times`). Voice (`GrokVoices.Eve`
+  / `Ara` / `Rex` or any id), language (BCP-47 or `auto`), `GrokAudioFormat` (MP3 / WAV / PCM /
+  µ-law / A-law), speed 0.7–1.5, text normalization. $15 per 1M characters, 60,000 per request. The
+  endpoint takes no model id; `grok-tts` is only a label. No request stitching.
+- **Added xAI `GrokImagineVideo15Lite`** (`grok-imagine-video-1.5-lite`): text- and image-to-video
+  at $0.02 per second at 480p. xAI has not published the 720p / 1080p rates; they are billed at the
+  $0.14 per second Artificial Analysis lists for 1080p (Lite renders 1080p at 720p and upscales), so
+  cost errs high until xAI publishes them.
+- **Added ElevenLabs `ElevenV4` / `ElevenV4Turbo`** (`eleven_v4`, `eleven_v4_turbo`, released
+  2026-09-28): 90+ languages, audio tags, 10,000 characters per request; Turbo for ~100 ms agents.
+  v4 takes only stability and similarity, so a new `SupportsStyleAndSpeed` flag (false on v4) keeps
+  `style` / `speed` out of its requests; request stitching is off until ElevenLabs documents it for v4.
+  `ElevenTurboV2` / `ElevenTurboV2_5` are marked obsolete (ElevenLabs deprecated them for Flash).
+- **Added OpenAI ultrafast**: `SpeedType.UltraFast` and `IUltraFast` (6× the standard card on every
+  token type, long context included), on `Sol61` and `Astra6` (`service_tier: "ultrafast"`). Asking
+  for it on any other model throws `NotSupportedException` before the request is sent.
+- **Billing follows the served tier, not just "granted or not":** `AiFastTier.Served` maps the
+  echoed `service_tier` (`ultrafast` / `fast` / `priority` / anything else) to a `SpeedType`, never
+  above the requested one, and `AiCostCalculator.CalculateCosts(llm, usage, SpeedType)` bills that
+  card — an ultrafast request downgraded to fast pays the fast rate. `AiFastTier.Requested` is the
+  one place providers read the requested tier. The `bool fastGranted` overloads and
+  `AiFastTier.WasGranted` keep working.
+- Not added: OpenAI `gpt-realtime-2.1-mini` (Realtime API only, which this library does not wrap).
+
 ## 10.18.0 — 2026-10-12
 
 ### TranslatePrompt: register follows the kind of text; spoken forms stay out of written text (#31)

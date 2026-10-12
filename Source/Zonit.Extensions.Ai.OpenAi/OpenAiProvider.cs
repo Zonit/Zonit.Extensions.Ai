@@ -86,7 +86,7 @@ public sealed class OpenAiProvider : IModelProvider
         var cacheWriteTokens = openAiResponse.Usage?.InputTokensDetails?.CacheWriteTokens ?? 0;
 
         // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
-        var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "GenerateAsync");
+        var servedSpeed = AiFastTier.Served(llm, openAiResponse.ServiceTier, _logger, Name, "GenerateAsync");
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
@@ -94,7 +94,7 @@ public sealed class OpenAiProvider : IModelProvider
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens,
             CacheWriteTokens = cacheWriteTokens
-        }, fastGranted);
+        }, servedSpeed);
 
         return new Result<TResponse>
         {
@@ -144,7 +144,7 @@ public sealed class OpenAiProvider : IModelProvider
         var cacheWriteTokens = openAiResponse.Usage?.InputTokensDetails?.CacheWriteTokens ?? 0;
 
         // Fast mode is best-effort: bill the tier OpenAI actually served, not the one asked for.
-        var fastGranted = AiFastTier.WasGranted(llm, openAiResponse.ServiceTier, _logger, Name, "ChatAsync");
+        var servedSpeed = AiFastTier.Served(llm, openAiResponse.ServiceTier, _logger, Name, "ChatAsync");
 
         var (inputCost, outputCost) = AiCostCalculator.CalculateCosts(llm, new TokenUsage
         {
@@ -152,7 +152,7 @@ public sealed class OpenAiProvider : IModelProvider
             OutputTokens = outputTokens,
             CachedTokens = cachedTokens,
             CacheWriteTokens = cacheWriteTokens
-        }, fastGranted);
+        }, servedSpeed);
 
         return new Result<TResponse>
         {
@@ -687,22 +687,30 @@ public sealed class OpenAiProvider : IModelProvider
     }
 
     /// <summary>
-    /// Opts the request into fast mode when the model asks for it
-    /// (<see cref="IFast"/> with <see cref="SpeedType.Fast"/>): up to ~2.5× faster
-    /// output and steadier latency, billed at double the standard rate.
+    /// Opts the request into the speed tier the model asks for: fast mode
+    /// (<see cref="SpeedType.Fast"/> — up to ~2.5× faster output, double the standard rate) or
+    /// ultrafast (<see cref="SpeedType.UltraFast"/> on an <see cref="IUltraFast"/> model — 6×).
+    /// </summary>
+    private static void ApplyServiceTier(ILlm llm, OpenAiResponsesRequest request)
+        => request.ServiceTier = ServiceTierFor(llm);
+
+    /// <summary>
+    /// The <c>service_tier</c> wire value for the model's requested speed, or <c>null</c> (field
+    /// omitted, standard processing) when it asks for none.
     /// </summary>
     /// <remarks>
-    /// The wire field is <c>service_tier</c>. OpenAI renamed priority processing to
-    /// fast mode on 30 July 2026 and kept <c>"priority"</c> as an accepted alias; we
-    /// send the current spelling. Omitting the field entirely (standard processing)
-    /// is the default for every model, including those that implement
-    /// <see cref="IFast"/> but were left at <see cref="SpeedType.Standard"/>.
+    /// OpenAI renamed priority processing to fast mode on 30 July 2026 and kept
+    /// <c>"priority"</c> as an accepted alias; we send the current spelling. Ultrafast is a
+    /// separate tier (<c>"ultrafast"</c>) with its own capacity, offered on <c>gpt-6.1-sol</c>
+    /// and <c>gpt-6-astra</c>; asking for it on another model throws before the request is sent
+    /// (<see cref="AiFastTier.Requested"/>).
     /// </remarks>
-    private static void ApplyServiceTier(ILlm llm, OpenAiResponsesRequest request)
+    internal static string? ServiceTierFor(ILlm llm) => AiFastTier.Requested(llm) switch
     {
-        if (llm is IFast { Speed: SpeedType.Fast })
-            request.ServiceTier = "fast";
-    }
+        SpeedType.Fast => "fast",
+        SpeedType.UltraFast => "ultrafast",
+        _ => null,
+    };
 
     /// <summary>
     /// Materialises every entry on <see cref="OpenAiBase.Tools"/> as the

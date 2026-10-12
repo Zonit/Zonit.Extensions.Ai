@@ -530,13 +530,199 @@ public sealed class XProvider : IModelProvider
     }
 
     /// <inheritdoc />
-    public Task<Result<string>> TranscribeAsync(
+    /// <remarks>
+    /// <c>POST /v1/stt</c> (multipart). xAI reads the option fields before the audio, and may
+    /// ignore fields sent after <c>file</c> on streamable uploads — so <c>file</c> goes last.
+    /// </remarks>
+    public async Task<Result<string>> TranscribeAsync(
         IAudioLlm llm,
         Asset audioFile,
         string? language = null,
         CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException("X does not support audio transcription");
+        var stopwatch = Stopwatch.StartNew();
+
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent(llm.Name), "model");
+        if (!string.IsNullOrWhiteSpace(language))
+            form.Add(new StringContent(language), "language");
+
+        // Same naming as the OpenAI provider: a name without an extension can hide the format,
+        // so prefer UniqueName ("{Id}{Extension}") and stamp the detected Content-Type.
+        var fileContent = new ByteArrayContent(audioFile.Data);
+        if (!string.IsNullOrEmpty(audioFile.MediaType.Value))
+            fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(audioFile.MediaType.Value);
+        var fileName = audioFile.Extension.Length > 0 ? audioFile.UniqueName : audioFile.OriginalName.Value;
+        form.Add(fileContent, "file", fileName);
+
+        using var response = await _httpClient.PostAsync("/v1/stt", form, cancellationToken);
+        stopwatch.Stop();
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("X transcription error: {Status} - {Response}", response.StatusCode, json);
+            throw new HttpRequestException($"X STT API failed: {response.StatusCode}: {json}");
+        }
+
+        var result = JsonSerializer.Deserialize(json, XJsonContext.Default.XSttResponse);
+
+        // Billed per hour of audio; the response reports the duration in seconds.
+        var cost = llm is GrokVoiceTranscribe20 stt && result?.Duration is { } seconds
+            ? (decimal)seconds / 3600m * stt.PricePerHour
+            : 0m;
+
+        return new Result<string>
+        {
+            Value = result?.Text ?? "",
+            MetaData = new MetaData
+            {
+                Model = llm,
+                Provider = Name,
+                PromptName = "Transcription",
+                Duration = stopwatch.Elapsed,
+                Usage = new TokenUsage { InputCost = cost }
+            }
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<Asset>> GenerateSpeechAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var request = BuildTtsRequest(llm, prompt, withTimestamps: false);
+        var stopwatch = Stopwatch.StartNew();
+
+        using var content = new StringContent(
+            JsonSerializer.Serialize(request, XJsonContext.Default.XTtsRequest), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/tts", content, cancellationToken);
+        stopwatch.Stop();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError("X TTS error: {Status} - {Response}", response.StatusCode, errorBody);
+            throw new HttpRequestException($"X TTS API failed: {response.StatusCode}: {errorBody}");
+        }
+
+        var audioBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        if (audioBytes.Length == 0)
+            throw new InvalidOperationException("X returned an empty audio payload.");
+
+        return new Result<Asset>
+        {
+            Value = new Asset(audioBytes, $"speech.{request.OutputFormat!.Codec}"),
+            MetaData = SpeechMetaData(llm, prompt, stopwatch.Elapsed)
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<SpeechTimestamps>> GenerateSpeechWithTimestampsAsync(
+        ISpeechLlm llm,
+        SpeechPrompt prompt,
+        CancellationToken cancellationToken = default)
+    {
+        var request = BuildTtsRequest(llm, prompt, withTimestamps: true);
+        var stopwatch = Stopwatch.StartNew();
+
+        using var content = new StringContent(
+            JsonSerializer.Serialize(request, XJsonContext.Default.XTtsRequest), Encoding.UTF8, "application/json");
+        using var response = await _httpClient.PostAsync("/v1/tts", content, cancellationToken);
+        stopwatch.Stop();
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("X TTS+timestamps error: {Status} - {Response}", response.StatusCode, json);
+            throw new HttpRequestException($"X TTS API failed: {response.StatusCode}: {json}");
+        }
+
+        var payload = JsonSerializer.Deserialize(json, XJsonContext.Default.XTtsTimestampsResponse)
+            ?? throw new InvalidOperationException("X returned no timestamps payload.");
+        if (string.IsNullOrEmpty(payload.Audio))
+            throw new InvalidOperationException("X returned an empty audio payload.");
+
+        var audio = new Asset(Convert.FromBase64String(payload.Audio), $"speech.{request.OutputFormat!.Codec}");
+
+        return new Result<SpeechTimestamps>
+        {
+            Value = new SpeechTimestamps { Audio = audio, Characters = BuildCharacterTimings(payload.AudioTimestamps) },
+            MetaData = SpeechMetaData(llm, prompt, stopwatch.Elapsed)
+        };
+    }
+
+    /// <summary>Validates the request and builds the <c>/v1/tts</c> body.</summary>
+    internal static XTtsRequest BuildTtsRequest(ISpeechLlm llm, SpeechPrompt prompt, bool withTimestamps)
+    {
+        ArgumentNullException.ThrowIfNull(llm);
+        ArgumentNullException.ThrowIfNull(prompt);
+
+        if (llm is not GrokTts tts)
+            throw new NotSupportedException($"'{llm.GetType().Name}' is not an xAI speech model; use GrokTts.");
+
+        var text = prompt.Text;
+        if (string.IsNullOrWhiteSpace(text))
+            throw new ArgumentException("Speech synthesis requires non-empty text.", nameof(prompt));
+        if (text.Length > GrokTts.MaxCharacters)
+            throw new ArgumentException(
+                $"Text is {text.Length} characters but xAI TTS accepts at most {GrokTts.MaxCharacters} per request. " +
+                "Split the text into smaller chunks.", nameof(prompt));
+        if (string.IsNullOrWhiteSpace(tts.Voice))
+            throw new InvalidOperationException("GrokTts has no voice set. Assign a voice id (e.g. GrokVoices.Eve).");
+        if (string.IsNullOrWhiteSpace(tts.Language))
+            throw new InvalidOperationException("GrokTts.Language is required — a BCP-47 code such as \"en\", or \"auto\".");
+        if (tts.Speed is < GrokTts.MinSpeed or > GrokTts.MaxSpeed)
+            throw new ArgumentException(
+                $"GrokTts.Speed must be between {GrokTts.MinSpeed} and {GrokTts.MaxSpeed} (got {tts.Speed}).", nameof(llm));
+
+        // FormatValue is "{codec}_{sampleRate}[_{bitRate}]".
+        var parts = tts.FormatValue.Split('_');
+
+        return new XTtsRequest
+        {
+            Text = text,
+            VoiceId = tts.Voice,
+            Language = tts.Language,
+            OutputFormat = new XTtsOutputFormat
+            {
+                Codec = parts[0],
+                SampleRate = int.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+                BitRate = parts.Length > 2 ? int.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture) : null,
+            },
+            // Defaults are left off the wire, so the request stays what the API would assume.
+            Speed = tts.Speed == 1.0 ? null : tts.Speed,
+            TextNormalization = tts.TextNormalization ? true : null,
+            WithTimestamps = withTimestamps ? true : null,
+        };
+    }
+
+    private MetaData SpeechMetaData(ISpeechLlm llm, SpeechPrompt prompt, TimeSpan duration) => new()
+    {
+        Model = llm,
+        Provider = Name,
+        PromptName = "Speech",
+        Duration = duration,
+        Usage = new TokenUsage { OutputCost = llm.GetSpeechGenerationPrice(prompt.Text.Length) }
+    };
+
+    /// <summary>Maps xAI's parallel <c>graph_chars</c> / <c>graph_times</c> arrays to character timings.</summary>
+    private static IReadOnlyList<CharacterTiming> BuildCharacterTimings(XTtsTimestamps? timestamps)
+    {
+        var chars = timestamps?.GraphChars;
+        var times = timestamps?.GraphTimes;
+        if (chars is null || times is null)
+            return [];
+
+        var count = Math.Min(chars.Count, times.Count);
+        var result = new List<CharacterTiming>(count);
+        for (var i = 0; i < count; i++)
+        {
+            if (times[i] is not { Count: >= 2 } span) continue;
+            result.Add(new CharacterTiming(chars[i], TimeSpan.FromSeconds(span[0]), TimeSpan.FromSeconds(span[1])));
+        }
+        return result;
     }
 
     private void ConfigureHttpClient()
@@ -826,7 +1012,7 @@ public sealed class XProvider : IModelProvider
     /// </remarks>
     private static void ApplyServiceTier(ILlm llm, XResponsesRequest request)
     {
-        if (llm is IFast { Speed: SpeedType.Fast })
+        if (AiFastTier.Requested(llm) == SpeedType.Fast)
             request.ServiceTier = "priority";
     }
 
@@ -1240,4 +1426,47 @@ internal sealed class XVideoRequest
 internal sealed class XVideoUrlRef
 {
     public string Url { get; set; } = "";
+}
+
+// ---- Speech-to-text (/v1/stt) ----
+
+internal sealed class XSttResponse
+{
+    public string? Text { get; set; }
+    public string? Language { get; set; }
+    public double? Duration { get; set; }
+}
+
+// ---- Text-to-speech (/v1/tts) ----
+
+internal sealed class XTtsRequest
+{
+    public string Text { get; set; } = "";
+    public string VoiceId { get; set; } = "";
+    public string Language { get; set; } = "auto";
+    public XTtsOutputFormat? OutputFormat { get; set; }
+    public double? Speed { get; set; }
+    public bool? TextNormalization { get; set; }
+    public bool? WithTimestamps { get; set; }
+}
+
+internal sealed class XTtsOutputFormat
+{
+    public string Codec { get; set; } = "mp3";
+    public int SampleRate { get; set; }
+    public int? BitRate { get; set; }
+}
+
+internal sealed class XTtsTimestampsResponse
+{
+    public string? Audio { get; set; }
+    public string? ContentType { get; set; }
+    public double? Duration { get; set; }
+    public XTtsTimestamps? AudioTimestamps { get; set; }
+}
+
+internal sealed class XTtsTimestamps
+{
+    public List<string>? GraphChars { get; set; }
+    public List<List<double>>? GraphTimes { get; set; }
 }

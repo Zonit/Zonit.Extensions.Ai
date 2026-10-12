@@ -666,7 +666,7 @@ public sealed class AnthropicProvider : IModelProvider
         if (request.MaxTokens < requiredMinTokens)
             request.MaxTokens = requiredMinTokens;
 
-        if (llm is IFast { Speed: SpeedType.Fast })
+        if (AiFastTier.Requested(llm) == SpeedType.Fast)
             request.Speed = "fast";
 
         var systemPrompt = string.Empty;
@@ -825,7 +825,7 @@ public sealed class AnthropicProvider : IModelProvider
         if (request.MaxTokens < requiredMinTokens)
             request.MaxTokens = requiredMinTokens;
 
-        if (llm is IFast { Speed: SpeedType.Fast })
+        if (AiFastTier.Requested(llm) == SpeedType.Fast)
             request.Speed = "fast";
 
         // System message: in chat mode the rendered Prompt.Text IS the system

@@ -14,10 +14,10 @@ For example, "generate images with GPT" needs an image-capable provider, so
 | :--- | :--- |
 | Text, chat, structured output, agents, tools | any provider package below |
 | Image generation | `Zonit.Extensions.Ai.OpenAi` (GPT Image), `Zonit.Extensions.Ai.X` (Grok Imagine) |
-| Video generation | `Zonit.Extensions.Ai.X` (Grok Imagine) |
+| Video generation | `Zonit.Extensions.Ai.X` (Grok Imagine Video 1.5 / 1.5 Lite) |
 | Embeddings | `Zonit.Extensions.Ai.OpenAi`, `Zonit.Extensions.Ai.Google`, `Zonit.Extensions.Ai.Mistral`, `Zonit.Extensions.Ai.Cohere` |
-| Audio transcription (speech → text) | `Zonit.Extensions.Ai.OpenAi` (GPT-4o Transcribe / mini / diarize; `whisper-1` is legacy) |
-| Speech synthesis / TTS (text → speech) | `Zonit.Extensions.Ai.ElevenLabs` |
+| Audio transcription (speech → text) | `Zonit.Extensions.Ai.OpenAi` (GPT Transcribe; GPT-4o Transcribe / mini / diarize and `whisper-1` are legacy), `Zonit.Extensions.Ai.X` (Grok Voice Transcribe 2.0) |
+| Speech synthesis / TTS (text → speech) | `Zonit.Extensions.Ai.ElevenLabs`, `Zonit.Extensions.Ai.X` (`GrokTts`) |
 
 ## By provider
 
@@ -26,7 +26,7 @@ For example, "generate images with GPT" needs an image-capable provider, so
 | OpenAI (GPT, o-series, GPT Image, embeddings, Transcribe) | `Zonit.Extensions.Ai.OpenAi` | `AddAiOpenAi()` |
 | Anthropic (Claude) | `Zonit.Extensions.Ai.Anthropic` | `AddAiAnthropic()` |
 | Google (Gemini) | `Zonit.Extensions.Ai.Google` | `AddAiGoogle()` |
-| xAI (Grok, Grok Imagine image/video) | `Zonit.Extensions.Ai.X` | `AddAiX()` |
+| xAI (Grok, Grok Imagine image/video, Grok Voice speech-to-text and text-to-speech) | `Zonit.Extensions.Ai.X` | `AddAiX()` |
 | DeepSeek | `Zonit.Extensions.Ai.DeepSeek` | `AddAiDeepSeek()` |
 | Mistral | `Zonit.Extensions.Ai.Mistral` | `AddAiMistral()` |
 | Groq | `Zonit.Extensions.Ai.Groq` | `AddAiGroq()` |

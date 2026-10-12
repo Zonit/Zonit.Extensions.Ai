@@ -29,6 +29,11 @@ namespace Zonit.Extensions.Ai.X;
 [JsonSerializable(typeof(XImageRequest))]
 [JsonSerializable(typeof(XVideoRequest))]
 [JsonSerializable(typeof(XVideoUrlRef))]
+[JsonSerializable(typeof(XSttResponse))]
+[JsonSerializable(typeof(XTtsRequest))]
+[JsonSerializable(typeof(XTtsOutputFormat))]
+[JsonSerializable(typeof(XTtsTimestampsResponse))]
+[JsonSerializable(typeof(XTtsTimestamps))]
 internal sealed partial class XJsonContext : JsonSerializerContext
 {
 }

@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 157 models across 17 providers.
+Total: 162 models across 17 providers.
 
 ## Alibaba
 
@@ -158,9 +158,11 @@ Total: 157 models across 17 providers.
 | `ElevenFlashV2` | `eleven_flash_v2` | — | — | Text → Audio | speech | — |
 | `ElevenFlashV2_5` | `eleven_flash_v2_5` | — | — | Text → Audio | speech | — |
 | `ElevenMultilingualV2` | `eleven_multilingual_v2` | — | — | Text → Audio | speech | — |
-| `ElevenTurboV2` | `eleven_turbo_v2` | — | — | Text → Audio | speech | — |
-| `ElevenTurboV2_5` | `eleven_turbo_v2_5` | — | — | Text → Audio | speech | — |
+| `ElevenTurboV2` ⚠️ | `eleven_turbo_v2` | — | — | Text → Audio | speech | — |
+| `ElevenTurboV2_5` ⚠️ | `eleven_turbo_v2_5` | — | — | Text → Audio | speech | — |
 | `ElevenV3` | `eleven_v3` | — | — | Text → Audio | speech | — |
+| `ElevenV4` | `eleven_v4` | — | — | Text → Audio | speech | — |
+| `ElevenV4Turbo` | `eleven_v4_turbo` | — | — | Text → Audio | speech | — |
 
 ### Pricing — USD / 1M tokens
 
@@ -172,6 +174,8 @@ Total: 157 models across 17 providers.
 | `ElevenTurboV2` | $0 | — | — | $0 |
 | `ElevenTurboV2_5` | $0 | — | — | $0 |
 | `ElevenV3` | $0 | — | — | $0 |
+| `ElevenV4` | $0 | — | — | $0 |
+| `ElevenV4Turbo` | $0 | — | — | $0 |
 
 ## Fireworks
 
@@ -467,6 +471,9 @@ Total: 157 models across 17 providers.
 | `GrokImagineImageQuality` ⚠️ | `grok-imagine-image-quality` | 32,000 | — | Text, Image → Image | image | — |
 | `GrokImagineVideo` ⚠️ | `grok-imagine-video` | 32,000 | — | Text, Image, Video → Video | video | — |
 | `GrokImagineVideo15` | `grok-imagine-video-1.5` | 32,000 | — | Text, Image → Video | video | — |
+| `GrokImagineVideo15Lite` | `grok-imagine-video-1.5-lite` | 32,000 | — | Text, Image → Video | video | — |
+| `GrokTts` | `grok-tts` | — | — | Text → Audio | speech | — |
+| `GrokVoiceTranscribe20` | `grok-voice-transcribe-2.0` | — | — | Audio → Text | audio | — |
 
 ### Pricing — USD / 1M tokens
 
@@ -486,6 +493,9 @@ Total: 157 models across 17 providers.
 | `GrokImagineImageQuality` | $0 | — | — | $0.05 |
 | `GrokImagineVideo` | $0 | — | — | $0.05 |
 | `GrokImagineVideo15` | $0 | — | — | $0.08 |
+| `GrokImagineVideo15Lite` | $0 | — | — | $0.02 |
+| `GrokTts` | $0 | — | — | $0 |
+| `GrokVoiceTranscribe20` | $0 | — | — | $0 |
 
 ## Yi
 
@@ -542,6 +552,8 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet55 (claude-sonnet-5-5, adaptive thinking). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet46` | `claude-sonnet-4-6` | Claude Sonnet 4.6 is being phased out — migrate to Sonnet55 (claude-sonnet-5-5). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet5` | `claude-sonnet-5` | Claude Sonnet 5 is superseded by Sonnet55 (claude-sonnet-5-5) at the same price. Still functional, but Anthropic will retire older models. Note Sonnet 5.5 cannot disable thinking and rejects a forced tool_choice. |
+| ElevenLabs | `ElevenTurboV2` | `eleven_turbo_v2` | ElevenLabs has deprecated eleven_turbo_v2 in favour of ElevenFlashV2 (eleven_flash_v2), which is faster and cheaper per character. Still functional for now. |
+| ElevenLabs | `ElevenTurboV2_5` | `eleven_turbo_v2_5` | ElevenLabs has deprecated eleven_turbo_v2_5 in favour of ElevenFlashV2_5 (eleven_flash_v2_5), which is faster and cheaper per character. Still functional for now. |
 | Google | `Gemini15Pro` | `gemini-1.5-pro` | gemini-1.5-pro was shut down by Google on 2025-09-29 — requests fail. Migrate to Gemini31Pro (gemini-3.1-pro-preview). |
 | Google | `Gemini20Flash` | `gemini-2.0-flash` | gemini-2.0-flash was shut down by Google on 2026-06-01 — requests fail. Migrate to Gemini38Flash (gemini-3.8-flash). |
 | Google | `Gemini20FlashLite` | `gemini-2.0-flash-lite` | gemini-2.0-flash-lite was shut down by Google on 2026-06-01 — requests fail. Migrate to Gemini35FlashLite (gemini-3.5-flash-lite). |
