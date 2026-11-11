@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 162 models across 17 providers.
+Total: 170 models across 17 providers.
 
 ## Alibaba
 
@@ -39,10 +39,12 @@ Total: 162 models across 17 providers.
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
 | `Fable5` | `claude-fable-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Fable51` | `claude-fable-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Fable52` | `claude-fable-5-2` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
 | `Haiku45` ⚠️ | `claude-haiku-4-5-20251001` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Haiku55` | `claude-haiku-5-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Mythos5` | `claude-mythos-5` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Mythos51` | `claude-mythos-5-1` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
+| `Mythos52` | `claude-mythos-5-2` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning, fast | WebSearch, MCP |
 | `Opus45` ⚠️ | `claude-opus-4-5-20251101` | 200,000 | 64,000 | Text, Image → Text | chat, agent | WebSearch, MCP |
 | `Opus46` ⚠️ | `claude-opus-4-6` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
 | `Opus47` ⚠️ | `claude-opus-4-7` | 1,000,000 | 128,000 | Text, Image → Text | chat, agent, reasoning | WebSearch, MCP |
@@ -60,10 +62,12 @@ Total: 162 models across 17 providers.
 | :--- | ---: | ---: | ---: | ---: |
 | `Fable5` | $10 | $1 | $12.5 | $50 |
 | `Fable51` | $10 | $0.25 | $12.5 | $50 |
+| `Fable52` | $8 | $0.2 | $10 | $40 |
 | `Haiku45` | $1 | $0.1 | $1.25 | $5 |
 | `Haiku55` | $0.1 | $0.01 | $0.125 | $0.5 |
 | `Mythos5` | $10 | $1 | $12.5 | $50 |
 | `Mythos51` | $10 | $0.25 | $12.5 | $50 |
+| `Mythos52` | $8 | $0.2 | $10 | $40 |
 | `Opus45` | $5 | $0.5 | $6.25 | $25 |
 | `Opus46` | $5 | $0.5 | $6.25 | $25 |
 | `Opus47` | $5 | $0.5 | $6.25 | $25 |
@@ -214,6 +218,8 @@ Total: 162 models across 17 providers.
 | `Gemini35Flash` | `gemini-3.5-flash` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
 | `Gemini35FlashLite` | `gemini-3.5-flash-lite` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
 | `Gemini38Flash` | `gemini-3.8-flash` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini4Argon` | `gemini-4-argon` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
+| `Gemini4Carbon` | `gemini-4-carbon` | 1,048,576 | 65,536 | Text, Image, Audio, Video → Text | chat, agent, reasoning | WebSearch, CodeInterpreter |
 | `GeminiEmbedding2` | `gemini-embedding-2` | 8,192 | 3,072 | Text → Embedding | chat, agent, embedding | — |
 | `TextEmbedding004` ⚠️ | `text-embedding-004` | 2,048 | 768 | Text → Embedding | chat, agent, embedding | — |
 
@@ -232,6 +238,8 @@ Total: 162 models across 17 providers.
 | `Gemini35Flash` | $1.5 | $0.15 | — | $9 |
 | `Gemini35FlashLite` | $0.3 | $0.03 | — | $2.5 |
 | `Gemini38Flash` | $0.75 | $0.075 | — | $3.75 |
+| `Gemini4Argon` | $2 | $0.1 | — | $10 |
+| `Gemini4Carbon` | $2 | $0.1 | — | $10 |
 | `GeminiEmbedding2` | $0.2 | — | — | $0 |
 | `TextEmbedding004` | $0.025 | — | — | $0 |
 
@@ -313,6 +321,7 @@ Total: 162 models across 17 providers.
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
 | `Astra6` | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Cyber56` | `gpt-5.6-cyber` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, MCP |
+| `Cyber6` | `gpt-6-cyber` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT41` ⚠️ | `gpt-4.1-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT41Mini` ⚠️ | `gpt-4.1-mini-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `GPT4o` ⚠️ | `gpt-4o` | 128,000 | 16,384 | Text, Image, Audio → Text, Audio | chat, agent | WebSearch, FileSearch, CodeInterpreter |
@@ -339,6 +348,8 @@ Total: 162 models across 17 providers.
 | `GPTImage2` | `gpt-image-2` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Flare` | `gpt-image-2.5-flare` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTImage25Sunburst` | `gpt-image-2.5-sunburst` | 128,000 | — | Text, Image → Image | image | — |
+| `GPTImage26Flare` | `gpt-image-2.6-flare` | 128,000 | — | Text, Image → Image | image | — |
+| `GPTImage26Sunburst` | `gpt-image-2.6-sunburst` | 128,000 | — | Text, Image → Image | image | — |
 | `GPTTranscribe` | `gpt-transcribe` | — | — | Audio → Text | audio | — |
 | `Luna56` ⚠️ | `gpt-5.6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch |
 | `Luna6` | `gpt-6-luna` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
@@ -348,6 +359,7 @@ Total: 162 models across 17 providers.
 | `Sol6` ⚠️ | `gpt-6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Sol61` | `gpt-6.1-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, CodeInterpreter, MCP |
+| `Terra61` | `gpt-6.1-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
 | `TextEmbedding3Small` | `text-embedding-3-small` | 8,191 | 1,536 | Text → Embedding | embedding | — |
 | `Whisper1` ⚠️ | `whisper-1` | — | — | Audio → Text | audio | — |
@@ -358,6 +370,7 @@ Total: 162 models across 17 providers.
 | :--- | ---: | ---: | ---: | ---: |
 | `Astra6` | $10 | $1 | $12.5 | $50 |
 | `Cyber56` | $12.5 | $1.25 | $15.625 | $75 |
+| `Cyber6` | $20 | $2 | $25 | $100 |
 | `GPT41` | $2 | $0.5 | — | $8 |
 | `GPT41Mini` | $0.4 | $0.1 | — | $1.6 |
 | `GPT4o` | $2.5 | $1.25 | — | $10 |
@@ -384,6 +397,8 @@ Total: 162 models across 17 providers.
 | `GPTImage2` | $5 | — | — | $30 |
 | `GPTImage25Flare` | $5 | — | — | $30 |
 | `GPTImage25Sunburst` | $5 | — | — | $30 |
+| `GPTImage26Flare` | $5 | — | — | $30 |
+| `GPTImage26Sunburst` | $5 | — | — | $30 |
 | `GPTTranscribe` | $0 | — | — | $0 |
 | `Luna56` | $0.2 | $0.02 | $0.25 | $1.2 |
 | `Luna6` | $0.1 | $0.01 | $0.125 | $0.5 |
@@ -393,6 +408,7 @@ Total: 162 models across 17 providers.
 | `Sol6` | $2 | $0.2 | $2.5 | $10 |
 | `Sol61` | $2 | $0.1 | $2.5 | $10 |
 | `Terra56` | $2 | $0.2 | $2.5 | $12 |
+| `Terra61` | $1 | $0.05 | $1.25 | $5 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
 | `TextEmbedding3Small` | $0.02 | — | — | $0 |
 | `Whisper1` | $0 | — | — | $0 |
@@ -561,23 +577,23 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Google | `Gemini25FlashLite` | `gemini-2.5-flash-lite` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini35FlashLite (gemini-3.5-flash-lite) or Gemini31FlashLite. |
 | Google | `Gemini25Pro` | `gemini-2.5-pro` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini31Pro (gemini-3.1-pro-preview) or Gemini38Flash. |
 | Google | `TextEmbedding004` | `text-embedding-004` | text-embedding-004 was shut down by Google on 2026-01-14 — requests fail. Migrate to GeminiEmbedding2 (gemini-embedding-2). |
-| OpenAi | `GPT41` | `gpt-4.1-2025-04-14` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT41` | `gpt-4.1-2025-04-14` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT41Mini` | `gpt-4.1-mini-2025-04-14` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT4o` | `gpt-4o` | Superseded by Terra56 (gpt-5.6-terra) for text and vision. Still works — upgrade for better quality. |
+| OpenAi | `GPT4o` | `gpt-4o` | Superseded by Terra61 (gpt-6.1-terra) for text and vision. Still works — upgrade for better quality. |
 | OpenAi | `GPT4oMini` | `gpt-4o-mini` | Superseded by Luna6 (gpt-6-luna) for text and vision. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT4oMiniTranscribe` | `gpt-4o-mini-transcribe` | gpt-4o-mini-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
 | OpenAi | `GPT4oTranscribe` | `gpt-4o-transcribe` | gpt-4o-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
 | OpenAi | `GPT4oTranscribeDiarize` | `gpt-4o-transcribe-diarize` | gpt-4o-transcribe-diarize is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
-| OpenAi | `GPT5` | `gpt-5-2025-08-07` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT5` | `gpt-5-2025-08-07` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT51Pro` | `gpt-5.1-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
-| OpenAi | `GPT52` | `gpt-5.2` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT52Chat` | `gpt-5.2-chat-latest` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT52` | `gpt-5.2` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT52Chat` | `gpt-5.2-chat-latest` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT52Pro` | `gpt-5.2-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
-| OpenAi | `GPT54` | `gpt-5.4` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT54` | `gpt-5.4` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT54Mini` | `gpt-5.4-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT54Nano` | `gpt-5.4-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT54Pro` | `gpt-5.4-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
-| OpenAi | `GPT55` | `gpt-5.5` | Superseded by Terra56 (gpt-5.6-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
+| OpenAi | `GPT55` | `gpt-5.5` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT55Pro` | `gpt-5.5-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT5Mini` | `gpt-5-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT5Nano` | `gpt-5-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |

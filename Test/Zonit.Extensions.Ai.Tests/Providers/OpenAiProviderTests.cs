@@ -319,6 +319,99 @@ public class OpenAiProviderTests
         usage.OutputCost.Value.Should().Be(0.200m);
     }
 
+    [Fact]
+    public async Task GenerateImageAsync_GptImage26_SendsComplexityAndGifOptions_AndNamesTheAsset()
+    {
+        _testHandler.ResponseJson = """
+            {"created":1762000000,
+             "data":[{"b64_json":"R0lGODlh"}],
+             "usage":{"input_tokens":80,"input_tokens_details":{"text_tokens":80,"image_tokens":0},
+                      "output_tokens":2000,"output_tokens_details":{"image_tokens":2000,"text_tokens":0}}}
+            """;
+
+        var provider = CreateProvider();
+        var model = new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Medium,
+            Size = GPTImage26Flare.SizeType.Square,
+            Complexity = GPTImage26Base.ComplexityType.Low,
+            OutputFormat = GPTImage26Base.OutputFormatType.Gif,
+            FrameCount = 12,
+            FrameDurationMs = 150,
+        };
+
+        var result = await provider.GenerateImageAsync(model, new ImagePrompt { Text = "a spinning coin" });
+
+        var body = _testHandler.CapturedRequest!;
+        body.Should().Contain("\"model\":\"gpt-image-2.6-flare\"");
+        body.Should().Contain("\"complexity\":\"low\"");
+        body.Should().Contain("\"output_format\":\"gif\"");
+        body.Should().Contain("\"frame_count\":12");
+        body.Should().Contain("\"frame_duration_ms\":150");
+        result.Value.OriginalName.Value.Should().EndWith(".gif");
+
+        // 80/1M × $5 + 2_000/1M × $30
+        result.MetaData!.Usage!.InputCost.Value.Should().BeApproximately(0.0004m, 1e-9m);
+        result.MetaData.Usage.OutputCost.Value.Should().BeApproximately(0.06m, 1e-9m);
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_GptImage26_LeavesUnsetOptionsOffTheWire()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"aGVsbG8="}]}""";
+
+        var provider = CreateProvider();
+        var model = new GPTImage26Sunburst
+        {
+            Quality = GPTImage26Sunburst.QualityType.High,
+            Size = GPTImage26Sunburst.SizeType.Square,
+        };
+
+        var result = await provider.GenerateImageAsync(model, new ImagePrompt { Text = "a red bicycle" });
+
+        var body = _testHandler.CapturedRequest!;
+        body.Should().NotContain("complexity");
+        body.Should().NotContain("output_format");
+        body.Should().NotContain("frame_");
+        result.Value.OriginalName.Value.Should().EndWith(".png");
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_GptImage26_RejectsGifFramesOnAnotherFormat()
+    {
+        var provider = CreateProvider();
+        var model = new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Low,
+            Size = GPTImage26Flare.SizeType.Square,
+            OutputFormat = GPTImage26Base.OutputFormatType.Svg,
+            FrameCount = 4,
+        };
+
+        var act = () => provider.GenerateImageAsync(model, new ImagePrompt { Text = "a logo" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData(1, null)]
+    [InlineData(17, null)]
+    [InlineData(null, 10)]
+    [InlineData(null, 2_010)]
+    public void GptImage26_ValidatesGifFrameRanges(int? frameCount, int? frameDurationMs)
+    {
+        var act = () => new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Low,
+            Size = GPTImage26Flare.SizeType.Square,
+            OutputFormat = GPTImage26Base.OutputFormatType.Gif,
+            FrameCount = frameCount,
+            FrameDurationMs = frameDurationMs,
+        };
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
     private OpenAiProvider CreateProvider(TestHttpHandler? handler = null)
     {
         var httpClient = new HttpClient(handler ?? _testHandler)

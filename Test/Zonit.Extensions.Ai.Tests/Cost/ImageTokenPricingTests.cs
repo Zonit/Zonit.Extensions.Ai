@@ -16,6 +16,8 @@ public class ImageTokenPricingTests
     [InlineData(typeof(GPTImage2))]
     [InlineData(typeof(GPTImage25Flare))]
     [InlineData(typeof(GPTImage25Sunburst))]
+    [InlineData(typeof(GPTImage26Flare))]
+    [InlineData(typeof(GPTImage26Sunburst))]
     public void ImageModels_ShareTheGptImageRateCard(Type modelType)
     {
         var model = (ITokenPricedImageLlm)Activator.CreateInstance(modelType)!;

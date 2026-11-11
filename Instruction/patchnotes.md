@@ -3,6 +3,49 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.20.0 — 2026-11-11
+
+### New models: Claude Fable 5.2 / Mythos 5.2, GPT-6.1 Terra, GPT-6 Cyber, GPT Image 2.6, Gemini 4
+
+- **Added Anthropic `Fable52`** (`claude-fable-5-2`) — successor to Fable 5.1 at a lower price:
+  $8 input / $0.20 cache read / $10 cache write (5 min; 1 h is $16) / $40 output per MTok, batch
+  half. 1M context, 128K output, no long-context surcharge. Thinking always on (no `None` level,
+  default effort `high`), forced `tool_choice` and sampling parameters rejected — same surface as
+  Fable 5.1. **Fast mode** (`IFast`, `speed: "fast"`) at $16 / $80 per MTok.
+- **Added Anthropic `Mythos52`** (`claude-mythos-5-2`) — the same model for verified organizations
+  only, same prices and fast mode.
+- **Added OpenAI `Terra61`** (`gpt-6.1-terra`) — the GPT-6 balanced tier: $1 input / $0.05 cached /
+  $1.25 cache write / $5 output per 1M up to 272K input tokens; above that 2× input-side and 1.5×
+  output. Batch half. Reasoning `none` … `max` (default `medium`), fast mode 2×. The `[Obsolete]`
+  messages that pointed at `Terra56` as the standard model now point at `Terra61`.
+- **Added OpenAI `Cyber6`** (`gpt-6-cyber`) — gated (Daybreak Red access): $20 / $2 cached / $25
+  cache write / $100 output per 1M; above 272K $40 / $4 / $50 / $150. Chat and Responses, no Batch.
+  OpenAI does not publish its effort levels, so the class takes `OpenAiReasonEffortAlwaysOn` like
+  `Astra6`.
+- **Added OpenAI `GPTImage26Flare` / `GPTImage26Sunburst`** (`gpt-image-2.6-flare`,
+  `gpt-image-2.6-sunburst`, released 2026-11-04) at the GPT Image 2.5 token rates ($5 / $1.25 text,
+  $8 / $2 image in, $30 image out per 1M). New options on `GPTImage26Base`: `Complexity`
+  (`low` / `medium` / `high`, server default `high`), `OutputFormat` (`png` / `jpeg` / `webp` /
+  `svg` / `gif`) and, for GIF, `FrameCount` (2–16) and `FrameDurationMs` (20–2000). The returned
+  asset is named after the format (`generated.svg`, `generated.gif`); frame settings on a non-GIF
+  format throw before the request is sent.
+- **Added Google `Gemini4Argon`** (`gemini-4-argon`, GA 2026-10-13) and **`Gemini4Carbon`**
+  (`gemini-4-carbon`, GA 2026-11-10). Introductory pricing $2 input / $0.10 cached / $10 output per
+  1M through 30 November 2026, **$4 / $0.20 / $20 from 1 December 2026** — the prices follow the
+  system clock (UTC), as on `Gemini38Flash`. 1M context, 64K output, thinking `low` / `medium` /
+  `high`. Google's long-decode mode (output up to 1M) is not wrapped.
+- Not added: xAI released no new API model since Grok 4.7; Gemini 3.8 TTS / Live, Gemini Omni
+  and the OpenAI Realtime models are endpoints this library does not wrap.
+
+### Cache billing verified
+
+Re-checked the cache path end to end after the earlier report that cache was priced wrong. The fix
+is in place: the Anthropic provider (single shot, agent and CLI transport) normalizes
+`input_tokens` to the inclusive total before costing, OpenAI, xAI and Google report it inclusive
+already, and the calculator bills uncached input, cache reads and cache writes at their own rates
+(long-context and fast tiers included). New tests pin the Fable 5.2 buckets (5-minute and 1-hour
+writes) and the GPT-6 cache-write tiering.
+
 ## 10.19.1 — 2026-10-12
 
 The 10.19.0 publish timed out on NuGet after `Zonit.Extensions.Ai` and

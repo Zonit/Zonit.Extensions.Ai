@@ -34,6 +34,8 @@ public class ModelGuardrailTests
     [InlineData(typeof(Fable51.ReasonType))]
     [InlineData(typeof(Mythos5.ReasonType))]
     [InlineData(typeof(Mythos51.ReasonType))]
+    [InlineData(typeof(Fable52.ReasonType))]
+    [InlineData(typeof(Mythos52.ReasonType))]
     // reasoning effort "none" is a 400.
     [InlineData(typeof(OpenAiReasonEffortAlwaysOn))]
     [InlineData(typeof(Grok47.ReasonType))]
@@ -61,6 +63,8 @@ public class ModelGuardrailTests
     [InlineData(typeof(Sonnet55))]
     [InlineData(typeof(Fable51))]
     [InlineData(typeof(Mythos51))]
+    [InlineData(typeof(Fable52))]
+    [InlineData(typeof(Mythos52))]
     [InlineData(typeof(Haiku55))]
 #pragma warning disable CS0618
     [InlineData(typeof(Opus5))]

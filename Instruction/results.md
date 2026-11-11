@@ -63,8 +63,8 @@ Price image = ai.CalculateCost(new GPTImage15 { Quality = GPTImage15.QualityType
 Price audio = ai.CalculateCost(new GPT4oTranscribe(), durationSeconds: 180);
 ```
 
-> ⚠️ **Image models billed per token.** `gpt-image-2` and the `gpt-image-2.5` family
-> (`GPTImage25Flare`, `GPTImage25Sunburst`) are charged per token — text input $5 / $1.25 cached,
+> ⚠️ **Image models billed per token.** `gpt-image-2` and the `gpt-image-2.5` / `gpt-image-2.6`
+> families (`GPTImage25Flare`, `GPTImage25Sunburst`, `GPTImage26Flare`, `GPTImage26Sunburst`) are charged per token — text input $5 / $1.25 cached,
 > image input $8 / $2 cached, image output $30 per MTok — not at a flat rate per image. For those
 > models `CalculateCost(IImageLlm)` returns an **estimate** derived from the expected output-token
 > count; the amount actually billed comes back on `MetaData.Usage` after the call, computed from

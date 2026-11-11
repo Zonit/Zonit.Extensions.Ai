@@ -27,6 +27,7 @@ public class FastModePricingTests
     [InlineData(typeof(Sol6))]
     [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
+    [InlineData(typeof(Terra61))]
     [InlineData(typeof(Terra56))]
     [InlineData(typeof(Luna56))]
     public void AModelsOwnGetters_AreAlwaysTheStandardRates_EvenAtFastSpeed(Type modelType)
@@ -49,6 +50,7 @@ public class FastModePricingTests
     [InlineData(typeof(Sol6))]
     [InlineData(typeof(Luna6))]
     [InlineData(typeof(Sol56))]
+    [InlineData(typeof(Terra61))]
     [InlineData(typeof(Terra56))]
     [InlineData(typeof(Luna56))]
     public void OpenAiModels_DefaultToStandardSpeed(Type modelType)
@@ -64,6 +66,7 @@ public class FastModePricingTests
     [InlineData(typeof(Sol6), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
     [InlineData(typeof(Luna6), 0.20, 0.40, 1.00, 1.50, 0.02, 0.04)]
     [InlineData(typeof(Sol56), 8.00, 16.00, 40.00, 60.00, 0.80, 1.60)]
+    [InlineData(typeof(Terra61), 2.00, 4.00, 10.00, 15.00, 0.10, 0.20)]
     [InlineData(typeof(Terra56), 4.00, 8.00, 24.00, 36.00, 0.40, 0.80)]
     [InlineData(typeof(Luna56), 0.40, 0.80, 2.40, 3.60, 0.04, 0.08)]
     public void OpenAiFastCard_DoublesEveryRate_AndStillTiersOnContext(
@@ -142,6 +145,27 @@ public class FastModePricingTests
         fast.FastPriceOutput.Should().Be(40.00m);
         fast.GetFastInputPrice(Short).Should().Be(8.00m);
         fast.GetFastOutputPrice(Short, outputTokens: 1_000).Should().Be(40.00m);
+    }
+
+    [Theory]
+    [InlineData(typeof(Fable52))]
+    [InlineData(typeof(Mythos52))]
+    public void Fable52FastCard_IsTwiceTheStandardCard_OnEveryRate(Type modelType)
+    {
+        var fast = (IFast)(modelType == typeof(Fable52)
+            ? new Fable52 { Speed = SpeedType.Fast }
+            : new Mythos52 { Speed = SpeedType.Fast });
+
+        fast.FastPriceInput.Should().Be(16.00m);
+        fast.FastPriceOutput.Should().Be(80.00m);
+        fast.GetFastInputPrice(Short).Should().Be(16.00m);
+        fast.GetFastOutputPrice(Short, outputTokens: 1_000).Should().Be(80.00m);
+        fast.GetFastCachedInputPrice(Short).Should().Be(0.40m);
+        fast.GetFastCachedInputWritePrice(Short).Should().Be(20.00m);
+
+        // The model's own getters stay on the standard card.
+        fast.GetInputPrice(Short).Should().Be(8.00m);
+        ((IFast)Activator.CreateInstance(modelType)!).Speed.Should().Be(SpeedType.Standard);
     }
 
     [Fact]
@@ -277,6 +301,7 @@ public class FastModePricingTests
         _ when modelType == typeof(Sol6) => new Sol6 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Luna6) => new Luna6 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Sol56) => new Sol56 { Speed = SpeedType.Fast },
+        _ when modelType == typeof(Terra61) => new Terra61 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Terra56) => new Terra56 { Speed = SpeedType.Fast },
         _ when modelType == typeof(Luna56) => new Luna56 { Speed = SpeedType.Fast },
         _ => throw new ArgumentOutOfRangeException(nameof(modelType), modelType, "Unmapped fast-mode model."),

@@ -33,6 +33,8 @@ public class LongContextPricingTests
     [InlineData(typeof(Sol6), 2.00, 4.00, 10.00, 15.00, 0.20, 0.40)]
     [InlineData(typeof(Luna6), 0.10, 0.20, 0.50, 0.75, 0.01, 0.02)]
     [InlineData(typeof(Sol56), 4.00, 8.00, 20.00, 30.00, 0.40, 0.80)]
+    [InlineData(typeof(Terra61), 1.00, 2.00, 5.00, 7.50, 0.05, 0.10)]
+    [InlineData(typeof(Cyber6), 20.00, 40.00, 100.00, 150.00, 2.00, 4.00)]
     [InlineData(typeof(Terra56), 2.00, 4.00, 12.00, 18.00, 0.20, 0.40)]
     [InlineData(typeof(Luna56), 0.20, 0.40, 1.20, 1.80, 0.02, 0.04)]
     public void Gpt56_TiersEveryRateOnTheInputSize(

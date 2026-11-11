@@ -20,8 +20,9 @@ the compiler stops you from, for example, asking an embedding model to generate 
 
 Concrete model classes live in the provider package under its `Llm/` folder. Use IntelliSense;
 do not invent or memorise model names, because they change every release. Verified examples at
-the time of writing: OpenAI `GPT5`, `GPT52`, `O3`, `GPTImage15`, `TextEmbedding3Large`,
-`GPT4oTranscribe`; Anthropic `Sonnet55`, `Opus55`, `Haiku55`; Google `Gemini38Flash`; xAI `Grok47`. For the capability each package provides,
+the time of writing: OpenAI `Sol61`, `Terra61`, `Luna6`, `GPTImage26Flare`, `TextEmbedding3Large`,
+`GPTTranscribe`; Anthropic `Sonnet55`, `Opus55`, `Haiku55`, `Fable52`; Google `Gemini38Flash`,
+`Gemini4Argon`, `Gemini4Carbon`; xAI `Grok47`. For the capability each package provides,
 see [`providers.md`](./providers.md).
 
 > 📋 For the complete, always-current list of **every** model — provider, context window,
@@ -335,11 +336,11 @@ rather than a 400 at runtime:
 
 | Setting | Models | Why |
 | :--- | :--- | :--- |
-| `ReasonType.None` | `Opus55`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Thinking cannot be disabled (`thinking: disabled` → 400). Leave `Reason` null for the server default. |
-| `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra6`, `Sol61` | Reasoning effort `none` → 400. |
+| `ReasonType.None` | `Opus55`, `Sonnet55`, `Fable5`, `Fable51`, `Fable52`, `Mythos5`, `Mythos51`, `Mythos52` | Thinking cannot be disabled (`thinking: disabled` → 400). Leave `Reason` null for the server default. |
+| `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra6`, `Sol61`, `Cyber6` | Reasoning effort `none` → 400. |
 | `Grok47.ReasonType` etc. (no `Max`; no `None` on 4.5–4.7; no `Extra` on 4.5) | `Grok43`, `Grok45`, `Grok46`, `Grok47` | Levels xAI does not accept → 400. |
 | `ToolStepReasoning = true` with `Reason` above `High` (analyzer **ZAI001**) | `Sonnet55` | Tool-step reasoning at `xhigh` / `max` → 400. Runtime values are checked before sending. |
-| `Temperature`, `TopP` (`[Obsolete(error: true)]`) | `Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`, `Fable5`, `Fable51`, `Mythos5`, `Mythos51` | Non-default sampling parameters → 400. A value set through `ITextLlm` is not sent. |
+| `Temperature`, `TopP` (`[Obsolete(error: true)]`) | `Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`, `Fable5`, `Fable51`, `Fable52`, `Mythos5`, `Mythos51`, `Mythos52` | Non-default sampling parameters → 400. A value set through `ITextLlm` is not sent. |
 
 ## Fast mode (`IFast`)
 
@@ -357,7 +358,8 @@ One property, three providers — each provider's own wire spelling is handled f
 | Models | On the wire | Premium | Notes |
 | :--- | :--- | :--- | :--- |
 | `Opus55`, `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). |
-| `Astra6`, `Sol61`, `Sol6`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
+| `Fable52`, `Mythos52` | `speed: "fast"` | 2× input and output ($16 / $80 per MTok) | Messages API on the Claude API; not on Batch. |
+| `Astra6`, `Sol61`, `Sol6`, `Terra61`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
 | `Grok47`, `Grok46` | `service_tier: "priority"` | 2× on every token type | xAI Priority Processing — higher scheduling priority (lower TTFT and inter-token latency) when xAI is under load. |
 | `Sol61`, `Astra6` with `SpeedType.UltraFast` | `service_tier: "ultrafast"` | 6× on every token type | OpenAI ultrafast (`IUltraFast`) — a tier above fast mode with its own capacity and rate limits. |
 

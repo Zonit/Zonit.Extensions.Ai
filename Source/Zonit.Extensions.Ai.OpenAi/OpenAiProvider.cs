@@ -195,6 +195,25 @@ public sealed class OpenAiProvider : IModelProvider
             Quality = llm.QualityValue
         };
 
+        var fileExtension = "png";
+        if (llm is GPTImage26Base image26)
+        {
+            // GPT Image 2.6 options; unset ones stay off the wire so the server defaults apply.
+            request.Complexity = image26.Complexity?.GetEnumValue();
+            request.OutputFormat = image26.OutputFormat?.GetEnumValue();
+            if (image26.OutputFormat == GPTImage26Base.OutputFormatType.Gif)
+            {
+                request.FrameCount = image26.FrameCount;
+                request.FrameDurationMs = image26.FrameDurationMs;
+            }
+            else if (image26.FrameCount is not null || image26.FrameDurationMs is not null)
+            {
+                throw new ArgumentException(
+                    "FrameCount and FrameDurationMs apply only to GIF output — set OutputFormat = OutputFormatType.Gif or leave them unset.");
+            }
+            fileExtension = image26.FileExtension;
+        }
+
         var imagePayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiImageRequest);
         using var imageContent = new StringContent(imagePayload, Encoding.UTF8, "application/json");
         using var response = await _httpClient.PostAsync("/v1/images/generations", imageContent, cancellationToken);
@@ -216,7 +235,7 @@ public sealed class OpenAiProvider : IModelProvider
         var imageBytes = Convert.FromBase64String(imageResponse.Data[0].B64Json);
 
         // Create Asset from generated image bytes
-        Asset generatedImage = new(imageBytes, "generated.png");
+        Asset generatedImage = new(imageBytes, $"generated.{fileExtension}");
 
         return new Result<Asset>
         {
@@ -1127,6 +1146,11 @@ internal sealed class OpenAiImageRequest
     public int N { get; set; }
     public string? Size { get; set; }
     public string? Quality { get; set; }
+    // GPT Image 2.6 only.
+    public string? Complexity { get; set; }
+    public string? OutputFormat { get; set; }
+    public int? FrameCount { get; set; }
+    public int? FrameDurationMs { get; set; }
 }
 
 internal sealed class OpenAiEmbedRequest
