@@ -214,9 +214,22 @@ public sealed class OpenAiProvider : IModelProvider
             fileExtension = image26.FileExtension;
         }
 
-        var imagePayload = JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiImageRequest);
-        using var imageContent = new StringContent(imagePayload, Encoding.UTF8, "application/json");
-        using var response = await _httpClient.PostAsync("/v1/images/generations", imageContent, cancellationToken);
+        // Input images turn the call into an edit (/v1/images/edits, multipart). Before 10.20.1
+        // they were dropped and a fresh image was generated from the text alone.
+        var inputImages = prompt.Files?.Where(f => f.HasValue).ToArray() ?? [];
+        if (inputImages.Length > 0)
+        {
+            if (!llm.SupportedEndpoints.HasFlag(EndpointsType.ImageEdit))
+                throw new NotSupportedException($"{llm.Name} cannot edit images — remove the input image or use a model that supports image edits.");
+            if (request.OutputFormat == "svg")
+                throw new ArgumentException("SVG output is available only when generating, not when editing an image.");
+        }
+
+        using HttpContent imageContent = inputImages.Length > 0
+            ? BuildImageEditContent(request, inputImages)
+            : new StringContent(JsonSerializer.Serialize(request, OpenAiJsonContext.Default.OpenAiImageRequest), Encoding.UTF8, "application/json");
+        var endpoint = inputImages.Length > 0 ? "/v1/images/edits" : "/v1/images/generations";
+        using var response = await _httpClient.PostAsync(endpoint, imageContent, cancellationToken);
         stopwatch.Stop();
 
         if (!response.IsSuccessStatusCode)
@@ -249,6 +262,45 @@ public sealed class OpenAiProvider : IModelProvider
                 Usage = BuildImageUsage(llm, imageResponse.Usage)
             }
         };
+    }
+
+    /// <summary>
+    /// Multipart body for <c>/v1/images/edits</c>: the same fields as a generation request plus
+    /// every input image as an <c>image[]</c> part, each stamped with its media type so the API
+    /// recognizes PNG / JPEG / WebP regardless of the original file name.
+    /// </summary>
+    private static MultipartFormDataContent BuildImageEditContent(OpenAiImageRequest request, Asset[] images)
+    {
+        var form = new MultipartFormDataContent
+        {
+            { new StringContent(request.Model), "model" },
+            { new StringContent(request.Prompt), "prompt" },
+            { new StringContent(request.N.ToString(System.Globalization.CultureInfo.InvariantCulture)), "n" },
+        };
+
+        void AddOptional(string name, string? value)
+        {
+            if (!string.IsNullOrEmpty(value))
+                form.Add(new StringContent(value), name);
+        }
+
+        AddOptional("size", request.Size);
+        AddOptional("quality", request.Quality);
+        AddOptional("complexity", request.Complexity);
+        AddOptional("output_format", request.OutputFormat);
+        AddOptional("frame_count", request.FrameCount?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddOptional("frame_duration_ms", request.FrameDurationMs?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
+        foreach (var image in images)
+        {
+            var part = new ByteArrayContent(image.Data);
+            if (!string.IsNullOrEmpty(image.MediaType.Value))
+                part.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(image.MediaType.Value);
+            var fileName = image.Extension.Length > 0 ? image.UniqueName : image.OriginalName.Value;
+            form.Add(part, "image[]", fileName);
+        }
+
+        return form;
     }
 
     /// <summary>

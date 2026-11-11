@@ -3,6 +3,18 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.20.1 — 2026-11-11
+
+### OpenAI image edits: the input image is sent
+
+- **Fixed** `GenerateAsync(IImageLlm, ImagePrompt { Image = … })` on OpenAI: the input image was
+  dropped and a new image was generated from the text alone, so an "edit" silently ignored the
+  picture it was given. A prompt with input images now goes to `POST /v1/images/edits` (multipart,
+  every image as an `image[]` part with its media type), with the same size, quality and GPT Image
+  2.6 options as a generation. A model without `EndpointsType.ImageEdit` throws
+  `NotSupportedException`, and `OutputFormatType.Svg` with an input image throws
+  `ArgumentException` (OpenAI takes SVG on generations only) — both before anything is sent.
+
 ## 10.20.0 — 2026-11-11
 
 ### New models: Claude Fable 5.2 / Mythos 5.2, GPT-6.1 Terra, GPT-6 Cyber, GPT Image 2.6, Gemini 4

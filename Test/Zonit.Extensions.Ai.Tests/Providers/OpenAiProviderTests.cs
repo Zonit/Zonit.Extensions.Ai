@@ -393,6 +393,71 @@ public class OpenAiProviderTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    private static readonly byte[] TinyPng =
+        Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
+
+    [Fact]
+    public async Task GenerateImageAsync_WithInputImage_SendsAMultipartEdit()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"aGVsbG8="}]}""";
+
+        var provider = CreateProvider();
+        var model = new GPTImage26Sunburst
+        {
+            Quality = GPTImage26Sunburst.QualityType.High,
+            Size = GPTImage26Sunburst.SizeType.Square,
+            Complexity = GPTImage26Base.ComplexityType.Medium,
+        };
+
+        await provider.GenerateImageAsync(model, new ImagePrompt
+        {
+            Text = "make the sky purple",
+            Image = new Asset(TinyPng, "input.png"),
+        });
+
+        var body = _testHandler.CapturedRequest!;
+        _testHandler.CapturedPath.Should().Be("/v1/images/edits");
+        body.Should().Contain("image[]");
+        body.Should().Contain("image/png");
+        body.Should().Contain("gpt-image-2.6-sunburst");
+        body.Should().Contain("make the sky purple");
+        body.Should().Contain("name=complexity").And.Contain("medium");
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_WithoutInputImage_UsesTheGenerationsEndpoint()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"aGVsbG8="}]}""";
+
+        var provider = CreateProvider();
+        await provider.GenerateImageAsync(
+            new GPTImage26Flare { Quality = GPTImage26Flare.QualityType.Low, Size = GPTImage26Flare.SizeType.Square },
+            new ImagePrompt { Text = "a cat" });
+
+        _testHandler.CapturedPath.Should().Be("/v1/images/generations");
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_SvgEdit_IsRejectedBeforeSending()
+    {
+        var provider = CreateProvider();
+        var model = new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Low,
+            Size = GPTImage26Flare.SizeType.Square,
+            OutputFormat = GPTImage26Base.OutputFormatType.Svg,
+        };
+
+        var act = () => provider.GenerateImageAsync(model, new ImagePrompt
+        {
+            Text = "vectorize this",
+            Image = new Asset(TinyPng, "input.png"),
+        });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _testHandler.CapturedPath.Should().BeNull();
+    }
+
     [Theory]
     [InlineData(1, null)]
     [InlineData(17, null)]
@@ -599,8 +664,11 @@ public class OpenAiProviderTests
 
         public string? CapturedRequest { get; private set; }
 
+        public string? CapturedPath { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            CapturedPath = request.RequestUri?.AbsolutePath;
             if (request.Content != null)
             {
                 CapturedRequest = await request.Content.ReadAsStringAsync(cancellationToken);
