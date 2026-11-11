@@ -211,6 +211,23 @@ public sealed class OpenAiProvider : IModelProvider
                 throw new ArgumentException(
                     "FrameCount and FrameDurationMs apply only to GIF output — set OutputFormat = OutputFormatType.Gif or leave them unset.");
             }
+
+            if (image26.OutputFormat == GPTImage26Base.OutputFormatType.Svg)
+            {
+                // The API rejects SVG without svg.model ("SVG generation requires 'svg.model'").
+                request.Svg = new OpenAiImageSvg
+                {
+                    Model = string.IsNullOrWhiteSpace(image26.SvgModel) ? GPTImage26Base.DefaultSvgModel : image26.SvgModel,
+                    Reasoning = image26.SvgReasoning is { } effort
+                        ? new OpenAiReasoningConfig { Effort = effort.GetEnumValue() }
+                        : null,
+                };
+            }
+            else if (image26.SvgModel is not null || image26.SvgReasoning is not null)
+            {
+                throw new ArgumentException(
+                    "SvgModel and SvgReasoning apply only to SVG output — set OutputFormat = OutputFormatType.Svg or leave them unset.");
+            }
             fileExtension = image26.FileExtension;
         }
 
@@ -1203,6 +1220,13 @@ internal sealed class OpenAiImageRequest
     public string? OutputFormat { get; set; }
     public int? FrameCount { get; set; }
     public int? FrameDurationMs { get; set; }
+    public OpenAiImageSvg? Svg { get; set; }
+}
+
+internal sealed class OpenAiImageSvg
+{
+    public string Model { get; set; } = "";
+    public OpenAiReasoningConfig? Reasoning { get; set; }
 }
 
 internal sealed class OpenAiEmbedRequest

@@ -393,6 +393,72 @@ public class OpenAiProviderTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task GenerateImageAsync_Svg_SendsTheDefaultSvgAuthor()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"PHN2Zy8+"}]}""";
+
+        var provider = CreateProvider();
+        var result = await provider.GenerateImageAsync(new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Low,
+            Size = GPTImage26Flare.SizeType.Square,
+            OutputFormat = GPTImage26Base.OutputFormatType.Svg,
+        }, new ImagePrompt { Text = "a rocket icon" });
+
+        var body = _testHandler.CapturedRequest!;
+        body.Should().Contain("\"output_format\":\"svg\"");
+        body.Should().Contain("\"svg\":{\"model\":\"gpt-6.1-sol\"}");
+        result.Value.OriginalName.Value.Should().EndWith(".svg");
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_Svg_SendsTheChosenAuthorAndEffort()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"PHN2Zy8+"}]}""";
+
+        var provider = CreateProvider();
+        await provider.GenerateImageAsync(new GPTImage26Sunburst
+        {
+            Quality = GPTImage26Sunburst.QualityType.High,
+            Size = GPTImage26Sunburst.SizeType.Square,
+            OutputFormat = GPTImage26Base.OutputFormatType.Svg,
+            SvgModel = "gpt-6.1-terra",
+            SvgReasoning = GPTImage26Base.SvgReasoningType.XHigh,
+        }, new ImagePrompt { Text = "a logo" });
+
+        _testHandler.CapturedRequest!.Should()
+            .Contain("\"svg\":{\"model\":\"gpt-6.1-terra\",\"reasoning\":{\"effort\":\"xhigh\"}}");
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_SvgOptionsOnAnotherFormat_AreRejected()
+    {
+        var provider = CreateProvider();
+        var act = () => provider.GenerateImageAsync(new GPTImage26Flare
+        {
+            Quality = GPTImage26Flare.QualityType.Low,
+            Size = GPTImage26Flare.SizeType.Square,
+            SvgReasoning = GPTImage26Base.SvgReasoningType.High,
+        }, new ImagePrompt { Text = "a cat" });
+
+        await act.Should().ThrowAsync<ArgumentException>();
+        _testHandler.CapturedPath.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task GenerateImageAsync_NonSvg_LeavesSvgOffTheWire()
+    {
+        _testHandler.ResponseJson = """{"created":1762000000,"data":[{"b64_json":"aGVsbG8="}]}""";
+
+        var provider = CreateProvider();
+        await provider.GenerateImageAsync(
+            new GPTImage26Flare { Quality = GPTImage26Flare.QualityType.Low, Size = GPTImage26Flare.SizeType.Square },
+            new ImagePrompt { Text = "a cat" });
+
+        _testHandler.CapturedRequest!.Should().NotContain("\"svg\"");
+    }
+
     private static readonly byte[] TinyPng =
         Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=");
 

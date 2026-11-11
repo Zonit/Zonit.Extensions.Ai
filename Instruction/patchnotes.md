@@ -3,6 +3,19 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.20.2 — 2026-11-11
+
+### GPT Image 2.6 SVG: the SVG author model is sent
+
+- **Fixed** SVG output on GPT Image 2.6 (`OutputFormat = OutputFormatType.Svg`): the API rejects
+  the request with `SVG generation requires 'svg.model'`. SVG is drawn in two steps — the image
+  model renders a raster reference, then a vision-capable text model writes the markup — and the
+  request now carries that author as `svg: { model, reasoning: { effort } }`.
+- **Added** `GPTImage26Base.SvgModel` (default `GPTImage26Base.DefaultSvgModel`, `gpt-6.1-sol`) and
+  `GPTImage26Base.SvgReasoning` (`None` … `Max`; unset uses the author model's default). Setting
+  either without SVG output throws `ArgumentException` before anything is sent. The author model's
+  tokens are billed on its own rate card and are not part of the image cost estimate.
+
 ## 10.20.1 — 2026-11-11
 
 ### OpenAI image edits: the input image is sent

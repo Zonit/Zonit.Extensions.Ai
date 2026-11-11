@@ -75,6 +75,27 @@ public abstract class GPTImage26Base : GPTImage25Base
         }
     }
 
+    /// <summary>Text model that writes the SVG when <see cref="SvgModel"/> is left unset.</summary>
+    public const string DefaultSvgModel = "gpt-6.1-sol";
+
+    /// <summary>
+    /// Model that authors the SVG, sent as <c>svg.model</c>. SVG output is two steps:
+    /// the image model draws a raster reference, then this vision-capable text model
+    /// writes the vector markup from it. The API requires it for SVG, so <c>null</c>
+    /// sends <see cref="DefaultSvgModel"/>. Only valid with <see cref="OutputFormatType.Svg"/>.
+    /// The author model's tokens are billed on its own rate card and are not included
+    /// in the image cost estimate.
+    /// </summary>
+    public string? SvgModel { get; init; }
+
+    /// <summary>
+    /// Reasoning effort of the SVG author, sent as <c>svg.reasoning.effort</c>,
+    /// independent of <see cref="Complexity"/> (which shapes the reference image).
+    /// <c>null</c> uses the author model's default. Supported values depend on
+    /// <see cref="SvgModel"/>. Only valid with <see cref="OutputFormatType.Svg"/>.
+    /// </summary>
+    public SvgReasoningType? SvgReasoning { get; init; }
+
     /// <summary>File extension of the generated asset for the selected <see cref="OutputFormat"/>.</summary>
     internal string FileExtension => OutputFormat switch
     {
@@ -99,6 +120,38 @@ public abstract class GPTImage26Base : GPTImage25Base
         /// <summary>Rich detail and structure. The server default.</summary>
         [EnumValue("high")]
         High,
+    }
+
+    /// <summary>Reasoning effort of the SVG author model.</summary>
+    public enum SvgReasoningType
+    {
+        /// <summary>No reasoning.</summary>
+        [EnumValue("none")]
+        None,
+
+        /// <summary>Minimal reasoning.</summary>
+        [EnumValue("minimal")]
+        Minimal,
+
+        /// <summary>Low effort.</summary>
+        [EnumValue("low")]
+        Low,
+
+        /// <summary>Medium effort.</summary>
+        [EnumValue("medium")]
+        Medium,
+
+        /// <summary>High effort.</summary>
+        [EnumValue("high")]
+        High,
+
+        /// <summary>Extra-high effort.</summary>
+        [EnumValue("xhigh")]
+        XHigh,
+
+        /// <summary>Maximum effort.</summary>
+        [EnumValue("max")]
+        Max,
     }
 
     /// <summary>Output formats for GPT Image 2.6.</summary>
