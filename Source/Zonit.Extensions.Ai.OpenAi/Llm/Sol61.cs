@@ -24,6 +24,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// without tool calling — this SDK uses the Responses API.
 /// </para>
 /// </remarks>
+[Obsolete("Superseded by Sol62 (gpt-6.2-sol) at the same price. Still works — upgrade for better quality.")]
 public class Sol61 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast, IUltraFast
 {
     /// <inheritdoc />

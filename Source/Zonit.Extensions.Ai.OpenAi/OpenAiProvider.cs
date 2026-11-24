@@ -789,8 +789,9 @@ public sealed class OpenAiProvider : IModelProvider
     /// <remarks>
     /// OpenAI renamed priority processing to fast mode on 30 July 2026 and kept
     /// <c>"priority"</c> as an accepted alias; we send the current spelling. Ultrafast is a
-    /// separate tier (<c>"ultrafast"</c>) with its own capacity, offered on <c>gpt-6.1-sol</c>
-    /// and <c>gpt-6-astra</c>; asking for it on another model throws before the request is sent
+    /// separate tier (<c>"ultrafast"</c>) with its own capacity, offered on <c>gpt-6.2-sol</c>,
+    /// <c>gpt-6.2-astra</c>, <c>gpt-6.1-sol</c> and <c>gpt-6-astra</c>; asking for it on another
+    /// model throws before the request is sent
     /// (<see cref="AiFastTier.Requested"/>).
     /// </remarks>
     internal static string? ServiceTierFor(ILlm llm) => AiFastTier.Requested(llm) switch

@@ -11,7 +11,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Uses a new tokenizer vs previous models — may use up to 35% more tokens for fixed text.
 /// Adaptive thinking only — does not accept the legacy <c>budget_tokens</c> mode.
 /// </remarks>
-[Obsolete("Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models.")]
+[Obsolete("Claude Opus 4.7 is being phased out — migrate to Opus55 (claude-opus-5-5). Still functional, but Anthropic will retire older models.")]
 public class Opus47 : AnthropicFixedSamplingBase<Opus47.ReasonType>, IAgentLlm
 {
     /// <summary>

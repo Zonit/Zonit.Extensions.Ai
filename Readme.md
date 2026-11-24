@@ -441,10 +441,10 @@ var fast = await ai.GenerateAsync(
     "Draft a release note for v10.");
 ```
 
-The same property covers Anthropic fast mode (`Opus55`, `Fable52`), OpenAI fast mode (`Astra6`,
-`Sol61`, `Terra61`, `Luna6`) and xAI Priority Processing (`Grok47`) — each provider's wire format is handled for you,
-and every one of them charges 2× for it. `Sol61` and `Astra6` also take `SpeedType.UltraFast`
-(OpenAI ultrafast, 6×). Fast mode is best-effort everywhere: when a provider downgrades the request
+The same property covers Anthropic fast mode (`Opus55`, `Fable52`), OpenAI fast mode (`Astra62`,
+`Sol62`, `Terra61`, `Luna6`) and xAI Priority Processing (`Grok47`) — each provider's wire format is handled for you,
+and every one of them charges 2× for it. `Sol62` and `Astra62` also take `SpeedType.UltraFast`
+(OpenAI ultrafast: 3× through 28 February 2027, then 6×; `Sol61` and `Astra6` stay at 6×). Fast mode is best-effort everywhere: when a provider downgrades the request
 to a slower tier, the reported cost follows it back down.
 See [models.md](./Instruction/models.md#fast-mode-ifast).
 

@@ -20,7 +20,7 @@ the compiler stops you from, for example, asking an embedding model to generate 
 
 Concrete model classes live in the provider package under its `Llm/` folder. Use IntelliSense;
 do not invent or memorise model names, because they change every release. Verified examples at
-the time of writing: OpenAI `Sol61`, `Terra61`, `Luna6`, `GPTImage26Flare`, `TextEmbedding3Large`,
+the time of writing: OpenAI `Sol62`, `Astra62`, `Terra61`, `Luna6`, `GPTImage26Flare`, `TextEmbedding3Large`,
 `GPTTranscribe`; Anthropic `Sonnet55`, `Opus55`, `Haiku55`, `Fable52`; Google `Gemini38Flash`,
 `Gemini4Argon`, `Gemini4Carbon`; xAI `Grok47`. For the capability each package provides,
 see [`providers.md`](./providers.md).
@@ -267,7 +267,7 @@ Reasoning models expose effort, summary and verbosity through typed properties. 
 per tier, so a model only accepts the levels its API actually supports (passing an unsupported level
 is a compile-time error). OpenAI GPT-5.0–5.5 / o-series use `OpenAiReasonEffort`
 (none/low/medium/high); GPT-5.6 (Sol / Terra / Luna), GPT-5.6 Cyber, GPT-6 Sol and GPT-6 Luna use
-`OpenAiReasonEffortExtended`, which adds `Xhigh` and `Max`; GPT-6 Astra and GPT-6.1 Sol, which
+`OpenAiReasonEffortExtended`, which adds `Xhigh` and `Max`; GPT-6 / GPT-6.2 Astra and GPT-6.1 / GPT-6.2 Sol, which
 always reason, use `OpenAiReasonEffortAlwaysOn` (no `None`). Anthropic, Google and xAI models carry
 a nested `ReasonType` per model (e.g. `Opus55.ReasonType`, `Grok47.ReasonType`).
 
@@ -286,9 +286,9 @@ await ai.GenerateAsync(new O3 { Reason = OpenAiReasonEffort.High }, "Prove...", 
 // GPT-5.6+ (Sol / Terra / Luna) and GPT-6 (Astra / Sol / Luna) add two deeper effort levels: Xhigh and Max.
 await ai.GenerateAsync(new Luna6 { Reason = OpenAiReasonEffortExtended.Xhigh }, prompt, ct);
 
-// GPT-6 Astra and GPT-6.1 Sol always reason: their enum has no None (the API rejects it).
-await ai.GenerateAsync(new Astra6 { Reason = OpenAiReasonEffortAlwaysOn.Max }, prompt, ct);
-await ai.GenerateAsync(new Sol61 { Reason = OpenAiReasonEffortAlwaysOn.Xhigh }, prompt, ct);
+// GPT-6.2 Astra / Sol (and GPT-6 Astra, GPT-6.1 Sol) always reason: their enum has no None (the API rejects it).
+await ai.GenerateAsync(new Astra62 { Reason = OpenAiReasonEffortAlwaysOn.Max }, prompt, ct);
+await ai.GenerateAsync(new Sol62 { Reason = OpenAiReasonEffortAlwaysOn.Xhigh }, prompt, ct);
 ```
 
 Gemini 3.x models take a `thinkingLevel` the same way, through a model-specific `ReasonType`. Gemini
@@ -337,7 +337,7 @@ rather than a 400 at runtime:
 | Setting | Models | Why |
 | :--- | :--- | :--- |
 | `ReasonType.None` | `Opus55`, `Sonnet55`, `Fable5`, `Fable51`, `Fable52`, `Mythos5`, `Mythos51`, `Mythos52` | Thinking cannot be disabled (`thinking: disabled` → 400). Leave `Reason` null for the server default. |
-| `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra6`, `Sol61`, `Cyber6` | Reasoning effort `none` → 400. |
+| `OpenAiReasonEffortAlwaysOn` (no `None`) | `Astra62`, `Sol62`, `Astra6`, `Sol61`, `Cyber6` | Reasoning effort `none` → 400. |
 | `Grok47.ReasonType` etc. (no `Max`; no `None` on 4.5–4.7; no `Extra` on 4.5) | `Grok43`, `Grok45`, `Grok46`, `Grok47` | Levels xAI does not accept → 400. |
 | `ToolStepReasoning = true` with `Reason` above `High` (analyzer **ZAI001**) | `Sonnet55` | Tool-step reasoning at `xhigh` / `max` → 400. Runtime values are checked before sending. |
 | `Temperature`, `TopP` (`[Obsolete(error: true)]`) | `Opus47`, `Opus48`, `Opus5`, `Opus55`, `Sonnet5`, `Sonnet55`, `Fable5`, `Fable51`, `Fable52`, `Mythos5`, `Mythos51`, `Mythos52` | Non-default sampling parameters → 400. A value set through `ITextLlm` is not sent. |
@@ -349,7 +349,7 @@ calculation switches to the fast rate automatically when it is selected.
 
 ```csharp
 await ai.GenerateAsync(new Opus55 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
-await ai.GenerateAsync(new Sol61 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
+await ai.GenerateAsync(new Sol62 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
 await ai.GenerateAsync(new Grok47 { Speed = SpeedType.Fast }, "Draft a release note.", ct);
 ```
 
@@ -357,13 +357,14 @@ One property, three providers — each provider's own wire spelling is handled f
 
 | Models | On the wire | Premium | Notes |
 | :--- | :--- | :--- | :--- |
-| `Opus55`, `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). |
+| `Opus55`, `Opus5`, `Opus48` | `speed: "fast"` (+ fast-mode beta header) | 2× input and output | Needs fast-mode access on the account (research preview, first-party API only). Anthropic removes fast mode for `Opus48` on 30 November 2026. |
 | `Fable52`, `Mythos52` | `speed: "fast"` | 2× input and output ($16 / $80 per MTok) | Messages API on the Claude API; not on Batch. |
-| `Astra6`, `Sol61`, `Sol6`, `Terra61`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
+| `Astra62`, `Sol62`, `Astra6`, `Sol61`, `Sol6`, `Terra61`, `Luna6`, `Sol56`, `Terra56`, `Luna56` | `service_tier: "fast"` | 2× on input, cached input and output | OpenAI fast mode (renamed from priority processing). Up to ~2.5× output tokens/sec and steadier latency. Not available for Batch, fine-tuned models or embeddings. |
 | `Grok47`, `Grok46` | `service_tier: "priority"` | 2× on every token type | xAI Priority Processing — higher scheduling priority (lower TTFT and inter-token latency) when xAI is under load. |
-| `Sol61`, `Astra6` with `SpeedType.UltraFast` | `service_tier: "ultrafast"` | 6× on every token type | OpenAI ultrafast (`IUltraFast`) — a tier above fast mode with its own capacity and rate limits. |
+| `Sol62`, `Astra62` with `SpeedType.UltraFast` | `service_tier: "ultrafast"` | 3× on every token type through 28 February 2027, 6× from 1 March 2027 (Pacific time) | OpenAI ultrafast (`IUltraFast`) — a tier above fast mode with its own capacity and rate limits, US data residency only. The GPT-6.2 launch promotion follows the system clock. |
+| `Sol61`, `Astra6` with `SpeedType.UltraFast` | `service_tier: "ultrafast"` | 6× on every token type | Not part of the GPT-6.2 promotion. |
 
-The premium composes with long-context tiering rather than replacing it: a fast `Sol61` request
+The premium composes with long-context tiering rather than replacing it: a fast `Sol62` request
 above 272K input tokens bills at 2× the *long-context* rate ($8 / $30 per MTok), not 2× the short
 one. `Speed` defaults to `SpeedType.Standard` everywhere, so nothing changes until you opt in, and
 setting it on a model that does not implement `IFast` has no effect. `SpeedType.UltraFast` on a
@@ -371,7 +372,7 @@ model without `IUltraFast` (e.g. `new Opus55 { Speed = SpeedType.UltraFast }`) i
 `NotSupportedException` before the request is sent, rather than silently run at another tier.
 
 ```csharp
-await ai.GenerateAsync(new Sol61 { Speed = SpeedType.UltraFast }, "Draft a release note.", ct);  // $12 / $60 per MTok
+await ai.GenerateAsync(new Sol62 { Speed = SpeedType.UltraFast }, "Draft a release note.", ct);  // $6 / $30 per MTok until 28 Feb 2027, then $12 / $60
 ```
 
 ### How the premium is applied

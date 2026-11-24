@@ -2,7 +2,7 @@ namespace Zonit.Extensions.Ai;
 
 /// <summary>
 /// Implemented by models that offer an <b>ultrafast</b> tier on top of fast mode — OpenAI
-/// <c>service_tier: "ultrafast"</c> on <c>gpt-6.1-sol</c> and <c>gpt-6-astra</c>. Setting
+/// <c>service_tier: "ultrafast"</c> on <c>gpt-6.2-sol</c>, <c>gpt-6.2-astra</c>, <c>gpt-6.1-sol</c> and <c>gpt-6-astra</c>. Setting
 /// <see cref="IFast.Speed"/> to <see cref="SpeedType.UltraFast"/> opts a request in.
 /// </summary>
 /// <remarks>
@@ -13,7 +13,8 @@ namespace Zonit.Extensions.Ai;
 /// <para>
 /// OpenAI prices ultrafast at a flat 6× the standard card on every token type, long context
 /// included, so a model normally implements nothing beyond the interface itself. Override
-/// <see cref="UltraFastMultiplier"/> for a different uniform factor, or the individual
+/// <see cref="UltraFastMultiplier"/> for a different uniform factor (the GPT-6.2 models do, for
+/// OpenAI's 3× launch promotion through 28 February 2027), or the individual
 /// <c>GetUltraFast*Price</c> members for a non-uniform card.
 /// </para>
 /// </remarks>

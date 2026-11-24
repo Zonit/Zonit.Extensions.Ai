@@ -657,6 +657,37 @@ public class OpenAiProviderTests
     }
 
     [Fact]
+    public async Task GenerateAsync_Sol62UltraFast_SendsTheTier_AndBillsTheCurrentPromotionFactor()
+    {
+        _testHandler.ResponseJson = """
+            {"status":"completed","service_tier":"ultrafast","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],
+             "usage":{"input_tokens":200000,"output_tokens":0}}
+            """;
+        var provider = CreateProvider();
+
+        var result = await provider.GenerateAsync(new Sol62 { Speed = SpeedType.UltraFast }, new TestPrompt { Text = "Quick" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.2-sol");
+        json.RootElement.GetProperty("service_tier").GetString().Should().Be("ultrafast");
+        // 200K × $2 × (3 through 28 February 2027, 6 from 1 March 2027)
+        result.MetaData.Usage!.InputCost.Value
+            .Should().Be(0.40m * Gpt62UltraFastPromotion.MultiplierAt(DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_Astra62Reason_IsSentWithoutANoneLevel()
+    {
+        var provider = CreateProvider();
+
+        await provider.GenerateAsync(new Astra62 { Reason = OpenAiReasonEffortAlwaysOn.Max }, new TestPrompt { Text = "Go" }, CancellationToken.None);
+
+        var json = JsonDocument.Parse(_testHandler.CapturedRequest!);
+        json.RootElement.GetProperty("model").GetString().Should().Be("gpt-6.2-astra");
+        json.RootElement.GetProperty("reasoning").GetProperty("effort").GetString().Should().Be("max");
+    }
+
+    [Fact]
     public async Task GenerateAsync_AtStandardSpeed_OmitsServiceTier()
     {
         // Standard processing is the default and must not be spelled out — sending a

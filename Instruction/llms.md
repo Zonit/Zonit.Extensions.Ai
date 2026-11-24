@@ -7,7 +7,7 @@
 > A `⚠️` next to a class marks a model declared `[Obsolete]` (deprecated / being
 > retired) — see the Deprecated models section at the end for the reason.
 
-Total: 170 models across 17 providers.
+Total: 172 models across 17 providers.
 
 ## Alibaba
 
@@ -319,7 +319,8 @@ Total: 170 models across 17 providers.
 
 | Class | Model name | Context | Max output | Modalities (in → out) | Capabilities | Tools |
 | :--- | :--- | ---: | ---: | :--- | :--- | :--- |
-| `Astra6` | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Astra6` ⚠️ | `gpt-6-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Astra62` | `gpt-6.2-astra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Cyber56` | `gpt-5.6-cyber` | 400,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, MCP |
 | `Cyber6` | `gpt-6-cyber` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `GPT41` ⚠️ | `gpt-4.1-2025-04-14` | 1,047,576 | 32,768 | Text, Image → Text | chat, agent | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
@@ -357,7 +358,8 @@ Total: 170 models across 17 providers.
 | `O3Pro` ⚠️ | `o3-pro` | 200,000 | 100,000 | Text, Image → Text | agent, reasoning | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Sol56` ⚠️ | `gpt-5.6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Sol6` ⚠️ | `gpt-6-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
-| `Sol61` | `gpt-6.1-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Sol61` ⚠️ | `gpt-6.1-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
+| `Sol62` | `gpt-6.2-sol` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `Terra56` | `gpt-5.6-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, CodeInterpreter, MCP |
 | `Terra61` | `gpt-6.1-terra` | 1,050,000 | 128,000 | Text, Image → Text | agent, reasoning, fast | WebSearch, FileSearch, ImageGeneration, CodeInterpreter, MCP |
 | `TextEmbedding3Large` | `text-embedding-3-large` | 8,191 | 3,072 | Text → Embedding | embedding | — |
@@ -369,6 +371,7 @@ Total: 170 models across 17 providers.
 | Class | Input | Cached read | Cached write | Output |
 | :--- | ---: | ---: | ---: | ---: |
 | `Astra6` | $10 | $1 | $12.5 | $50 |
+| `Astra62` | $8 | $0.4 | $10 | $40 |
 | `Cyber56` | $12.5 | $1.25 | $15.625 | $75 |
 | `Cyber6` | $20 | $2 | $25 | $100 |
 | `GPT41` | $2 | $0.5 | — | $8 |
@@ -407,6 +410,7 @@ Total: 170 models across 17 providers.
 | `Sol56` | $4 | $0.4 | $5 | $20 |
 | `Sol6` | $2 | $0.2 | $2.5 | $10 |
 | `Sol61` | $2 | $0.1 | $2.5 | $10 |
+| `Sol62` | $2 | $0.1 | $2.5 | $10 |
 | `Terra56` | $2 | $0.2 | $2.5 | $12 |
 | `Terra61` | $1 | $0.05 | $1.25 | $5 |
 | `TextEmbedding3Large` | $0.13 | — | — | $0 |
@@ -560,12 +564,12 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Provider | Class | Model name | Reason |
 | :--- | :--- | :--- | :--- |
 | Anthropic | `Haiku45` | `claude-haiku-4-5-20251001` | Claude Haiku 4.5 is superseded by Haiku55 (claude-haiku-5-5), about 10× cheaper up to 100K prompt tokens ($0.10 / $0.50 per MTok). Still functional, but Anthropic will retire older models. Note Haiku 5.5 rejects temperature / top_p and thinks by default (this SDK disables it while Reason is unset). |
-| Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
-| Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
-| Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus45` | `claude-opus-4-5-20251101` | Claude Opus 4.5 (legacy budget_tokens thinking) is deprecated — Anthropic retires it from the Claude API on 22 January 2027. Migrate to Opus55 (claude-opus-5-5). Note Opus 5.5 cannot disable thinking and rejects a forced tool_choice. |
+| Anthropic | `Opus46` | `claude-opus-4-6` | Claude Opus 4.6 is being phased out — migrate to Opus55 (claude-opus-5-5). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Opus47` | `claude-opus-4-7` | Claude Opus 4.7 is being phased out — migrate to Opus55 (claude-opus-5-5). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus48` | `claude-opus-4-8` | Claude Opus 4.8 is being phased out — migrate to Opus55 (claude-opus-5-5), which is cheaper on every rate. Still functional, but Anthropic will retire older models. |
 | Anthropic | `Opus5` | `claude-opus-5` | Claude Opus 5 is superseded by Opus55 (claude-opus-5-5), which is cheaper on every rate ($4 / $20 per MTok). Still functional, but Anthropic will retire older models. Note Opus 5.5 cannot disable thinking and rejects a forced tool_choice. |
-| Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Sonnet55 (claude-sonnet-5-5, adaptive thinking). Still functional, but Anthropic will retire older models. |
+| Anthropic | `Sonnet45` | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (legacy budget_tokens thinking) is deprecated — Anthropic retires it from the Claude API on 30 November 2026. Migrate to Sonnet55 (claude-sonnet-5-5, adaptive thinking). |
 | Anthropic | `Sonnet46` | `claude-sonnet-4-6` | Claude Sonnet 4.6 is being phased out — migrate to Sonnet55 (claude-sonnet-5-5). Still functional, but Anthropic will retire older models. |
 | Anthropic | `Sonnet5` | `claude-sonnet-5` | Claude Sonnet 5 is superseded by Sonnet55 (claude-sonnet-5-5) at the same price. Still functional, but Anthropic will retire older models. Note Sonnet 5.5 cannot disable thinking and rejects a forced tool_choice. |
 | ElevenLabs | `ElevenTurboV2` | `eleven_turbo_v2` | ElevenLabs has deprecated eleven_turbo_v2 in favour of ElevenFlashV2 (eleven_flash_v2), which is faster and cheaper per character. Still functional for now. |
@@ -577,6 +581,7 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | Google | `Gemini25FlashLite` | `gemini-2.5-flash-lite` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini35FlashLite (gemini-3.5-flash-lite) or Gemini31FlashLite. |
 | Google | `Gemini25Pro` | `gemini-2.5-pro` | Google limited Gemini 2.5 to accounts that already use it on 18 September 2026. Migrate to Gemini31Pro (gemini-3.1-pro-preview) or Gemini38Flash. |
 | Google | `TextEmbedding004` | `text-embedding-004` | text-embedding-004 was shut down by Google on 2026-01-14 — requests fail. Migrate to GeminiEmbedding2 (gemini-embedding-2). |
+| OpenAi | `Astra6` | `gpt-6-astra` | Superseded by Astra62 (gpt-6.2-astra) — input and output 20% cheaper, cached input 60% cheaper. Still works — upgrade for the lower price. Note gpt-6.2-astra does not support predicted outputs. |
 | OpenAi | `GPT41` | `gpt-4.1-2025-04-14` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT41Mini` | `gpt-4.1-mini-2025-04-14` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT4o` | `gpt-4o` | Superseded by Terra61 (gpt-6.1-terra) for text and vision. Still works — upgrade for better quality. |
@@ -585,26 +590,27 @@ These carry `[Obsolete]` in the SDK — avoid in new code; they may stop working
 | OpenAi | `GPT4oTranscribe` | `gpt-4o-transcribe` | gpt-4o-transcribe is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
 | OpenAi | `GPT4oTranscribeDiarize` | `gpt-4o-transcribe-diarize` | gpt-4o-transcribe-diarize is deprecated: OpenAI shuts it down on 2027-02-26 — migrate to GPTTranscribe (gpt-transcribe). |
 | OpenAi | `GPT5` | `gpt-5-2025-08-07` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT51Pro` | `gpt-5.1-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT51Pro` | `gpt-5.1-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT52` | `gpt-5.2` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT52Chat` | `gpt-5.2-chat-latest` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT52Pro` | `gpt-5.2-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT52Pro` | `gpt-5.2-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT54` | `gpt-5.4` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
 | OpenAi | `GPT54Mini` | `gpt-5.4-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT54Nano` | `gpt-5.4-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT54Pro` | `gpt-5.4-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT54Pro` | `gpt-5.4-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT55` | `gpt-5.5` | Superseded by Terra61 (gpt-6.1-terra), OpenAI's current standard model. Still works — upgrade for better quality. |
-| OpenAi | `GPT55Pro` | `gpt-5.5-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT55Pro` | `gpt-5.5-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPT5Mini` | `gpt-5-mini` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
 | OpenAi | `GPT5Nano` | `gpt-5-nano` | Superseded by Luna6 (gpt-6-luna), OpenAI's current lightweight model. Still works — upgrade for better quality and cost. |
-| OpenAi | `GPT5Pro` | `gpt-5-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest workloads. Still works — upgrade for better quality. |
+| OpenAi | `GPT5Pro` | `gpt-5-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest workloads. Still works — upgrade for better quality. |
 | OpenAi | `GPTImage15` | `gpt-image-1.5` | Superseded by GPTImage2 (gpt-image-2), OpenAI's next-generation image model (higher quality, 2K/4K sizes). OpenAI shuts gpt-image-1.5 down on 2026-12-01. |
 | OpenAi | `GPTImage1Mini` | `gpt-image-1-mini` | gpt-image-1-mini is deprecated and OpenAI shuts it down on 2026-12-01. Migrate to GPTImage2 (gpt-image-2). |
 | OpenAi | `Luna56` | `gpt-5.6-luna` | Superseded by Luna6 (gpt-6-luna) — the GPT-6 generation of the Luna tier at half the price ($0.10 / $0.50 per MTok). Still works — upgrade for the lower price. |
-| OpenAi | `O3` | `o3-2025-04-16` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
-| OpenAi | `O3Pro` | `o3-pro` | Superseded by Sol61 (gpt-6.1-sol), or Astra6 (gpt-6-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
-| OpenAi | `Sol56` | `gpt-5.6-sol` | Superseded by Sol61 (gpt-6.1-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price. |
-| OpenAi | `Sol6` | `gpt-6-sol` | Superseded by Sol61 (gpt-6.1-sol) — same input / output price, half the cached-input rate. Still works — upgrade for better quality. Note gpt-6.1-sol rejects reasoning effort "none". |
+| OpenAi | `O3` | `o3-2025-04-16` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
+| OpenAi | `O3Pro` | `o3-pro` | Superseded by Sol62 (gpt-6.2-sol), or Astra62 (gpt-6.2-astra) for the hardest reasoning workloads. Still works — upgrade for better quality. |
+| OpenAi | `Sol56` | `gpt-5.6-sol` | Superseded by Sol62 (gpt-6.2-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price. |
+| OpenAi | `Sol6` | `gpt-6-sol` | Superseded by Sol62 (gpt-6.2-sol) — same input / output price, half the cached-input rate. Still works — upgrade for better quality. Note gpt-6.2-sol rejects reasoning effort "none". |
+| OpenAi | `Sol61` | `gpt-6.1-sol` | Superseded by Sol62 (gpt-6.2-sol) at the same price. Still works — upgrade for better quality. |
 | OpenAi | `Whisper1` | `whisper-1` | whisper-1 is OpenAI's legacy speech-recognition model and is shut down on 2027-02-26. Use GPTTranscribe (gpt-transcribe). |
 | X | `Grok41FastNonReasoning` | `grok-4-1-fast-non-reasoning` | Retired by xAI on 2026-05-15 — requests are redirected to grok-4.3 and billed at its rates. Migrate to Grok47 (grok-4.7), xAI's current frontier model. |
 | X | `Grok41FastReasoning` | `grok-4-1-fast-reasoning` | Retired by xAI on 2026-05-15 — requests are redirected to grok-4.3 and billed at its rates. Migrate to Grok47 (grok-4.7), xAI's current frontier model. |

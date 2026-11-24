@@ -32,7 +32,7 @@ public static class AiFastTier
         if (fast.Speed == SpeedType.UltraFast && llm is not IUltraFast)
             throw new NotSupportedException(
                 $"Model '{llm.Name}' does not offer the ultrafast tier. Use SpeedType.Fast, or a model " +
-                "that implements IUltraFast (OpenAI Sol61, Astra6).");
+                "that implements IUltraFast (OpenAI Sol62, Astra62, Sol61, Astra6).");
 
         return fast.Speed;
     }

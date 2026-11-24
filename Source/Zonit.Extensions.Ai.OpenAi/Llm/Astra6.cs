@@ -22,6 +22,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <c>top_p</c> are not accepted.
 /// </para>
 /// </remarks>
+[Obsolete("Superseded by Astra62 (gpt-6.2-astra) — input and output 20% cheaper, cached input 60% cheaper. Still works — upgrade for the lower price. Note gpt-6.2-astra does not support predicted outputs.")]
 public class Astra6 : OpenAiReasoningBase<OpenAiReasonEffortAlwaysOn>, IAgentLlm, IFast, IUltraFast
 {
     /// <inheritdoc />

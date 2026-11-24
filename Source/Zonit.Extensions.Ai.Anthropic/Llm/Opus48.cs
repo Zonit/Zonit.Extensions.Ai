@@ -56,6 +56,10 @@ public class Opus48 : AnthropicFixedSamplingBase<Opus48.ReasonType>, IAgentLlm, 
     /// (research preview, first-party API only). Defaults to
     /// <see cref="SpeedType.Standard"/>.
     /// </summary>
+    /// <remarks>
+    /// Anthropic removes fast mode for Claude Opus 4.8 on 30 November 2026; from then on, use
+    /// <see cref="Opus55"/> for fast mode.
+    /// </remarks>
     public SpeedType Speed { get; init; } = SpeedType.Standard;
 
     /// <inheritdoc />

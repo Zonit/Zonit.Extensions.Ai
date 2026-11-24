@@ -4,7 +4,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Claude Opus 4.5 - Premium model combining maximum intelligence with practical performance.
 /// Most capable Anthropic model.
 /// </summary>
-[Obsolete("Claude Opus 4.5 (legacy budget_tokens thinking) is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models.")]
+[Obsolete("Claude Opus 4.5 (legacy budget_tokens thinking) is deprecated — Anthropic retires it from the Claude API on 22 January 2027. Migrate to Opus55 (claude-opus-5-5). Note Opus 5.5 cannot disable thinking and rejects a forced tool_choice.")]
 public class Opus45 : AnthropicLegacyThinkingBase, IAgentLlm
 {
     /// <inheritdoc />

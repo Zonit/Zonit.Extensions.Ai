@@ -17,7 +17,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// reasoning range none / low / medium / high / <see cref="OpenAiReasonEffortExtended.Xhigh"/>
 /// / <see cref="OpenAiReasonEffortExtended.Max"/>.
 /// </remarks>
-[Obsolete("Superseded by Sol61 (gpt-6.1-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price.")]
+[Obsolete("Superseded by Sol62 (gpt-6.2-sol) — the GPT-6 generation of the Sol tier at half the price ($2 / $10 per MTok). Still works — upgrade for the lower price.")]
 public class Sol56 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
 {
     /// <inheritdoc />

@@ -3,6 +3,38 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.21.0 — 2026-11-24
+
+### New models: GPT-6.2 Sol and GPT-6.2 Astra; Anthropic retirement dates
+
+- **Added OpenAI `Sol62`** (`gpt-6.2-sol`, released 2026-11-17) — successor to `Sol61` at the same
+  rates: $2 input / $0.10 cached / $2.50 cache write / $10 output per 1M up to 272K input tokens,
+  above that 2× input-side and 1.5× output ($4 / $0.20 / $5 / $15). Batch half. 1.05M context,
+  128K output, knowledge cutoff 2026-06-01. Reasoning effort `none` is rejected, so the class takes
+  `OpenAiReasonEffortAlwaysOn` (`Low` … `Max`). Fast mode 2×.
+- **Added OpenAI `Astra62`** (`gpt-6.2-astra`, released 2026-11-17) — successor to `Astra6`, input
+  and output 20% cheaper and cached input 60% cheaper: $8 / $0.40 cached / $10 cache write / $40
+  output per 1M, long context $16 / $0.80 / $20 / $60. Batch half. 1.05M context, 128K output,
+  knowledge cutoff 2026-05-18. `OpenAiReasonEffortAlwaysOn`, fast mode 2×. Unlike `Astra6` it does
+  not support predicted outputs.
+- **Ultrafast launch promotion on the GPT-6.2 models:** `SpeedType.UltraFast` on `Sol62` / `Astra62`
+  costs **3×** the standard card through 28 February 2027 and **6×** from 1 March 2027 (Pacific time,
+  taken as 00:00 PST). The factor follows the system clock (`UltraFastMultiplier`), the way the
+  Gemini 4 rate card does. `Sol61` and `Astra6` are not part of the promotion and stay at 6×.
+- `Sol61` and `Astra6` are marked `[Obsolete]` (superseded, still work). The `[Obsolete]` messages
+  that pointed at `Sol61` / `Astra6` now point at `Sol62` / `Astra62`.
+- Neither 6.2 model takes `temperature` / `top_p`, Flex processing, or tool calling on Chat
+  Completions (this SDK uses the Responses API). The 12-hour prompt-cache lifetime
+  (`prompt_cache_options.ttl: "12h"`, 2.5× input) is not wrapped; the default 30-minute write is
+  what is billed.
+- **Anthropic:** `Opus45` is deprecated (2026-11-23) and retires from the Claude API on
+  **22 January 2027** — its message now points at `Opus55`. `Sonnet45`'s message names its retirement
+  on **30 November 2026**. `Opus46` / `Opus47` point at `Opus55` instead of the already obsolete
+  `Opus48`. `Opus48` documents that Anthropic removes its fast mode on 30 November 2026.
+- Not added: `gpt-6.2-astra-law` (legal configuration of Astra, not confirmed as a public API id);
+  xAI and Anthropic released no new API model since 10.20 (Grok 4.8 has no public model id yet);
+  ElevenLabs Scribe v3 speech-to-text (the ElevenLabs package wraps text-to-speech only).
+
 ## 10.20.2 — 2026-11-11
 
 ### GPT Image 2.6 SVG: the SVG author model is sent

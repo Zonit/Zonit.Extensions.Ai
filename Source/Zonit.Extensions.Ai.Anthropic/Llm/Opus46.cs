@@ -27,7 +27,7 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// </para>
 /// </remarks>
 /// <seealso href="https://platform.claude.com/docs/en/build-with-claude/adaptive-thinking">Adaptive thinking — Supported models</seealso>
-[Obsolete("Claude Opus 4.6 is being phased out — migrate to Opus48 (claude-opus-4-8). Still functional, but Anthropic will retire older models.")]
+[Obsolete("Claude Opus 4.6 is being phased out — migrate to Opus55 (claude-opus-5-5). Still functional, but Anthropic will retire older models.")]
 public class Opus46 : AnthropicReasoningBase<Opus46.ReasonType>, IAgentLlm
 {
     /// <summary>

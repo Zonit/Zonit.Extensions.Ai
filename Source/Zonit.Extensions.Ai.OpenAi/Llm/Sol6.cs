@@ -21,7 +21,7 @@ namespace Zonit.Extensions.Ai.OpenAi;
 /// <c>none</c>.
 /// </para>
 /// </remarks>
-[Obsolete("Superseded by Sol61 (gpt-6.1-sol) — same input / output price, half the cached-input rate. Still works — upgrade for better quality. Note gpt-6.1-sol rejects reasoning effort \"none\".")]
+[Obsolete("Superseded by Sol62 (gpt-6.2-sol) — same input / output price, half the cached-input rate. Still works — upgrade for better quality. Note gpt-6.2-sol rejects reasoning effort \"none\".")]
 public class Sol6 : OpenAiReasoningBase<OpenAiReasonEffortExtended>, IAgentLlm, IFast
 {
     /// <inheritdoc />
