@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -17,9 +18,18 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// one turn.
 /// </summary>
 /// <remarks>
-/// Consequence of CLI-owned execution: the framework's <c>ToolExecutor</c>,
-/// per-tool-timeout, <c>MaxIterations</c> and nested-usage tracking do not apply to this
-/// path; usage is taken from the CLI's reported token counts.
+/// <para>
+/// The run is read as <c>stream-json</c>, so the terminal turn reports what happened inside it:
+/// <see cref="AgentTurn.CompletedToolCalls"/> (every tool call, with input, result and duration)
+/// and <see cref="AgentTurn.Iterations"/> (model round-trips). The runner's iteration budget is
+/// passed as <c>--max-turns</c>; a run that hits it fails with
+/// <see cref="AgentIterationLimitException"/>, as on the HTTP path.
+/// </para>
+/// <para>
+/// Still CLI-owned: the framework's <c>ToolExecutor</c> does not run here, so
+/// <c>MaxParallelToolCalls</c>, <c>OnToolCall</c>, the per-tool timeout and nested-usage tracking
+/// do not apply; usage is taken from the CLI's reported token counts.
+/// </para>
 /// </remarks>
 internal sealed class CliAgentSession : IAgentSession
 {
@@ -32,7 +42,6 @@ internal sealed class CliAgentSession : IAgentSession
 
     private bool _completed;
     private AgentTurn? _finalTurn;
-    private string? _mcpConfigPath;
 
     public CliAgentSession(
         AgentSessionContext context,
@@ -60,6 +69,7 @@ internal sealed class CliAgentSession : IAgentSession
 
         var tools = _context.Tools;
         IAgentToolBridgeSession? bridgeSession = null;
+        using var scratch = new ClaudeCliScratch();
         try
         {
             if (tools.Count > 0)
@@ -77,26 +87,64 @@ internal sealed class CliAgentSession : IAgentSession
                 bridgeSession = await _bridge.StartAsync(bridgeTools, cancellationToken).ConfigureAwait(false);
             }
 
-            var invocation = BuildInvocation(bridgeSession);
+            var invocation = BuildInvocation(bridgeSession, scratch);
             _logger.LogDebug(
-                "Claude CLI agent run: {Exe} (model {Model}, tools {ToolCount})",
-                invocation.ExecutablePath, _context.Llm.Name, tools.Count);
+                "Claude CLI agent run: {Exe} (model {Model}, tools {ToolCount}, max turns {MaxTurns})",
+                invocation.ExecutablePath, _context.Llm.Name, tools.Count, _context.MaxIterations);
 
+            var log = new ClaudeCliRunLog(bridgeSession?.ServerName);
             var sw = Stopwatch.StartNew();
-            var process = await _runner.RunAsync(invocation, cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await foreach (var line in _runner.StreamLinesAsync(invocation, cancellationToken).ConfigureAwait(false))
+                    log.Accept(line, sw.Elapsed);
+            }
+            catch (InvalidOperationException) when (log.Result is not null)
+            {
+                // The CLI exits non-zero after it reported a failed run (e.g. error_max_turns);
+                // the result line already says why, and is handled below.
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new InvalidOperationException(
+                    $"Claude CLI agent run for model '{_context.Llm.Name}' failed: {ex.Message}", ex);
+            }
             sw.Stop();
 
-            if (process.ExitCode != 0)
-                throw new InvalidOperationException(
-                    $"Claude CLI agent run for model '{_context.Llm.Name}' exited with code {process.ExitCode}. " +
-                    $"stderr: {Truncate(process.StandardError)}");
+            var result = log.Result
+                ?? throw new InvalidOperationException(
+                    $"Claude CLI agent run for model '{_context.Llm.Name}' ended without a result.");
 
-            var parsed = ParseResult(process);
-            if (parsed.IsError || parsed.Type == "error")
-                throw new InvalidOperationException(
-                    $"Claude CLI agent run for model '{_context.Llm.Name}' returned an error: {parsed.Result ?? parsed.Subtype ?? "(no detail)"}");
+            var toolCalls = log.ToolCalls();
+            var iterations = log.Iterations > 0 ? log.Iterations : Math.Max(result.NumTurns ?? 1, 1);
+            var usage = BuildUsage(result);
 
-            _finalTurn = BuildTurn(parsed, sw.Elapsed);
+            if (result.Subtype == "error_max_turns")
+            {
+                var limit = _context.MaxIterations ?? iterations;
+                throw new AgentIterationLimitException(limit, new AgentPartialResult
+                {
+                    Iterations = iterations,
+                    ToolCalls = toolCalls,
+                    TotalUsage = usage,
+                    TotalCost = usage.InputCost + usage.OutputCost,
+                });
+            }
+
+            if (result.IsError || result.Type == "error")
+                throw new InvalidOperationException(
+                    $"Claude CLI agent run for model '{_context.Llm.Name}' returned an error: {result.Result ?? result.Subtype ?? "(no detail)"}");
+
+            _finalTurn = new AgentTurn
+            {
+                ToolCalls = Array.Empty<PendingToolCall>(),
+                FinalText = result.Result ?? string.Empty,
+                Usage = usage,
+                Duration = sw.Elapsed,
+                RequestId = result.SessionId,
+                CompletedToolCalls = toolCalls,
+                Iterations = iterations,
+            };
             _completed = true;
             return _finalTurn;
         }
@@ -104,36 +152,40 @@ internal sealed class CliAgentSession : IAgentSession
         {
             if (bridgeSession is not null)
                 await bridgeSession.DisposeAsync().ConfigureAwait(false);
-            if (_mcpConfigPath is not null)
-            {
-                try { System.IO.File.Delete(_mcpConfigPath); } catch { /* best effort */ }
-                _mcpConfigPath = null;
-            }
         }
     }
 
     [RequiresUnreferencedCode("Builds the prompt, which may resolve a structured-output schema via reflection.")]
     [RequiresDynamicCode("Builds the prompt, which may resolve a structured-output schema via reflection.")]
-    private ClaudeCliInvocation BuildInvocation(IAgentToolBridgeSession? bridgeSession)
+    private ClaudeCliInvocation BuildInvocation(IAgentToolBridgeSession? bridgeSession, ClaudeCliScratch scratch)
     {
+        var cli = _options.Cli;
+        var (systemText, prompt) = BuildPrompt();
+
         var args = new List<string>
         {
             "--print",
-            BuildPrompt(),
-            "--output-format", "json",
+            "--output-format", "stream-json",
+            "--verbose", // required by the CLI for stream-json output
             "--model", _context.Llm.Name,
         };
 
+        // The runner's iteration budget, so MaxIterations means the same on both transports.
+        if (_context.MaxIterations is int maxTurns and > 0)
+        {
+            args.Add("--max-turns");
+            args.Add(maxTurns.ToString(CultureInfo.InvariantCulture));
+        }
+
+        ClaudeCliCommand.AddSystemPrompt(args, scratch, systemText, cli);
+        ClaudeCliCommand.AddIsolation(args, cli);
+
         if (bridgeSession is not null)
         {
+            // Passed as a file, not inline JSON: on Windows an npm `claude.cmd` shim runs through
+            // cmd.exe, which mangles the quotes and braces of an inline {"mcpServers":…} argument.
             args.Add("--mcp-config");
-            // Pass the MCP config as a FILE PATH, not an inline JSON string. On Windows
-            // an npm-installed `claude` is a `.cmd` shim launched through `cmd.exe /c`,
-            // and cmd.exe mangles the quotes/braces of an inline `{"mcpServers":…}` arg —
-            // the CLI then loads no servers and the agent's tools silently never run.
-            // A temp-file path has no shell metacharacters and survives cmd.exe intact.
-            // (A native claude.exe handles inline JSON fine; the file is robust for both.)
-            args.Add(WriteMcpConfigFile(bridgeSession));
+            args.Add(scratch.WriteFile("mcp-config.json", BuildMcpConfig(bridgeSession)));
 
             // Pre-approve our bridge's tools so the CLI runs them unattended.
             foreach (var name in bridgeSession.ToolNames)
@@ -143,37 +195,38 @@ internal sealed class CliAgentSession : IAgentSession
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.Cli.PermissionMode))
+        if (!string.IsNullOrWhiteSpace(cli.PermissionMode))
         {
             args.Add("--permission-mode");
-            args.Add(_options.Cli.PermissionMode);
+            args.Add(cli.PermissionMode);
         }
 
-        if (_options.Cli.AdditionalArguments is { Length: > 0 } extra)
+        if (cli.AdditionalArguments is { Length: > 0 } extra)
             args.AddRange(extra);
 
         return new ClaudeCliInvocation
         {
-            ExecutablePath = ClaudeCliLocator.Resolve(_options.Cli.ExecutablePath),
+            ExecutablePath = ClaudeCliLocator.Resolve(cli.ExecutablePath),
             Arguments = args,
-            WorkingDirectory = _options.Cli.WorkingDirectory,
-            EnvironmentOverrides = BuildEnvironment(),
-            Timeout = _options.Cli.Timeout ?? _options.Timeout ?? _resilience.TotalRequestTimeout,
+            StandardInput = prompt,
+            WorkingDirectory = ClaudeCliCommand.WorkingDirectory(cli, scratch),
+            EnvironmentOverrides = ClaudeCliCommand.BuildEnvironment(cli),
+            Timeout = cli.Timeout ?? _options.Timeout ?? _resilience.TotalRequestTimeout,
         };
     }
 
     /// <summary>
-    /// Composes the single prompt for <c>claude -p</c>: any seeded conversation flattened
-    /// to a transcript, then the agent instruction (<c>Prompt.Text</c>), plus a JSON-schema
-    /// directive when structured output is expected — mirroring how the HTTP agent session
-    /// folds the schema into the initial user message.
+    /// Splits the run into system text and the prompt sent on stdin, the way the HTTP agent session
+    /// builds its request: a run seeded with a conversation uses <c>Prompt.Text</c> as the system
+    /// instruction and the conversation (flattened to a transcript) as the prompt; a standalone run
+    /// sends <c>Prompt.Text</c> as the prompt with no system text. A JSON-schema directive follows
+    /// the prompt when structured output is expected.
     /// </summary>
     [RequiresUnreferencedCode("AiSchemaRegistry.GetSchema may use reflection over the response type.")]
     [RequiresDynamicCode("AiSchemaRegistry.GetSchema may use reflection over the response type.")]
-    private string BuildPrompt()
+    private (string? SystemText, string Prompt) BuildPrompt()
     {
-        var sb = new StringBuilder();
-
+        var transcript = new StringBuilder();
         if (_context.InitialChat is { Count: > 0 } chat)
         {
             foreach (var message in chat)
@@ -186,39 +239,34 @@ internal sealed class CliAgentSession : IAgentSession
                     _ => (message.GetType().Name, null),
                 };
                 if (string.IsNullOrEmpty(text)) continue;
-                if (sb.Length > 0) sb.Append("\n\n");
-                sb.Append(label).Append(": ").Append(text);
+                if (transcript.Length > 0) transcript.Append("\n\n");
+                transcript.Append(label).Append(": ").Append(text);
             }
         }
 
-        if (sb.Length > 0) sb.Append("\n\n");
-        sb.Append(_context.Prompt.Text);
+        string? systemText = null;
+        var prompt = new StringBuilder();
+        if (transcript.Length > 0 && !string.IsNullOrEmpty(_context.Prompt.Text))
+        {
+            systemText = _context.Prompt.Text;
+            prompt.Append(transcript);
+        }
+        else
+        {
+            prompt.Append(transcript);
+            if (prompt.Length > 0) prompt.Append("\n\n");
+            prompt.Append(_context.Prompt.Text);
+        }
 
         if (_context.ResponseType is { } responseType)
         {
             var schema = AiSchemaRegistry.GetSchema(responseType);
-            sb.Append("\n\nWhen you are ready to produce the final answer (after all tool calls), ")
-              .Append("respond with a SINGLE JSON object (no markdown fences) matching this schema:\n")
-              .Append(schema.ToString());
+            prompt.Append("\n\nWhen you are ready to produce the final answer (after all tool calls), ")
+                  .Append("respond with a SINGLE JSON object (no markdown fences) matching this schema:\n")
+                  .Append(schema.ToString());
         }
 
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// Serializes the bridge's MCP config to a temp <c>.json</c> file and returns its path.
-    /// Passing a path (not inline JSON) keeps the config intact when <c>claude</c> is a
-    /// Windows <c>.cmd</c> shim launched via <c>cmd.exe</c>. The file is deleted in
-    /// <see cref="RunTurnAsync"/>'s finally block once the CLI has consumed it.
-    /// </summary>
-    private string WriteMcpConfigFile(IAgentToolBridgeSession session)
-    {
-        var json = BuildMcpConfig(session);
-        var path = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(), $"zonit-mcp-{Guid.NewGuid():N}.json");
-        System.IO.File.WriteAllText(path, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-        _mcpConfigPath = path;
-        return path;
+        return (systemText, prompt.ToString());
     }
 
     private static string BuildMcpConfig(IAgentToolBridgeSession session)
@@ -247,45 +295,9 @@ internal sealed class CliAgentSession : IAgentSession
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
-    private Dictionary<string, string?>? BuildEnvironment()
+    private TokenUsage BuildUsage(ClaudeCliResult result)
     {
-        Dictionary<string, string?>? env = null;
-        void Set(string key, string? value)
-        {
-            if (string.IsNullOrEmpty(value)) return;
-            (env ??= new Dictionary<string, string?>())[key] = value;
-        }
-
-        Set("CLAUDE_CODE_OAUTH_TOKEN", _options.Cli.OAuthToken);
-        Set("ANTHROPIC_AUTH_TOKEN", _options.Cli.AuthToken);
-
-        if (_options.Cli.AdditionalEnvironment is { } extra)
-            foreach (var kv in extra)
-                (env ??= new Dictionary<string, string?>())[kv.Key] = kv.Value;
-
-        return env;
-    }
-
-    private static ClaudeCliResult ParseResult(ClaudeProcessResult process)
-    {
-        var stdout = process.StandardOutput.Trim();
-        try
-        {
-            var parsed = JsonSerializer.Deserialize(stdout, AnthropicJsonContext.Default.ClaudeCliResult);
-            if (parsed is not null) return parsed;
-        }
-        catch (JsonException)
-        {
-            // fall through
-        }
-
-        throw new InvalidOperationException(
-            $"Could not parse Claude CLI agent JSON output. stdout: {Truncate(process.StandardOutput)} | stderr: {Truncate(process.StandardError)}");
-    }
-
-    private AgentTurn BuildTurn(ClaudeCliResult parsed, TimeSpan duration)
-    {
-        var u = parsed.Usage;
+        var u = result.Usage;
         var cacheRead = u?.CacheReadInputTokens ?? 0;
         var cacheWrite = u?.CacheCreationInputTokens ?? 0;
         // Mirror the API path: normalize InputTokens to the inclusive total so the
@@ -301,29 +313,15 @@ internal sealed class CliAgentSession : IAgentSession
             CacheWriteTokens = cacheWrite,
         });
 
-        return new AgentTurn
+        return new TokenUsage
         {
-            ToolCalls = Array.Empty<PendingToolCall>(),
-            FinalText = parsed.Result ?? string.Empty,
-            Usage = new TokenUsage
-            {
-                InputTokens = totalInput,
-                OutputTokens = output,
-                CachedTokens = cacheRead,
-                CacheWriteTokens = cacheWrite,
-                InputCost = inputCost,
-                OutputCost = outputCost,
-            },
-            Duration = duration,
-            RequestId = parsed.SessionId,
+            InputTokens = totalInput,
+            OutputTokens = output,
+            CachedTokens = cacheRead,
+            CacheWriteTokens = cacheWrite,
+            InputCost = inputCost,
+            OutputCost = outputCost,
         };
-    }
-
-    private static string Truncate(string? value)
-    {
-        if (string.IsNullOrEmpty(value)) return "(empty)";
-        var trimmed = value.Trim();
-        return trimmed.Length <= 500 ? trimmed : trimmed[..500] + "…";
     }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;

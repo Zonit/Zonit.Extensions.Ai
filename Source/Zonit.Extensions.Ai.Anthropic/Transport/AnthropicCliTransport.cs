@@ -25,6 +25,11 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// Prompt caching is automatic inside the CLI/SDK, so the request's
 /// <c>cache_control</c> markers are simply ignored here.
 /// </para>
+/// <para>
+/// The prompt is written to stdin and the system text to a file, so prompt length is not bound
+/// by the Windows command-line limits. With <see cref="AnthropicCliOptions.Isolated"/> (the
+/// default) the run sees only the request: see <see cref="ClaudeCliCommand"/>.
+/// </para>
 /// </remarks>
 internal sealed class AnthropicCliTransport : IAnthropicTransport
 {
@@ -58,7 +63,8 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
         if (TryGetUnsupportedReason(request) is { } reason)
             return await FallbackOrThrowAsync(reason, () => _apiFallback.SendAsync(llm, request, operation, cancellationToken));
 
-        var invocation = BuildInvocation(request, streaming: false);
+        using var scratch = new ClaudeCliScratch();
+        var invocation = BuildInvocation(request, streaming: false, scratch);
         _logger.LogDebug("Claude CLI {Operation}: {Exe} (model {Model})", operation, invocation.ExecutablePath, request.Model);
 
         var process = await _runner.RunAsync(invocation, cancellationToken);
@@ -106,7 +112,8 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
             yield break;
         }
 
-        var invocation = BuildInvocation(request, streaming: true);
+        using var scratch = new ClaudeCliScratch();
+        var invocation = BuildInvocation(request, streaming: true, scratch);
         _logger.LogDebug("Claude CLI {Operation} (stream): {Exe} (model {Model})", operation, invocation.ExecutablePath, request.Model);
 
         var emittedAny = false;
@@ -161,12 +168,17 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
 
     // ---- request → invocation -------------------------------------------------
 
-    private ClaudeCliInvocation BuildInvocation(AnthropicMessagesRequest request, bool streaming)
+    /// <summary>
+    /// Builds the invocation. The prompt travels on <b>stdin</b> (<c>claude -p</c> reads it when no
+    /// positional prompt is given) and the system text in a file, so no command-line length limit
+    /// applies to either.
+    /// </summary>
+    private ClaudeCliInvocation BuildInvocation(AnthropicMessagesRequest request, bool streaming, ClaudeCliScratch scratch)
     {
+        var cli = _options.Cli;
         var args = new List<string>
         {
             "--print",
-            BuildPromptText(request),
             "--output-format", streaming ? "stream-json" : "json",
         };
         if (streaming)
@@ -175,12 +187,8 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
         args.Add("--model");
         args.Add(request.Model);
 
-        var system = BuildSystemPrompt(request);
-        if (!string.IsNullOrEmpty(system))
-        {
-            args.Add("--append-system-prompt");
-            args.Add(system);
-        }
+        ClaudeCliCommand.AddSystemPrompt(args, scratch, BuildSystemPrompt(request), cli);
+        ClaudeCliCommand.AddIsolation(args, cli);
 
         if (!string.IsNullOrWhiteSpace(_options.Cli.PermissionMode))
         {
@@ -193,11 +201,12 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
 
         return new ClaudeCliInvocation
         {
-            ExecutablePath = ClaudeCliLocator.Resolve(_options.Cli.ExecutablePath),
+            ExecutablePath = ClaudeCliLocator.Resolve(cli.ExecutablePath),
             Arguments = args,
-            WorkingDirectory = _options.Cli.WorkingDirectory,
-            EnvironmentOverrides = BuildEnvironment(),
-            Timeout = _options.Cli.Timeout ?? _options.Timeout ?? _fallbackTimeout,
+            StandardInput = BuildPromptText(request),
+            WorkingDirectory = ClaudeCliCommand.WorkingDirectory(cli, scratch),
+            EnvironmentOverrides = ClaudeCliCommand.BuildEnvironment(cli),
+            Timeout = cli.Timeout ?? _options.Timeout ?? _fallbackTimeout,
         };
     }
 
@@ -247,7 +256,7 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
     }
 
     /// <summary>
-    /// Builds the <c>--append-system-prompt</c> text: the request's system blocks, plus
+    /// Builds the system prompt text (sent as a file): the request's system blocks, plus
     /// — for structured output — an instruction carrying the JSON Schema (the CLI cannot
     /// use the synthetic <c>respond_json</c> tool, so the schema is enforced by prompt).
     /// </summary>
@@ -276,28 +285,6 @@ internal sealed class AnthropicCliTransport : IAnthropicTransport
         }
 
         return sb.ToString();
-    }
-
-    private Dictionary<string, string?>? BuildEnvironment()
-    {
-        // Ambient environment is always inherited (so `claude login` works). Layer on
-        // explicit credentials only when configured — never auto-inject ApiKey, which
-        // belongs to the HTTP fallback transport, not the subscription-based CLI.
-        Dictionary<string, string?>? env = null;
-        void Set(string key, string? value)
-        {
-            if (string.IsNullOrEmpty(value)) return;
-            (env ??= new Dictionary<string, string?>())[key] = value;
-        }
-
-        Set("CLAUDE_CODE_OAUTH_TOKEN", _options.Cli.OAuthToken);
-        Set("ANTHROPIC_AUTH_TOKEN", _options.Cli.AuthToken);
-
-        if (_options.Cli.AdditionalEnvironment is { } extra)
-            foreach (var kv in extra)
-                (env ??= new Dictionary<string, string?>())[kv.Key] = kv.Value;
-
-        return env;
     }
 
     // ---- response parsing -----------------------------------------------------

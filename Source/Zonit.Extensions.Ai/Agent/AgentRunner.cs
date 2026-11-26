@@ -199,6 +199,9 @@ internal sealed class AgentRunner
             // over the MCP bridge) can bind it onto contextual/sub-agent tools. The in-process
             // ToolExecutor below shares the same bag for the HTTP path.
             Context = aiContext,
+            // A transport whose external runtime owns the loop (the Claude Code CLI) enforces the
+            // same budget itself (--max-turns); the in-process loop below enforces it for the rest.
+            MaxIterations = maxIterations,
         };
 
         await using var session = adapter.BeginSession(context);
@@ -265,7 +268,12 @@ internal sealed class AgentRunner
             }
             catch (Exception ex)
             {
-                turnFailurePartial = BuildPartial(iteration - 1, invocations, totalUsage, totalCost);
+                // A session that ran the loop externally (the Claude Code CLI) knows the iterations,
+                // tool calls and usage of the failed run; keep its partial rather than the runner's
+                // own, which has seen none of them.
+                turnFailurePartial = ex is AgentException { Partial: { } sessionPartial }
+                    ? sessionPartial
+                    : BuildPartial(iteration - 1, invocations, totalUsage, totalCost);
                 turnFailure = ex;
             }
 
@@ -303,6 +311,26 @@ internal sealed class AgentRunner
                 ToolCallCount = turn.ToolCalls.Count,
                 RequestId = turn.RequestId,
             };
+
+            // Tool calls an external runtime already ran inside this turn (the Claude Code CLI over
+            // the tool bridge): record them for the result and observers; they are not run again.
+            if (turn.CompletedToolCalls is { Count: > 0 } externalCalls)
+            {
+                invocations.AddRange(externalCalls);
+                foreach (var inv in externalCalls)
+                {
+                    yield return new AgentToolCallCompletedEvent
+                    {
+                        Iteration = inv.Iteration,
+                        Timestamp = DateTimeOffset.UtcNow,
+                        Invocation = inv,
+                    };
+                }
+            }
+
+            // A turn that covered several model round-trips counts as that many iterations.
+            if (turn.Iterations is int coveredIterations && coveredIterations > 1)
+                iteration += coveredIterations - 1;
 
             // Terminal: model produced a final answer.
             if (turn.ToolCalls.Count == 0)

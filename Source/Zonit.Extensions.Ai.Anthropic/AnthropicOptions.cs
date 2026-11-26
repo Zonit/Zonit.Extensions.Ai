@@ -106,10 +106,12 @@ public sealed class AnthropicCliOptions
 {
     /// <summary>
     /// Absolute path to the <c>claude</c> executable. When unset, the binary is
-    /// auto-discovered per OS (Windows: <c>claude.cmd</c>/<c>claude.exe</c> on PATH,
-    /// <c>%APPDATA%\npm</c>, <c>%USERPROFILE%\.local\bin</c>; Linux/macOS: <c>claude</c>
-    /// on PATH, <c>~/.local/bin</c>, npm global). Set this when the CLI is installed
-    /// somewhere non-standard or not on the service account's PATH.
+    /// auto-discovered per OS (Windows: <c>claude.exe</c>/<c>claude.cmd</c> on PATH,
+    /// <c>%APPDATA%\npm</c>, <c>%USERPROFILE%\.local\bin</c>, the Claude Desktop bundle;
+    /// Linux/macOS: <c>claude</c> on PATH, <c>~/.local/bin</c>, npm global). When discovery finds
+    /// the npm <c>claude.cmd</c> shim, the native <c>claude.exe</c> npm installs next to it is used
+    /// instead. Set this when the CLI is installed somewhere non-standard or not on the service
+    /// account's PATH.
     /// </summary>
     public string? ExecutablePath { get; set; }
 
@@ -122,7 +124,8 @@ public sealed class AnthropicCliOptions
 
     /// <summary>
     /// Working directory for the <c>claude</c> process. Affects file-relative
-    /// operations and session lookup. Defaults to the current process directory.
+    /// operations and session lookup. When unset: a fresh, empty temporary directory if
+    /// <see cref="Isolated"/> is on (the default), otherwise the current process directory.
     /// </summary>
     public string? WorkingDirectory { get; set; }
 
@@ -152,6 +155,32 @@ public sealed class AnthropicCliOptions
     /// (after the ambient environment and auth overrides). Optional.
     /// </summary>
     public Dictionary<string, string>? AdditionalEnvironment { get; set; }
+
+    /// <summary>
+    /// Keeps the CLI session to what the request carries, the way the HTTP API path behaves.
+    /// <c>true</c> by default. When on, every <c>claude</c> invocation:
+    /// <list type="bullet">
+    ///   <item><description>gets no built-in Claude Code tools (<c>--tools ""</c>) — an agent sees only the
+    ///   tools it registered, through the loopback tool bridge;</description></item>
+    ///   <item><description>loads no MCP servers besides the bridge (<c>--strict-mcp-config</c>), so the
+    ///   signed-in claude.ai account's connectors and user/project MCP servers stay out;</description></item>
+    ///   <item><description>loads no user or project settings, <c>CLAUDE.md</c> or memory
+    ///   (<c>--setting-sources local</c>), no skills or slash commands, and saves no session;</description></item>
+    ///   <item><description>replaces Claude Code's own system prompt with the request's system text
+    ///   (<c>--system-prompt-file</c>) instead of appending to it;</description></item>
+    ///   <item><description>runs in a fresh, empty working directory unless <see cref="WorkingDirectory"/> is set;</description></item>
+    ///   <item><description>drops the variables a parent Claude Code / Agent SDK session hands its children
+    ///   (<c>CLAUDECODE</c>, <c>CLAUDE_CODE_*</c>, <c>CLAUDE_AGENT_SDK_*</c>) and <c>ANTHROPIC_API_KEY</c>, so a
+    ///   host started inside a Claude Code session behaves like any other and the subscription — not the
+    ///   API — is billed. Credentials and routing settings are kept (<c>CLAUDE_CODE_OAUTH_TOKEN</c>,
+    ///   <c>CLAUDE_CODE_USE_BEDROCK</c> / <c>_VERTEX</c> / <c>_FOUNDRY</c> and their <c>SKIP_*_AUTH</c>,
+    ///   <c>CLAUDE_CODE_GIT_BASH_PATH</c>, <c>CLAUDE_CODE_CLIENT_*</c>); re-add anything else through
+    ///   <see cref="AdditionalEnvironment"/>, which is applied last.</description></item>
+    /// </list>
+    /// Set <c>false</c> to run the full Claude Code session instead (its built-in tools, connectors,
+    /// <c>CLAUDE.md</c>, memory and system prompt, with the request's system text appended).
+    /// </summary>
+    public bool Isolated { get; set; } = true;
 
     /// <summary>
     /// Hard wall-clock timeout for a single <c>claude</c> invocation. When unset,

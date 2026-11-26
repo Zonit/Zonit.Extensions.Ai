@@ -54,21 +54,31 @@ public class AgentRunnerTests
         public Queue<AgentTurn> Turns { get; } = new();
         public List<AgentSessionContext> SessionsCreated { get; } = new();
 
+        /// <summary>When set, every turn throws this instead of dequeuing a scripted turn.</summary>
+        public Exception? FailWith { get; set; }
+
         public bool SupportsAgent(ILlm llm) => llm is FakeModel;
 
         public IAgentSession BeginSession(AgentSessionContext context)
         {
             SessionsCreated.Add(context);
-            return new ScriptedSession(Turns);
+            return new ScriptedSession(Turns, () => FailWith);
         }
 
         private sealed class ScriptedSession : IAgentSession
         {
             private readonly Queue<AgentTurn> _turns;
-            public ScriptedSession(Queue<AgentTurn> turns) => _turns = turns;
+            private readonly Func<Exception?> _failWith;
+            public ScriptedSession(Queue<AgentTurn> turns, Func<Exception?> failWith)
+            {
+                _turns = turns;
+                _failWith = failWith;
+            }
 
             public Task<AgentTurn> RunTurnAsync(IReadOnlyList<ToolResult>? toolResults, CancellationToken cancellationToken)
             {
+                if (_failWith() is { } error)
+                    return Task.FromException<AgentTurn>(error);
                 if (_turns.Count == 0)
                     throw new InvalidOperationException("No more scripted turns.");
                 return Task.FromResult(_turns.Dequeue());
@@ -589,6 +599,83 @@ public class AgentRunnerTests
         ex.Which.Limit.Should().Be(3);
         ex.Which.Partial!.Iterations.Should().Be(3);
     }
+
+    // ---- sessions whose external runtime runs the loop (Claude Code CLI) ----
+
+    [Fact]
+    public async Task RunAsync_ExternallyExecutedToolCalls_AreReported_WithTheTurnsIterations()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(FinalTurn("done") with
+        {
+            Iterations = 3,
+            CompletedToolCalls =
+            [
+                ExternalCall(1, "get_weather"),
+                ExternalCall(1, "get_forecast"),
+                ExternalCall(2, "save_note"),
+            ],
+        });
+
+        var events = new List<AgentEvent>();
+        await foreach (var evt in provider.GenerateStreamAsync(new FakeModel(), new TestPrompt(), tools: new ITool[] { new EchoTool() }))
+            events.Add(evt);
+
+        var result = events.OfType<AgentCompletedEvent<string>>().Single().Result;
+        result.Iterations.Should().Be(3, "the CLI made three model round-trips inside its single turn");
+        result.ToolCalls.Select(c => c.Name).Should().Equal("get_weather", "get_forecast", "save_note");
+        result.ToolCalls.Select(c => c.Iteration).Should().Equal(1, 1, 2);
+        events.OfType<AgentToolCallCompletedEvent>().Select(e => e.Invocation.Name)
+            .Should().Equal("get_weather", "get_forecast", "save_note");
+    }
+
+    [Fact]
+    public async Task RunAsync_PassesTheIterationBudgetToTheSession()
+    {
+        var (provider, adapter) = BuildProvider();
+        adapter.Turns.Enqueue(FinalTurn("ok"));
+
+        await provider.GenerateAsync(
+            new FakeModel(),
+            "ping",
+            tools: null, mcps: null,
+            options: new AgentOptions { MaxIterations = 7 });
+
+        adapter.SessionsCreated.Single().MaxIterations.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task RunAsync_SessionFailureWithItsOwnPartial_KeepsThatPartial()
+    {
+        // A session that ran the loop externally knows the tool calls of the failed run; the
+        // runner, which saw none of them, must not replace its partial with an empty one.
+        var (provider, adapter) = BuildProvider();
+        adapter.FailWith = new AgentIterationLimitException(5, new AgentPartialResult
+        {
+            Iterations = 5,
+            ToolCalls = [ExternalCall(1, "get_weather")],
+            TotalUsage = new TokenUsage { InputTokens = 10 },
+            TotalCost = Price.Zero,
+        });
+
+        var events = new List<AgentEvent>();
+        await foreach (var evt in provider.GenerateStreamAsync(new FakeModel(), new TestPrompt(), tools: null))
+            events.Add(evt);
+
+        var failed = events.OfType<AgentFailedEvent>().Single();
+        failed.Error.Should().BeOfType<AgentIterationLimitException>();
+        failed.Partial!.Iterations.Should().Be(5);
+        failed.Partial.ToolCalls.Should().ContainSingle().Which.Name.Should().Be("get_weather");
+    }
+
+    private static ToolInvocation ExternalCall(int iteration, string name) => new()
+    {
+        Iteration = iteration,
+        Name = name,
+        Input = JsonDocument.Parse("{}").RootElement.Clone(),
+        Output = JsonDocument.Parse("\"ok\"").RootElement.Clone(),
+        Duration = TimeSpan.FromMilliseconds(3),
+    };
 
     [Fact]
     public async Task RunAsync_AllowedToolsFilter_ShouldHideFilteredTools()

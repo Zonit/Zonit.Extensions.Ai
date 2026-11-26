@@ -39,4 +39,21 @@ public sealed record AgentTurn
     /// Provider-assigned request identifier for the iteration, if any.
     /// </summary>
     public string? RequestId { get; init; }
+
+    /// <summary>
+    /// Tool calls an <b>external</b> runtime already executed during this turn — e.g. the Claude
+    /// Code CLI, which runs the whole agent loop itself and calls the framework's tools over the
+    /// loopback tool bridge. The runner records them in <c>ResultAgent&lt;T&gt;.ToolCalls</c> and
+    /// emits an <see cref="AgentToolCallCompletedEvent"/> for each, but does not execute them
+    /// again. <c>null</c> (the usual case) when the runner executes the tools itself through
+    /// <see cref="ToolCalls"/>.
+    /// </summary>
+    public IReadOnlyList<ToolInvocation>? CompletedToolCalls { get; init; }
+
+    /// <summary>
+    /// Number of model round-trips this turn covered, when an external runtime ran several of
+    /// them inside one turn (the Claude Code CLI reports the whole loop as one turn). The runner
+    /// counts it towards <c>ResultAgent&lt;T&gt;.Iterations</c>. <c>null</c> means one.
+    /// </summary>
+    public int? Iterations { get; init; }
 }

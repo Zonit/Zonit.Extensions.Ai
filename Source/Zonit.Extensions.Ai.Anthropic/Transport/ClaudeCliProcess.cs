@@ -31,10 +31,9 @@ internal sealed class ClaudeCliProcess : IClaudeCliRunner
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
 
-        await WriteAndCloseStdinAsync(process, invocation.StandardInput, token).ConfigureAwait(false);
-
         try
         {
+            await WriteAndCloseStdinAsync(process, invocation.StandardInput, token).ConfigureAwait(false);
             await process.WaitForExitAsync(token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -72,14 +71,16 @@ internal sealed class ClaudeCliProcess : IClaudeCliRunner
             throw new InvalidOperationException($"Failed to start Claude CLI process '{invocation.ExecutablePath}'.");
 
         var stderrTask = process.StandardError.ReadToEndAsync();
+        // Written concurrently with the stdout reads: a long prompt can exceed the pipe buffer,
+        // and the CLI may emit its first lines before it has read all of stdin.
+        var stdinTask = WriteAndCloseStdinAsync(process, invocation.StandardInput, token);
 
         try
         {
-            await WriteAndCloseStdinAsync(process, invocation.StandardInput, token).ConfigureAwait(false);
-
             while (await process.StandardOutput.ReadLineAsync(token).ConfigureAwait(false) is { } line)
                 yield return line;
 
+            await stdinTask.ConfigureAwait(false);
             await process.WaitForExitAsync(token).ConfigureAwait(false);
         }
         finally
@@ -99,11 +100,20 @@ internal sealed class ClaudeCliProcess : IClaudeCliRunner
         try
         {
             if (!string.IsNullOrEmpty(stdin))
+            {
                 await process.StandardInput.WriteAsync(stdin.AsMemory(), token).ConfigureAwait(false);
+                await process.StandardInput.FlushAsync(token).ConfigureAwait(false);
+            }
+        }
+        catch (IOException)
+        {
+            // The CLI exited before reading its input (e.g. it rejected an argument). Its exit
+            // code and stderr report the real cause, so the broken pipe is not the error to surface.
         }
         finally
         {
-            process.StandardInput.Close();
+            try { process.StandardInput.Close(); }
+            catch (IOException) { /* pipe already closed by the exiting process */ }
         }
     }
 
@@ -118,7 +128,8 @@ internal sealed class ClaudeCliProcess : IClaudeCliRunner
             CreateNoWindow = true,
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
-            StandardInputEncoding = Encoding.UTF8,
+            // No BOM: the prompt travels on stdin, and a leading U+FEFF would become part of it.
+            StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
         };
 
         if (!string.IsNullOrEmpty(invocation.WorkingDirectory))
@@ -132,9 +143,10 @@ internal sealed class ClaudeCliProcess : IClaudeCliRunner
         if (isWindowsBatch)
         {
             // CreateProcess cannot execute a .cmd/.bat directly — route through the
-            // command interpreter. The high-risk payload (the user prompt) travels via
-            // a positional arg through ArgumentList; cmd metacharacter escaping is
-            // best-effort here, so prefer a native claude.exe when available.
+            // command interpreter. Only short flags travel this way: the prompt goes to stdin
+            // and the system prompt / MCP config to files, so neither cmd's 8,191-character
+            // limit nor its metacharacter handling applies to them. Discovery prefers the
+            // native claude.exe next to an npm shim (ClaudeCliLocator).
             psi.FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe";
             psi.ArgumentList.Add("/c");
             psi.ArgumentList.Add(invocation.ExecutablePath);

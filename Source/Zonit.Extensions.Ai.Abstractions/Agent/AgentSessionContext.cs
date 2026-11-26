@@ -43,4 +43,12 @@ public sealed class AgentSessionContext
     /// contextual/sub-agent tools before exposing them. <c>null</c> when the caller passed no context.
     /// </summary>
     public IRunContext? Context { get; init; }
+
+    /// <summary>
+    /// The run's iteration budget (model round-trips), as the runner enforces it. A session whose
+    /// <b>external</b> runtime owns the loop passes it on so the limit means the same on every
+    /// transport — the Claude Code CLI receives it as <c>--max-turns</c>. <c>null</c> when the
+    /// caller did not supply one (sessions then apply no limit of their own).
+    /// </summary>
+    public int? MaxIterations { get; init; }
 }

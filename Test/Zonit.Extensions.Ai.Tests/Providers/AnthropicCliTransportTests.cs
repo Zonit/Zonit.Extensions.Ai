@@ -72,9 +72,66 @@ public class AnthropicCliTransportTests
         var args = runner.LastInvocation!.Arguments;
         // The synthetic respond_json tool must NOT be forwarded to the CLI.
         args.Should().NotContain(AnthropicProvider.StructuredToolName);
-        // The schema must be injected via --append-system-prompt.
-        args.Should().Contain("--append-system-prompt");
-        args.Should().Contain(a => a.Contains("JSON object") && a.Contains("\"type\""));
+        // The schema travels in the system prompt file, not on the command line.
+        args.Should().Contain("--system-prompt-file");
+        runner.SystemPromptContent.Should().Contain("JSON object").And.Contain("\"type\"");
+        args.Should().NotContain(a => a.Contains("JSON object"));
+    }
+
+    [Fact]
+    public async Task SendAsync_Prompt_TravelsOnStdin_WhateverItsLength()
+    {
+        // 42,000 characters: above cmd.exe's 8,191 and CreateProcess's 32,767 (issue #32).
+        var prompt = string.Join(" ", Enumerable.Repeat("filler", 6000));
+        var runner = new FakeRunner();
+        var transport = CreateTransport(runner, new AnthropicOptions { Transport = AnthropicTransport.Sdk });
+
+        await transport.SendAsync(new Sonnet46(), TextRequest(prompt), "GenerateAsync", CancellationToken.None);
+
+        runner.LastInvocation!.StandardInput.Should().Be(prompt);
+        runner.LastInvocation.Arguments.Sum(a => a.Length).Should().BeLessThan(2_000);
+    }
+
+    [Fact]
+    public async Task SendAsync_Isolated_ByDefault()
+    {
+        var runner = new FakeRunner();
+        var transport = CreateTransport(runner, new AnthropicOptions { Transport = AnthropicTransport.Sdk });
+
+        var request = TextRequest("hi");
+        request.System = [new AnthropicContentBlock { Type = "text", Text = "Be brief." }];
+        await transport.SendAsync(new Sonnet46(), request, "GenerateAsync", CancellationToken.None);
+
+        var args = runner.LastInvocation!.Arguments.ToList();
+        args.Should().ContainInOrder("--tools", "");
+        args.Should().Contain("--strict-mcp-config");
+        args.Should().ContainInOrder("--setting-sources", "local");
+        args.Should().Contain("--disable-slash-commands");
+        args.Should().Contain("--no-session-persistence");
+        runner.SystemPromptContent.Should().Be("Be brief.", "the request's system text replaces Claude Code's prompt");
+        runner.WorkingDirectoryWasEmpty.Should().BeTrue("an isolated run starts in a fresh empty directory");
+        System.IO.Directory.Exists(runner.LastInvocation.WorkingDirectory).Should().BeFalse("it is removed afterwards");
+    }
+
+    [Fact]
+    public async Task SendAsync_NotIsolated_AppendsTheSystemTextToClaudeCodesPrompt()
+    {
+        var runner = new FakeRunner();
+        var options = new AnthropicOptions { Transport = AnthropicTransport.Sdk };
+        options.Cli.Isolated = false;
+        options.Cli.WorkingDirectory = System.IO.Path.GetTempPath();
+        var transport = CreateTransport(runner, options);
+
+        var request = TextRequest("hi");
+        request.System = [new AnthropicContentBlock { Type = "text", Text = "Be brief." }];
+        await transport.SendAsync(new Sonnet46(), request, "GenerateAsync", CancellationToken.None);
+
+        var args = runner.LastInvocation!.Arguments.ToList();
+        args.Should().Contain("--append-system-prompt-file").And.NotContain("--system-prompt-file");
+        args.Should().NotContain("--tools").And.NotContain("--strict-mcp-config");
+        runner.SystemPromptContent.Should().Be("Be brief.");
+        runner.LastInvocation.WorkingDirectory.Should().Be(System.IO.Path.GetTempPath(), "a configured directory is kept");
+        runner.LastInvocation.EnvironmentOverrides.Should().BeNull("nothing is scrubbed or added");
     }
 
     [Fact]
@@ -245,10 +302,14 @@ public class AnthropicCliTransportTests
         public string Stderr = "";
         public int ExitCode;
         public string[] StreamLines = [];
+        /// <summary>The system prompt file's content, read while the run is live (it is deleted afterwards).</summary>
+        public string? SystemPromptContent;
+        public bool WorkingDirectoryWasEmpty;
 
         public Task<ClaudeProcessResult> RunAsync(ClaudeCliInvocation invocation, CancellationToken cancellationToken)
         {
             LastInvocation = invocation;
+            Capture(invocation);
             return Task.FromResult(new ClaudeProcessResult
             {
                 ExitCode = ExitCode,
@@ -262,13 +323,77 @@ public class AnthropicCliTransportTests
             [EnumeratorCancellation] CancellationToken cancellationToken)
         {
             LastInvocation = invocation;
+            Capture(invocation);
             foreach (var line in StreamLines)
             {
                 await Task.Yield();
                 yield return line;
             }
         }
+
+        private void Capture(ClaudeCliInvocation invocation)
+        {
+            var args = invocation.Arguments.ToList();
+            var idx = args.FindIndex(a => a is "--system-prompt-file" or "--append-system-prompt-file");
+            SystemPromptContent = idx >= 0 && System.IO.File.Exists(args[idx + 1]) ? System.IO.File.ReadAllText(args[idx + 1]) : null;
+            WorkingDirectoryWasEmpty = invocation.WorkingDirectory is { } dir
+                && System.IO.Directory.Exists(dir)
+                && !System.IO.Directory.EnumerateFileSystemEntries(dir).Any();
+        }
     }
+}
+
+/// <summary>The child-process environment of the CLI transport (issue #33).</summary>
+public class ClaudeCliCommandTests
+{
+    [Fact]
+    public void Isolated_RemovesTheParentSessionsVariables_AndKeepsCredentials()
+    {
+        var ambient = new System.Collections.Hashtable
+        {
+            ["CLAUDECODE"] = "1",
+            ["CLAUDE_CODE_ENTRYPOINT"] = "sdk-ts",
+            ["CLAUDE_CODE_SESSION_ID"] = "abc",
+            ["CLAUDE_AGENT_SDK_MCP_NO_PREFIX"] = "1",
+            ["ANTHROPIC_API_KEY"] = "sk-ant-x",
+            ["CLAUDE_CODE_OAUTH_TOKEN"] = "oauth",
+            ["CLAUDE_CODE_USE_BEDROCK"] = "1",
+            ["CLAUDE_CONFIG_DIR"] = @"C:\cfg",
+            ["PATH"] = "x",
+        };
+
+        var env = ClaudeCliCommand.BuildEnvironment(new AnthropicCliOptions(), ambient)!;
+
+        env.Should().ContainKey("CLAUDECODE").WhoseValue.Should().BeNull();
+        env.Should().ContainKey("CLAUDE_CODE_ENTRYPOINT").WhoseValue.Should().BeNull();
+        env.Should().ContainKey("CLAUDE_CODE_SESSION_ID").WhoseValue.Should().BeNull();
+        env.Should().ContainKey("CLAUDE_AGENT_SDK_MCP_NO_PREFIX").WhoseValue.Should().BeNull();
+        env.Should().ContainKey("ANTHROPIC_API_KEY").WhoseValue.Should().BeNull();
+        env.Should().NotContainKeys("CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CONFIG_DIR", "PATH");
+    }
+
+    [Fact]
+    public void AdditionalEnvironment_IsAppliedLast_AndCanRestoreAScrubbedVariable()
+    {
+        var ambient = new System.Collections.Hashtable { ["ANTHROPIC_API_KEY"] = "ambient" };
+        var cli = new AnthropicCliOptions
+        {
+            OAuthToken = "token",
+            AdditionalEnvironment = new() { ["ANTHROPIC_API_KEY"] = "explicit" },
+        };
+
+        var env = ClaudeCliCommand.BuildEnvironment(cli, ambient)!;
+
+        env["ANTHROPIC_API_KEY"].Should().Be("explicit");
+        env["CLAUDE_CODE_OAUTH_TOKEN"].Should().Be("token");
+    }
+
+    [Fact]
+    public void NotIsolated_InheritsTheEnvironmentUnchanged()
+        => ClaudeCliCommand.BuildEnvironment(
+                new AnthropicCliOptions { Isolated = false },
+                new System.Collections.Hashtable { ["CLAUDECODE"] = "1" })
+            .Should().BeNull();
 }
 
 /// <summary>Tests for the OS-aware Claude CLI binary discovery.</summary>
@@ -355,5 +480,51 @@ public class ClaudeCliLocatorTests
 
         // "nightly" parses to 0.0 and lands last; real versions keep their descending order.
         ordered.Select(Path.GetFileName).Should().Equal("1.2.3", "0.9.0", "nightly");
+    }
+
+    [Fact]
+    public void PreferNativeExecutable_ReplacesTheNpmShim_WithTheNativeBinaryNextToIt()
+    {
+        var npm = Path.Combine("root", "npm");
+        var shim = Path.Combine(npm, "claude.cmd");
+        var native = Path.Combine(npm, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+
+        ClaudeCliLocator.PreferNativeExecutable(shim, p => p == native).Should().Be(native);
+        ClaudeCliLocator.PreferNativeExecutable(shim, _ => false).Should().Be(shim, "no native binary installed");
+        ClaudeCliLocator.PreferNativeExecutable(Path.Combine(npm, "claude.exe"), _ => true)
+            .Should().Be(Path.Combine(npm, "claude.exe"), "a native binary is used as found");
+    }
+
+    [Fact]
+    public void ResolveCore_OnWindows_PrefersTheNativeBinaryOverTheShimOnPath()
+    {
+        if (!OperatingSystem.IsWindows()) return; // the npm shim is a Windows concept
+
+        var npm = @"C:\Users\me\AppData\Roaming\npm";
+        var shim = Path.Combine(npm, "claude.cmd");
+        var native = Path.Combine(npm, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+
+        var resolved = ClaudeCliLocator.ResolveCore(
+            explicitPath: null,
+            fileExists: p => p == shim || p == native,
+            pathEnvironment: npm,
+            wellKnownDirectories: []);
+
+        resolved.Should().Be(native);
+    }
+
+    [Fact]
+    public void ExpandVersionDirs_AddsTheBuildFolderOfEachVersion()
+    {
+        // Claude Desktop 2.1.3xx: claude-code\<version>\<build-hash>\claude.exe
+        var sep = Path.DirectorySeparatorChar;
+        var v330 = $"cc{sep}2.1.330";
+        var v328 = $"cc{sep}2.1.328";
+
+        var dirs = ClaudeCliLocator.ExpandVersionDirs(
+            [v330, v328],
+            v => v == v330 ? [$"{v330}{sep}9424831ad51c"] : []).ToList();
+
+        dirs.Should().Equal(v330, $"{v330}{sep}9424831ad51c", v328);
     }
 }

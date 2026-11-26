@@ -5,8 +5,9 @@ namespace Zonit.Extensions.Ai.Anthropic;
 /// an explicit <see cref="AnthropicCliOptions.ExecutablePath"/>, then PATH, then the
 /// well-known install locations for the current OS — npm global, the native installer's
 /// user-local <c>bin</c>, and the <b>Claude Desktop</b>-bundled CLI under its per-version
-/// folder (newest version first, so app updates are picked up automatically). The
-/// auto-discovered result is cached for the process lifetime; an explicit path is
+/// folder (newest version first, so app updates are picked up automatically). When discovery
+/// lands on the npm <c>claude.cmd</c> shim, the native <c>claude.exe</c> next to it is used
+/// instead. The auto-discovered result is cached for the process lifetime; an explicit path is
 /// validated on every call. When nothing is found, set
 /// <see cref="AnthropicCliOptions.ExecutablePath"/> to the absolute path.
 /// </summary>
@@ -50,9 +51,31 @@ internal static class ClaudeCliLocator
 
         foreach (var candidate in EnumerateCandidates(pathEnvironment, wellKnownDirectories))
             if (fileExists(candidate))
-                return candidate;
+                return PreferNativeExecutable(candidate, fileExists);
 
         throw new FileNotFoundException(BuildNotFoundMessage(pathEnvironment, wellKnownDirectories));
+    }
+
+    /// <summary>Location of the npm package's native binary, relative to the folder holding the npm shim.</summary>
+    private static readonly string[] NpmNativeExecutable = ["node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe"];
+
+    /// <summary>
+    /// When discovery lands on the npm shim (<c>claude.cmd</c> / <c>claude.bat</c>), returns the
+    /// native <c>claude.exe</c> the npm package installs next to it, if present. The shim runs
+    /// through <c>cmd.exe</c>, which caps the command line at 8,191 characters and re-parses every
+    /// argument; the native binary avoids both. Any other path is returned unchanged.
+    /// </summary>
+    internal static string PreferNativeExecutable(string candidate, Func<string, bool> fileExists)
+    {
+        var ext = Path.GetExtension(candidate);
+        if (!ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".bat", StringComparison.OrdinalIgnoreCase))
+            return candidate;
+
+        var dir = Path.GetDirectoryName(candidate);
+        if (string.IsNullOrEmpty(dir)) return candidate;
+
+        var native = Path.Combine([dir, .. NpmNativeExecutable]);
+        return fileExists(native) ? native : candidate;
     }
 
     internal static string[] ExecutableNames() => OperatingSystem.IsWindows()
@@ -97,7 +120,7 @@ internal static class ClaudeCliLocator
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (!string.IsNullOrEmpty(appData)) dirs.Add(Path.Combine(appData, "npm"));
             if (!string.IsNullOrEmpty(home)) dirs.Add(Path.Combine(home, ".local", "bin"));
-            // Claude Desktop ships the CLI at <Roaming|Local>\Claude\claude-code\<version>\claude.exe
+            // Claude Desktop ships the CLI at <Roaming|Local>\Claude\claude-code\<version>[\<build>]\claude.exe
             if (!string.IsNullOrEmpty(appData)) AddClaudeDesktopVersionDirs(dirs, Path.Combine(appData, "Claude", "claude-code"));
             if (!string.IsNullOrEmpty(localAppData)) AddClaudeDesktopVersionDirs(dirs, Path.Combine(localAppData, "Claude", "claude-code"));
         }
@@ -130,9 +153,11 @@ internal static class ClaudeCliLocator
     }
 
     /// <summary>
-    /// Claude Desktop installs the CLI under a per-version subfolder
-    /// (e.g. <c>…\claude-code\2.1.170\claude.exe</c>). Adds each version folder as a
-    /// candidate directory, newest first, so an app update is picked up without any config.
+    /// Claude Desktop installs the CLI under a per-version subfolder — directly
+    /// (<c>…\claude-code\2.1.170\claude.exe</c>) or, in newer builds, one level deeper in a
+    /// build folder (<c>…\claude-code\2.1.330\9424831ad51c\claude.exe</c>). Adds each version
+    /// folder followed by its build folders as candidate directories, newest version first, so an
+    /// app update is picked up without any config.
     /// </summary>
     private static void AddClaudeDesktopVersionDirs(List<string> dirs, string parent)
     {
@@ -140,7 +165,38 @@ internal static class ClaudeCliLocator
         string[] subdirs;
         try { subdirs = System.IO.Directory.GetDirectories(parent); }
         catch { return; } // unreadable — skip
-        dirs.AddRange(OrderVersionDirsDescending(subdirs));
+        dirs.AddRange(ExpandVersionDirs(OrderVersionDirsDescending(subdirs), GetBuildDirectories));
+    }
+
+    /// <summary>
+    /// Each version folder followed by its build folders (as <paramref name="getBuildDirectories"/>
+    /// orders them), preserving the order of <paramref name="orderedVersionDirs"/>.
+    /// </summary>
+    internal static IEnumerable<string> ExpandVersionDirs(
+        IEnumerable<string> orderedVersionDirs,
+        Func<string, IReadOnlyList<string>> getBuildDirectories)
+    {
+        foreach (var versionDir in orderedVersionDirs)
+        {
+            yield return versionDir;
+            foreach (var buildDir in getBuildDirectories(versionDir))
+                yield return buildDir;
+        }
+    }
+
+    /// <summary>Build folders inside a version folder, most recently written first; empty when unreadable.</summary>
+    private static IReadOnlyList<string> GetBuildDirectories(string versionDir)
+    {
+        try
+        {
+            return System.IO.Directory.GetDirectories(versionDir)
+                .OrderByDescending(System.IO.Directory.GetLastWriteTimeUtc)
+                .ToArray();
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     /// <summary>Orders version subfolders newest-first (semantic version, then ordinal name).</summary>

@@ -3,6 +3,51 @@
 Dated, version-scoped change log. The other guides describe the library as it is *now*; this file
 records *what changed and why*.
 
+## 10.22.0 — 2026-11-26
+
+### Sdk transport (Claude Code CLI): long prompts, isolation, agent tool calls (#32, #33, #34)
+
+- **Fixed (#32)** long prompts on Windows. The prompt was a command-line argument, so it failed
+  above 8,191 characters through the npm `claude.cmd` shim (`The command line is too long.`) and
+  above 32,767 with the native `claude.exe` (`The filename or extension is too long`). The prompt
+  now goes to the CLI's **stdin**, and the system prompt (with the structured-output schema) to a
+  file; with the MCP config, which was already a file, they live in a per-run temporary folder that
+  is deleted afterwards. Stdin is written UTF-8 without a BOM and concurrently with the stdout read.
+- **Changed (#32)** discovery: when it finds the npm shim `claude.cmd`, it uses the native
+  `node_modules\@anthropic-ai\claude-code\bin\claude.exe` next to it, so no argument passes through
+  `cmd.exe`. The Claude Desktop bundle is also probed one folder deeper, for the
+  `claude-code\<version>\<build>\claude.exe` layout of current Desktop builds.
+- **Added (#33)** `AnthropicCliOptions.Isolated`, **on by default**. A CLI run used to be a full
+  Claude Code session: the model had Bash, PowerShell, Read, Write, Edit, Agent and the other
+  built-in tools, the signed-in claude.ai account's connectors, and read `CLAUDE.md` (also from
+  parent folders) and memory of the working directory. Verified on Claude Code 2.1.310: without
+  isolation a test prompt listed those tools and quoted a word from a `CLAUDE.md` one folder up;
+  isolated it answered that it has no tools and no such word. Isolated runs pass `--tools ""`,
+  `--strict-mcp-config`, `--setting-sources local`, `--disable-slash-commands` and
+  `--no-session-persistence`, replace Claude Code's system prompt with the request's system text
+  (`--system-prompt-file`), start in a fresh empty working directory unless `WorkingDirectory` is
+  set, and remove `CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_AGENT_SDK_*` and `ANTHROPIC_API_KEY` from
+  the child environment (credentials and routing such as `CLAUDE_CODE_OAUTH_TOKEN` and
+  `CLAUDE_CODE_USE_BEDROCK` are kept; `AdditionalEnvironment` is applied last). The tool bridge keeps
+  working, because it is passed through `--mcp-config`.
+  **Behaviour change:** set `Cli.Isolated = false` to get the full Claude Code session back (its
+  tools, connectors, `CLAUDE.md`, memory and system prompt, with the request's system text appended
+  through `--append-system-prompt-file`). A setup that relied on an inherited `ANTHROPIC_API_KEY`
+  must pass it through `AdditionalEnvironment`.
+- **Fixed (#34)** agent results on the CLI path. `ResultAgent<T>.Iterations` was always 1 and
+  `ToolCalls` always empty. The agent run is now read as `stream-json`: `ToolCalls` lists every
+  tool call (name, input, result or error, duration, the iteration it was issued in), each also
+  emitted as an `AgentToolCallCompletedEvent`, and `Iterations` counts the model round-trips.
+  `MaxIterations` is passed as `--max-turns`; a run that reaches it fails with
+  `AgentIterationLimitException`, with the iterations, tool calls and usage in `Partial`.
+- **Added** `AgentTurn.CompletedToolCalls` / `AgentTurn.Iterations` and
+  `AgentSessionContext.MaxIterations` for sessions whose external runtime owns the loop. The runner
+  records those calls, counts those iterations, and keeps a session exception's own `Partial`.
+- A chat-seeded agent run on the CLI now sends `Prompt.Text` as the system prompt and the
+  conversation as the prompt, like the HTTP agent session (it was appended after the transcript).
+- Still CLI-owned: `MaxParallelToolCalls`, `OnToolCall`, the per-tool timeout and nested-usage
+  tracking do not apply on this path.
+
 ## 10.21.0 — 2026-11-24
 
 ### New models: GPT-6.2 Sol and GPT-6.2 Astra; Anthropic retirement dates
